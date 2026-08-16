@@ -1,0 +1,16 @@
+{
+  "name": "pi-skill-desc",
+  "private": true,
+  "type": "module",
+  "description": "Pi extension: a detail window that mirrors the completion popup's highlight with full candidate descriptions",
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-tui": "0.84.2",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
