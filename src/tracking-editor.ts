@@ -6,7 +6,11 @@ import {
 	type SelectList,
 	type TUI,
 } from "@earendil-works/pi-tui";
-import { applyModelInfo, type ModelInfo, type ThemeLike } from "./model-info.js";
+import {
+	applyModelInfo,
+	type ModelInfo,
+	type ThemeLike,
+} from "./model-info.js";
 
 /**
  * Minimal structural view of pi's KeybindingsManager.

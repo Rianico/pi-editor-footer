@@ -282,6 +282,16 @@ export default function (pi: ExtensionAPILike): void {
 				description: "Scroll the pi-skill-desc detail window down",
 				handler: () => scrollWindow(1),
 			});
+			// Fallbacks that work on every terminal (no Kitty/modified-arrow
+			// protocol needed): ESC+j / ESC+k are universally distinguishable.
+			pi.registerShortcut("alt+j", {
+				description: "Scroll the pi-skill-desc detail window up (fallback)",
+				handler: () => scrollWindow(-1),
+			});
+			pi.registerShortcut("alt+k", {
+				description: "Scroll the pi-skill-desc detail window down (fallback)",
+				handler: () => scrollWindow(1),
+			});
 		}
 
 		currentModelInfo = modelInfoOf(ctx);

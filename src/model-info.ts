@@ -203,7 +203,10 @@ function rgbTo256(r: number, g: number, b: number): number {
  * so higher levels "glow" more intensely.
  */
 function buildGlow(theme: ThemeLike, level: string): (s: string) => string {
-	const base = parseFgAnsiToRgb(theme, THINKING_COLORS[level as ThinkingLevel]) ?? {
+	const base = parseFgAnsiToRgb(
+		theme,
+		THINKING_COLORS[level as ThinkingLevel],
+	) ?? {
 		r: 140,
 		g: 140,
 		b: 140,
@@ -275,16 +278,27 @@ function embedLabel(
 	glow: (s: string) => string,
 ): string {
 	// Padding collapses gracefully on very narrow terminals.
-	const padCount = Math.min(LABEL_PAD, Math.max(0, Math.floor((width - 1) / 2)));
+	const padCount = Math.min(
+		LABEL_PAD,
+		Math.max(0, Math.floor((width - 1) / 2)),
+	);
 	const padding = padCount * 2;
 	// Reserve at least one border char on each side.
-	const labelText = truncateToWidth(label, Math.max(0, width - 2 - padding), "");
+	const labelText = truncateToWidth(
+		label,
+		Math.max(0, width - 2 - padding),
+		"",
+	);
 	const lw = visibleWidth(labelText);
 	const leftWidth = Math.max(0, Math.min(2, width - lw - padding));
 	const rightWidth = Math.max(0, width - lw - leftWidth - padding);
 	const pad = " ".repeat(padCount);
 	return (
-		glow("─".repeat(leftWidth)) + pad + labelText + pad + glow("─".repeat(rightWidth))
+		glow("─".repeat(leftWidth)) +
+		pad +
+		labelText +
+		pad +
+		glow("─".repeat(rightWidth))
 	);
 }
 
@@ -299,7 +313,13 @@ export function applyModelInfo(
 	info: ModelInfo,
 ): string[] {
 	const glow = buildGlow(theme, info.level);
-	const label = buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow);
+	const label = buildLabel(
+		theme,
+		info.provider,
+		info.modelId,
+		info.level,
+		info.contextWindow,
+	);
 
 	// Top border (always lines[0]): embed the label into plain borders,
 	// keep scroll indicators but recolor them.

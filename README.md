@@ -37,6 +37,8 @@ ln -s /path/to/pi-skill-desc ~/.pi/agent/extensions/pi-skill-desc
 
 shift+up/down must arrive as *modified-arrow* sequences (Kitty keyboard protocol) to be distinguishable from plain arrows. Terminals that alias shift+arrows to plain arrows simply get no scroll — everything else still works. In most modern terminals (Kitty, iTerm2, recent WezTerm/Windows Terminal) this just works.
 
+**Universal fallbacks** — work on every terminal, no protocol needed: **`alt+j`** scrolls up, **`alt+k`** scrolls down (same one-line-per-press behavior). Use these if shift+arrows don't scroll for you.
+
 ## Breakage mode
 
 The extension observes the popup's highlight through two **private pi-tui internals** (see `docs/adr/0001-tracking-editor-for-skill-descriptions.md`): the `autocompleteList` field and the `applyAutocompleteSuggestions` method. At load it asserts both exist and prints a warning:
