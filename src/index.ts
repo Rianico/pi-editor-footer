@@ -128,7 +128,10 @@ function contentLinesFrom(lines: string[]): number {
  */
 function makeWidget(ctx: ExtensionUIContextLike): Component {
 	const themeOf = (theme: unknown): WindowThemeLike => {
-		const t = theme as { fg(color: string, s: string): string; bold(s: string): string };
+		const t = theme as {
+			fg(color: string, s: string): string;
+			bold(s: string): string;
+		};
 		return {
 			border: (s) => t.fg("border", s),
 			highlight: (s) => t.fg("accent", t.bold(s)),
@@ -192,7 +195,12 @@ function scrollWindow(delta: -1 | 1): void {
 	const width = lastWidth > 0 ? lastWidth : 80;
 	// Match the widget's content width (borders take 4 columns).
 	const innerWidth = Math.max(1, width - 4);
-	const lines = renderDetail(detailItemOf(currentItem), innerWidth, MAX_LINES, 0);
+	const lines = renderDetail(
+		detailItemOf(currentItem),
+		innerWidth,
+		MAX_LINES,
+		0,
+	);
 	scrollOffset = scroll(
 		scrollOffset,
 		delta,

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { decorateWindow, type WindowThemeLike } from "../src/window-presentation.js";
+import {
+	decorateWindow,
+	type WindowThemeLike,
+} from "../src/window-presentation.js";
 
 const RED = "\x1b[31m";
 const RESET = "\x1b[39m";
@@ -21,7 +24,11 @@ describe("decorateWindow", () => {
 	});
 
 	test("builds a bordered box: border, header, body, border", () => {
-		const out = decorateWindow(["grilling · skill", "Interview users"], 20, makeTheme());
+		const out = decorateWindow(
+			["grilling · skill", "Interview users"],
+			20,
+			makeTheme(),
+		);
 		assert.equal(out.length, 4);
 		// top/bottom borders: ┌ + (width-2) ─ + ┐
 		assert.equal(out[0], `┌${RED}${"─".repeat(18)}${RESET}┐`);
@@ -35,7 +42,11 @@ describe("decorateWindow", () => {
 	test("every row is exactly `width` columns (ANSI-aware padding)", () => {
 		const out = decorateWindow(["a · b", "line"], 12, makeTheme());
 		for (const row of out) {
-			assert.equal(visibleWidth(row), 12, `row ${JSON.stringify(row)} not 12 wide`);
+			assert.equal(
+				visibleWidth(row),
+				12,
+				`row ${JSON.stringify(row)} not 12 wide`,
+			);
 		}
 	});
 

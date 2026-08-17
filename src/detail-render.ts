@@ -44,6 +44,18 @@ export function renderDetail(
 
   const visibleLines = contentLines.slice(offset, offset + capacity);
 
+  // "More content" markers: `...` replaces the last visible content line when
+  // there is content remaining BELOW the window (not yet scrolled to the
+  // bottom), and the first visible line when scrolled down hides content
+  // ABOVE. The header's ` offset/total` marker still carries the exact totals.
+  const hasMoreAbove = offset > 0;
+  const hasMoreBelow = offset + visibleLines.length < contentLines.length;
+  if (hasMoreBelow && visibleLines.length > 0) {
+    visibleLines[visibleLines.length - 1] = "...";
+  }
+  if (hasMoreAbove && visibleLines.length > 1) {
+    visibleLines[0] = "...";
+  }
   const overflows = contentLines.length > capacity;
   const namePart = `${item.label} · ${item.kind}`;
   let header: string;

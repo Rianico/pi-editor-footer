@@ -137,6 +137,44 @@ describe("renderDetail", () => {
     assert.ok(lines[0].length <= 10);
     assert.match(lines[0], /\d+\/\d+$/);
   });
+
+  test("shows '...' on the last visible line when content remains below", () => {
+    const longItem: DetailItem = {
+      ...item,
+      description: "x".repeat(200), // 10 content lines at width 20
+    };
+    const lines = renderDetail(longItem, 20, 5, 0);
+    assert.equal(lines[4], "...");
+  });
+
+  test("no bottom ellipsis when scrolled to the bottom", () => {
+    const longItem: DetailItem = {
+      ...item,
+      description: "x".repeat(200),
+    };
+    const lines = renderDetail(longItem, 20, 5, 999); // clamped to max offset 6
+    assert.equal(lines.length, 5);
+    assert.notEqual(lines[4], "...");
+  });
+
+  test("top ellipsis when scrolled down hides content above", () => {
+    const longItem: DetailItem = {
+      ...item,
+      description: "x".repeat(200),
+    };
+    const mid = renderDetail(longItem, 20, 5, 3);
+    assert.equal(mid[1], "..."); // first visible content line
+    assert.equal(mid[4], "..."); // still more below
+  });
+
+  test("no ellipsis when the description fits the window", () => {
+    const lines = renderDetail(item, 60, 5, 0);
+    assert.deepEqual(lines, [
+      "to-spec · skill",
+      "Turn the current conversation into a spec.",
+    ]);
+    assert.ok(!lines.includes("..."));
+  });
 });
 
 describe("scroll", () => {
