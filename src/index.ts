@@ -41,6 +41,8 @@ export interface ExtensionUIContextLike {
 	): void;
 	/** Live getter for the current theme (used by the border glow at render time). */
 	readonly theme: ThemeLike;
+	/** Show a transient notification to the user. */
+	notify(message: string, type?: "info" | "warning" | "error"): void;
 }
 
 export interface ExtensionContextLike {
@@ -68,6 +70,13 @@ export interface ExtensionAPILike {
 		shortcut: string,
 		options: { description?: string; handler: () => void },
 	): void;
+	registerCommand(
+		name: string,
+		options: {
+			description?: string;
+			handler: (args: string, ctx: ExtensionContextLike) => void | Promise<void>;
+		},
+	): void;
 }
 
 /** Height cap of the detail window (the user's spec: up to 5 lines). */
@@ -83,6 +92,8 @@ let scrollOffset = 0;
 let lastWidth = 0;
 let tuiRef: TUI | null = null;
 let shortcutsRegistered = false;
+// eslint-disable-next-line prefer-const -- toggled by the /model-info command
+let glowEnabled = true;
 let installedEditor: TrackingEditor | null = null;
 let currentModelInfo: ModelInfo = {
 	provider: "",
@@ -232,6 +243,7 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		const editor = new TrackingEditor(tui, theme, keybindings, () => ctx.theme);
 		installedEditor = editor;
 		editor.setModelInfo(currentModelInfo);
+		editor.glowEnabled = glowEnabled;
 		editor.onHighlight = (item) => {
 			currentItem = item;
 			scrollOffset = 0; // a new candidate restarts the scroll
@@ -298,6 +310,17 @@ assertInternals();
 export default function (pi: ExtensionAPILike): void {
 	let watchTimer: ReturnType<typeof setInterval> | null = null;
 
+	// Toggle the border glow + model label (off restores pi's stock border).
+	// Replaces model-info-widget's command, which is inert now that we own the
+	// editor slot (ADR-0002).
+	pi.registerCommand("model-info", {
+		description: "Toggle the model label + glow on the input border",
+		handler: async (_args, ctx) => {
+			glowEnabled = !glowEnabled;
+			installedEditor?.setGlowEnabled(glowEnabled);
+			ctx.ui.notify(`Model info border ${glowEnabled ? "shown" : "hidden"}`, "info");
+		},
+	});
 	pi.on("session_start", (_event, ctx) => {
 		// Only the interactive TUI has an editor component to replace.
 		if (ctx.mode !== "tui") {

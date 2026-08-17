@@ -105,6 +105,12 @@ export class TrackingEditor extends Editor {
 		this.tui.requestRender();
 	}
 
+	/** Toggle the border glow + model label (off restores pi's stock border). */
+	setGlowEnabled(enabled: boolean): void {
+		this.glowEnabled = enabled;
+		this.tui.requestRender();
+	}
+
 	/**
 	 * Instance-patch the (TS-private) `applyAutocompleteSuggestions` so we re-wire
 	 * the freshly created popup list and report the initial best-match highlight

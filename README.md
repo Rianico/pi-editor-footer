@@ -32,6 +32,7 @@ ln -s /path/to/pi-skill-desc ~/.pi/agent/extensions/pi-skill-desc
 3. The detail window above the input shows the highlighted candidate's full description.
 4. When a description is longer than the window, **shift+up / shift+down** scrolls it one line per press (clamped at both ends). The keys are inert when the window is hidden.
 5. The window closes with the popup (escape, selection, or typing).
+6. **`/model-info`** toggles the border glow + model label (off restores pi's stock border).
 
 ## Terminal requirement for scrolling
 

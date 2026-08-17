@@ -13,6 +13,6 @@ Status: accepted
 
 ## Consequences
 
-- model-info-widget's editor install is now inert (its `/model-info` toggle no longer affects anything); its rendering lives in `src/model-info.ts`.
+- model-info-widget's editor install is now inert; its rendering lives in `src/model-info.ts`, and its `/model-info` toggle is reimplemented by pi-skill-desc's own `/model-info` command — so the widget can be deleted from `~/.pi/agent/extensions/`.
 - Intentional code duplication with model-info-widget; a future cleanup could merge the extensions.
 - The watchdog only fights input editors (CustomEditor duck-type: `actionHandlers` is a `Map`) — selectors, dialogs, and overlays are never disturbed.
