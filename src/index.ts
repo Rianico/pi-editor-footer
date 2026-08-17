@@ -74,7 +74,10 @@ export interface ExtensionAPILike {
 		name: string,
 		options: {
 			description?: string;
-			handler: (args: string, ctx: ExtensionContextLike) => void | Promise<void>;
+			handler: (
+				args: string,
+				ctx: ExtensionContextLike,
+			) => void | Promise<void>;
 		},
 	): void;
 }
@@ -318,7 +321,10 @@ export default function (pi: ExtensionAPILike): void {
 		handler: async (_args, ctx) => {
 			glowEnabled = !glowEnabled;
 			installedEditor?.setGlowEnabled(glowEnabled);
-			ctx.ui.notify(`Model info border ${glowEnabled ? "shown" : "hidden"}`, "info");
+			ctx.ui.notify(
+				`Model info border ${glowEnabled ? "shown" : "hidden"}`,
+				"info",
+			);
 		},
 	});
 	pi.on("session_start", (_event, ctx) => {

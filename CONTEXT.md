@@ -19,3 +19,11 @@ _Avoid_: description window, tooltip, preview
 **Highlight**:
 The row currently selected in the completion popup. The detail window mirrors it — cycling the highlight swaps the window's content.
 _Avoid_: selection, cursor
+
+**Editor slot**:
+The single custom-editor position in pi — the last `setEditorComponent` writer wins. pi-skill-desc must own it to observe the popup (ADR-0001, ADR-0002).
+_Avoid_: editor position, editor hook
+
+**TrackingEditor**:
+This extension's custom editor — the actual input editor in the box. Replaces pi's `CustomEditor` (replicated inline) and adds popup-highlight observation plus the model-info border glow.
+_Avoid_: custom editor, wrapper

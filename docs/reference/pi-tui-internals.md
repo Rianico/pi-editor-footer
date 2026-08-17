@@ -126,6 +126,19 @@ The factory is called `factory(this.ui, getEditorTheme(), this.keybindings)`. Af
 - The completion popup lists slash commands, templates, extension commands, and skills (`skill:<name>`, description = SKILL.md frontmatter, prefixed with source info). **Tools never appear** — they are agent-invoked, not slash-invocable.
 - No catalog lookups needed: the highlighted `SelectItem` carries its own full description.
 
+## Sync contract — keeping the editor current with pi updates
+
+This extension **replaces pi's default input editor** via `setEditorComponent`. `TrackingEditor` (`src/tracking-editor.ts`) is the actual editor in the input box: it replicates pi's `CustomEditor` inline and reads two private pi-tui internals — so **pi editor changes are NOT inherited automatically.** On every pi update, and whenever pi adds or changes editor behaviour, sync manually:
+
+1. **Diff the replicated base.** Compare pi's `CustomEditor` (`dist/modes/interactive/components/custom-editor.js` in `@earendil-works/pi-coding-agent` — source in the "How pi's CustomEditor works" section above) and pi-tui's `Editor` (`components/editor.js` in `@earendil-works/pi-tui`) against `src/tracking-editor.ts`: port any new/changed app-keybinding branches, fields, or methods in `handleInput`; keep the highlight-sync additions after each `super.handleInput(data)`.
+2. **Check the private internals.** Confirm `autocompleteList` and `applyAutocompleteSuggestions` still exist with the same names on pi-tui's `Editor`. The load-time `assertInternals()` in `src/index.ts` warns if they vanish — if it warns, fix the tracking in `src/tracking-editor.ts`, don't silence the warning.
+3. **Verify live** with the scripted pty loop (the only seam for the editor wiring): from the repo root,
+   `(sleep 18; printf '/'; sleep 1.5; printf '\033[B'; sleep 2; printf '\033'; sleep 2) | timeout 45 script -q /tmp/psd.log pi -e ./src/index.ts --no-session`,
+   then grep `/tmp/psd.log` for the bordered detail window (`┌…┐`, `· command`/`· skill` rows) following the highlight. Add `sh -c 'stty cols 40; …'` around the command for a narrow terminal that triggers the scroll/ellipsis paths.
+4. **Regression:** `npm test` (renderer/presentation seams) and `npm run typecheck` must stay green.
+
+The replacement itself is deliberate — see ADR-0001 (why the popup internals are read) and ADR-0002 (why we own the editor slot).
+
 ## Glossary / decisions
 
 See `CONTEXT.md` (Completion popup, Candidate, Detail window, Highlight) and `docs/adr/0001-tracking-editor-for-skill-descriptions.md` (accepted) before implementing.
