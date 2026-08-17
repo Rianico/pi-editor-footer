@@ -10,6 +10,7 @@ import {
 import { TrackingEditor } from "./tracking-editor.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
+import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -121,8 +122,19 @@ function contentLinesFrom(lines: string[]): number {
 }
 
 /** The widget component: renders the current window at the TUI's actual width. */
-function createWidget(tui: TUI, _theme: unknown): Component {
-	tuiRef = tui;
+/**
+ * The widget component: renders the bordered window at the TUI's actual width,
+ * reading the LIVE theme at render time (so theme swaps apply immediately).
+ */
+function makeWidget(ctx: ExtensionUIContextLike): Component {
+	const themeOf = (theme: unknown): WindowThemeLike => {
+		const t = theme as { fg(color: string, s: string): string; bold(s: string): string };
+		return {
+			border: (s) => t.fg("border", s),
+			highlight: (s) => t.fg("accent", t.bold(s)),
+			dim: (s) => t.fg("dim", s),
+		};
+	};
 	return {
 		invalidate(): void {
 			// No cached render state — nothing to invalidate.
@@ -132,18 +144,28 @@ function createWidget(tui: TUI, _theme: unknown): Component {
 			if (!currentItem) {
 				return [];
 			}
-			return renderDetail(
+			// Two border columns on each side: content wraps at width - 4.
+			const innerWidth = Math.max(1, width - 4);
+			const lines = renderDetail(
 				detailItemOf(currentItem),
-				width,
+				innerWidth,
 				MAX_LINES,
 				scrollOffset,
 			);
+			return decorateWindow(lines, width, themeOf(ctx.theme));
 		},
 	};
 }
 
 function installWidget(ctx: ExtensionUIContextLike): void {
-	ctx.setWidget("pi-skill-desc", createWidget, { placement: "aboveEditor" });
+	ctx.setWidget(
+		"pi-skill-desc",
+		(tui) => {
+			tuiRef = tui;
+			return makeWidget(ctx);
+		},
+		{ placement: "aboveEditor" },
+	);
 }
 
 function removeWidget(ctx: ExtensionUIContextLike): void {
@@ -168,7 +190,9 @@ function scrollWindow(delta: -1 | 1): void {
 		return; // window not shown — keys stay inert
 	}
 	const width = lastWidth > 0 ? lastWidth : 80;
-	const lines = renderDetail(detailItemOf(currentItem), width, MAX_LINES, 0);
+	// Match the widget's content width (borders take 4 columns).
+	const innerWidth = Math.max(1, width - 4);
+	const lines = renderDetail(detailItemOf(currentItem), innerWidth, MAX_LINES, 0);
 	scrollOffset = scroll(
 		scrollOffset,
 		delta,
