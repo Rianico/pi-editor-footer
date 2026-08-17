@@ -7,9 +7,9 @@
  */
 
 export interface DetailItem {
-  label: string;
-  kind: string;
-  description: string;
+	label: string;
+	kind: string;
+	description: string;
 }
 
 /**
@@ -25,50 +25,46 @@ export interface DetailItem {
  * - `scrollOffset` is clamped into `[0, max(0, contentLines - (maxLines - 1))]`.
  */
 export function renderDetail(
-  item: DetailItem | null,
-  width: number,
-  maxLines: number,
-  scrollOffset: number,
+	item: DetailItem | null,
+	width: number,
+	maxLines: number,
+	scrollOffset: number,
 ): string[] {
-  if (!item || item.description.trim() === "") {
-    return [];
-  }
+	if (!item || item.description.trim() === "") {
+		return [];
+	}
 
-  const wrapWidth = Math.max(1, Math.floor(width));
-  const safeMax = Math.max(1, Math.floor(maxLines));
+	const wrapWidth = Math.max(1, Math.floor(width));
+	const safeMax = Math.max(1, Math.floor(maxLines));
 
-  const contentLines = wrapDescription(item.description, wrapWidth);
-  const capacity = Math.max(0, safeMax - 1);
-  const maxOffset = capacity === 0 ? 0 : Math.max(0, contentLines.length - capacity);
-  const offset = clamp(Math.floor(scrollOffset) || 0, 0, maxOffset);
+	const contentLines = wrapDescription(item.description, wrapWidth);
+	const capacity = Math.max(0, safeMax - 1);
+	const maxOffset =
+		capacity === 0 ? 0 : Math.max(0, contentLines.length - capacity);
+	const offset = clamp(Math.floor(scrollOffset) || 0, 0, maxOffset);
 
-  const visibleLines = contentLines.slice(offset, offset + capacity);
+	const visibleLines = contentLines.slice(offset, offset + capacity);
 
-  // "More content" markers: `...` replaces the last visible content line when
-  // there is content remaining BELOW the window (not yet scrolled to the
-  // bottom), and the first visible line when scrolled down hides content
-  // ABOVE. The header's ` offset/total` marker still carries the exact totals.
-  const hasMoreAbove = offset > 0;
-  const hasMoreBelow = offset + visibleLines.length < contentLines.length;
-  if (hasMoreBelow && visibleLines.length > 0) {
-    visibleLines[visibleLines.length - 1] = "...";
-  }
-  if (hasMoreAbove && visibleLines.length > 1) {
-    visibleLines[0] = "...";
-  }
-  const overflows = contentLines.length > capacity;
-  const namePart = `${item.label} · ${item.kind}`;
-  let header: string;
-  if (overflows) {
-    // Reserve room for the scroll marker so it always survives truncation.
-    const marker = ` ${offset + 1}/${contentLines.length}`;
-    const nameWidth = Math.max(0, wrapWidth - marker.length);
-    header = truncateToWidth(namePart, nameWidth) + marker;
-  } else {
-    header = truncateToWidth(namePart, wrapWidth);
-  }
+	// "More content" marker: `...` replaces the last visible content line when
+	// there is content remaining BELOW the window (not yet scrolled to the
+	// bottom). The header's ` offset/total` marker still carries the totals.
+	const hasMoreBelow = offset + visibleLines.length < contentLines.length;
+	if (hasMoreBelow && visibleLines.length > 0) {
+		visibleLines[visibleLines.length - 1] = "...";
+	}
+	const overflows = contentLines.length > capacity;
+	const namePart = `${item.label} · ${item.kind}`;
+	let header: string;
+	if (overflows) {
+		// Reserve room for the scroll marker so it always survives truncation.
+		const marker = ` ${offset + 1}/${contentLines.length}`;
+		const nameWidth = Math.max(0, wrapWidth - marker.length);
+		header = truncateToWidth(namePart, nameWidth) + marker;
+	} else {
+		header = truncateToWidth(namePart, wrapWidth);
+	}
 
-  return [header, ...visibleLines];
+	return [header, ...visibleLines];
 }
 
 /**
@@ -79,45 +75,45 @@ export function renderDetail(
  *   `[0, contentLines - (maxLines - 1)]`.
  */
 export function scroll(
-  offset: number,
-  delta: -1 | 1,
-  contentLines: number,
-  maxLines: number,
+	offset: number,
+	delta: -1 | 1,
+	contentLines: number,
+	maxLines: number,
 ): number {
-  const capacity = Math.max(0, maxLines - 1);
-  if (capacity === 0) {
-    return 0;
-  }
-  const maxOffset = Math.max(0, contentLines - capacity);
-  if (maxOffset === 0) {
-    return 0;
-  }
-  return clamp(Math.floor(offset) + delta, 0, maxOffset);
+	const capacity = Math.max(0, maxLines - 1);
+	if (capacity === 0) {
+		return 0;
+	}
+	const maxOffset = Math.max(0, contentLines - capacity);
+	if (maxOffset === 0) {
+		return 0;
+	}
+	return clamp(Math.floor(offset) + delta, 0, maxOffset);
 }
 
 function wrapDescription(description: string, width: number): string[] {
-  const lines: string[] = [];
-  for (const rawLine of description.split("\n")) {
-    const trimmed = rawLine.replace(/\s+$/g, "");
-    if (trimmed === "") {
-      // Preserve explicit paragraph breaks (empty lines in the description).
-      lines.push("");
-      continue;
-    }
-    for (let i = 0; i < trimmed.length; i += width) {
-      const segment = trimmed.slice(i, i + width).replace(/\s+$/g, "");
-      if (segment !== "") {
-        lines.push(segment);
-      }
-    }
-  }
-  return lines;
+	const lines: string[] = [];
+	for (const rawLine of description.split("\n")) {
+		const trimmed = rawLine.replace(/\s+$/g, "");
+		if (trimmed === "") {
+			// Preserve explicit paragraph breaks (empty lines in the description).
+			lines.push("");
+			continue;
+		}
+		for (let i = 0; i < trimmed.length; i += width) {
+			const segment = trimmed.slice(i, i + width).replace(/\s+$/g, "");
+			if (segment !== "") {
+				lines.push(segment);
+			}
+		}
+	}
+	return lines;
 }
 
 function truncateToWidth(text: string, width: number): string {
-  return text.length <= width ? text : text.slice(0, width);
+	return text.length <= width ? text : text.slice(0, width);
 }
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+	return Math.max(min, Math.min(max, value));
 }
