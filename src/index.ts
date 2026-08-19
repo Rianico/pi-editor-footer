@@ -66,6 +66,10 @@ export interface ExtensionAPILike {
 		event: "thinking_level_select",
 		handler: (event: unknown, ctx: ExtensionContextLike) => void,
 	): void;
+	on(
+		event: "session_shutdown",
+		handler: (event: unknown, ctx: ExtensionContextLike) => void,
+	): void;
 	registerShortcut(
 		shortcut: string,
 		options: { description?: string; handler: () => void },
@@ -312,6 +316,7 @@ assertInternals();
 
 export default function (pi: ExtensionAPILike): void {
 	let watchTimer: ReturnType<typeof setInterval> | null = null;
+	let deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Toggle the border glow + model label (off restores pi's stock border).
 	// Replaces model-info-widget's command, which is inert now that we own the
@@ -358,13 +363,28 @@ export default function (pi: ExtensionAPILike): void {
 		currentModelInfo = modelInfoOf(ctx);
 
 		// Deferred so we win the single editor slot (see installEditor).
-		setTimeout(() => installEditor(ctx.ui), 0);
+		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
 
 		// Re-arm the ownership watchdog with this session's ctx.
 		if (watchTimer !== null) {
 			clearInterval(watchTimer);
 		}
 		watchTimer = setInterval(() => ensureEditorOwnership(ctx.ui), 1000);
+	});
+
+	// Teardown: pi emits session_shutdown BEFORE invalidating this runner (and
+	// before re-evaluating the module on /reload). Any timer that captured this
+	// session's ctx must be dead before then — otherwise its next tick hits the
+	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
+	pi.on("session_shutdown", () => {
+		if (deferredInstallTimer !== null) {
+			clearTimeout(deferredInstallTimer);
+			deferredInstallTimer = null;
+		}
+		if (watchTimer !== null) {
+			clearInterval(watchTimer);
+			watchTimer = null;
+		}
 	});
 
 	// Keep the border label/glow current when the model or thinking level changes.
