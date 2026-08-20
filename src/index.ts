@@ -13,6 +13,8 @@ import { installFooter } from "./footer.js";
 import { createInitialState } from "./state.js";
 import type { FooterState } from "./state.js";
 import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
+import { readGitStatus } from "./git.js";
+import { readRuntimeInfo } from "./runtime.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
@@ -115,7 +117,7 @@ let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
-const footerState: FooterState = createInitialState();
+let footerState: FooterState = createInitialState();
 let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
@@ -419,8 +421,33 @@ export default function (pi: ExtensionAPILike): void {
 						effort: currentModelInfo.level,
 					}),
 					{
-						setRequestRender: (fn) => {},
-						scheduleGitRefresh: () => {},
+						setRequestRender: (fn) => {
+							(
+								globalThis as unknown as { __footerRender?: () => void }
+							).__footerRender = fn ?? undefined;
+						},
+						scheduleGitRefresh: () => {
+							void (async () => {
+								try {
+									const cwd =
+										(
+											ctx as unknown as { sessionManager?: { getCwd: () => string } }
+										).sessionManager?.getCwd?.() ??
+										(ctx as unknown as { cwd?: string }).cwd ??
+										process.cwd();
+									const git = await readGitStatus(cwd);
+									footerState = { ...footerState, git } as FooterState;
+									(
+										globalThis as unknown as { __footerRender?: () => void }
+									).__footerRender?.();
+									const runtime = await readRuntimeInfo(cwd);
+									footerState = { ...footerState, runtime } as FooterState;
+									(
+										globalThis as unknown as { __footerRender?: () => void }
+									).__footerRender?.();
+								} catch {}
+							})();
+						},
 					},
 				);
 			} catch (_e) {

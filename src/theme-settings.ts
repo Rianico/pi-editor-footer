@@ -59,7 +59,6 @@ const COPY = {
   hint: "Tab/Shift+Tab/←/→: tabs · ↑/↓: move · Enter/Space: change · Esc/q: close",
   labels: {
     enabled: "Enabled",
-    workspaceDisplay: "Workspace display",
     cursorStyle: "Cursor style",
     iconMode: "Icon mode",
     cwd: "CWD",
@@ -81,10 +80,6 @@ const COPY = {
   values: {
     on: "On",
     off: "Off",
-    workspace: { path: "Path", name: "Name" } as Record<
-      ThemeConfig["workspaceDisplay"],
-      string
-    >,
     cursorStyles: {
       block: "Block",
       bar: "Bar",
@@ -97,12 +92,6 @@ const COPY = {
   },
 };
 
-function toggleWorkspace(config: ThemeConfig): ThemeConfig {
-  return {
-    ...config,
-    workspaceDisplay: config.workspaceDisplay === "path" ? "name" : "path",
-  };
-}
 function cycleCursor(config: ThemeConfig): ThemeConfig {
   const order: CursorStyle[] = ["block", "bar", "underline"];
   const idx = order.indexOf(config.cursorStyle);
@@ -150,11 +139,6 @@ function buildGeneralItems(config: ThemeConfig): SettingItem[] {
       id: "enabled",
       label: COPY.labels.enabled,
       currentValue: config.enabled ? COPY.values.on : COPY.values.off,
-    },
-    {
-      id: "workspaceDisplay",
-      label: COPY.labels.workspaceDisplay,
-      currentValue: COPY.values.workspace[config.workspaceDisplay],
     },
     {
       id: "cursorStyle",
@@ -265,7 +249,6 @@ function handleSettingChange(
 ): ThemeConfig {
   if (tab === "general") {
     if (itemId === "enabled") return { ...config, enabled: !config.enabled };
-    if (itemId === "workspaceDisplay") return toggleWorkspace(config);
     if (itemId === "cursorStyle") return cycleCursor(config);
   }
   if (tab === "appearance") {

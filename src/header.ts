@@ -54,9 +54,8 @@ export function truncatePath(path: string, maxLen: number): string {
   return result.length > maxLen ? result.slice(0, maxLen - 3) + "..." : result;
 }
 
-function displayCwd(rawCwd: string, mode: WorkspaceDisplay): string {
-  const formatted = formatCwd(rawCwd);
-  return mode === "name" ? basenamePath(formatted) : formatted;
+function displayCwd(rawCwd: string, _mode: WorkspaceDisplay): string {
+  return formatCwd(rawCwd);
 }
 
 // Keep layout logic local; footer owns the full headerColumnWidths.

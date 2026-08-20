@@ -176,14 +176,13 @@ export function renderFooter(
   if (segments.cwd) {
     const maxCwd = Math.min(30, Math.max(10, Math.floor(width * 0.4)));
     const rawCwd = formatCwd(ctx.cwd);
-    const displayCwd =
-      config.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
+    const displayCwd = rawCwd;
     const cwdPrefix = `${theme.fg("mdLink", glyphs.cwd)} `;
     const accent = (text: string) => theme.fg("accent", text);
     leftParts.push({
       text: `${cwdPrefix}${accent(truncatePath(displayCwd, maxCwd))}`,
       compactText: `${cwdPrefix}${accent(truncatePath(basenamePath(displayCwd), maxCwd))}`,
-      priority: 0,
+      priority: 5,
       truncate: (_text, maxWidth, ellipsis) => {
         const pathWidth = maxWidth - visibleWidth(cwdPrefix);
         if (pathWidth <= visibleWidth(ellipsis)) {
@@ -207,7 +206,7 @@ export function renderFooter(
     }
   }
   const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
-  if (gitSeg) leftParts.push({ text: gitSeg, priority: 3 });
+  if (gitSeg) leftParts.push({ text: gitSeg, priority: 4 });
   if (segments.runtime) {
     const runtimeSeg = renderRuntimeSegment(
       theme,
