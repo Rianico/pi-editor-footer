@@ -61,10 +61,8 @@ function renderGitSegment(
   const parts: string[] = [];
   if (segments.gitBranch) {
     if (git.branch) {
-      parts.push(theme.fg("mdLink", glyphs.git));
       parts.push(theme.fg("mdLink", truncateBranch(git.branch, maxBranchLen)));
     } else if (git.commit?.detached) {
-      parts.push(theme.fg("warning", glyphs.git));
       parts.push(theme.fg("warning", "HEAD"));
       if (git.commit.oid) {
         const shortHash = git.commit.oid.slice(0, 7);

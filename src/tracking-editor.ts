@@ -305,7 +305,11 @@ export class TrackingEditor extends Editor {
 	private renderBase(width: number): string[] {
 		const lines = super.render(width);
 		if (this.cursorStyle === "block") return lines;
-		let cursorMarker = "";
+		let cursorMarker =
+			this.previewHardwareCursor &&
+			!(this as unknown as { focused?: boolean }).focused
+				? CURSOR_MARKER
+				: "";
 		if ((this as unknown as { focused?: boolean }).focused)
 			this.previewHardwareCursor = false;
 		return lines.map((line) => {
