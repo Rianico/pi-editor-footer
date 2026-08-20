@@ -59,61 +59,6 @@ function isBorderLine(line: string): boolean {
 	return /^─+$/.test(plain) || /^─── [↑↓] \d+ more/.test(plain);
 }
 
-/**
- * Embed telemetry text right-aligned on the bottom border line.
- * Left dashes are glow-colored, telemetry keeps its own ANSI colors.
- */
-function _embedTelemetry(
-	lines: string[],
-	width: number,
-	telemetryText: string,
-	getGlow: (s: string) => string,
-): string[] {
-	if (!telemetryText || lines.length === 0) return lines;
-	const tWidth = visibleWidth(telemetryText);
-	if (tWidth <= 0) return lines;
-	// Find bottom border index (last border-like line)
-	let bottomIdx = -1;
-	for (let i = lines.length - 1; i >= 0; i--) {
-		if (isBorderLine(lines[i] ?? "")) {
-			bottomIdx = i;
-			break;
-		}
-	}
-	if (bottomIdx === -1) return lines;
-
-	// Truncate telemetry if too wide (reserve 2 pad spaces + 1 right dash min)
-	const maxTelemetryWidth = Math.max(0, width - 3);
-	let displayText = telemetryText;
-	let displayWidth = tWidth;
-	if (tWidth > maxTelemetryWidth) {
-		displayText = truncateToWidth(telemetryText, maxTelemetryWidth, "");
-		displayWidth = visibleWidth(displayText);
-	}
-	const pad = " ";
-	const rightDash = 1;
-	const leftDash = Math.max(0, width - displayWidth - 2 - rightDash);
-	// Build bottom line: left glow dashes + pad + telemetry + pad + right glow dash
-	const embedded =
-		getGlow("─".repeat(leftDash)) +
-		pad +
-		displayText +
-		pad +
-		getGlow("─".repeat(rightDash));
-	// Ensure visible width equals requested width (truncate if ANSI miscount)
-	const result = [...lines];
-	result[bottomIdx] = truncateToWidth(embedded, width, "");
-	// truncateToWidth strips? We used it without theme; need to ensure we keep ANSI.
-	// Actually truncateToWidth from pi-tui handles ANSI; our embedded already ANSI, but we passed without theme fg for ellipsis.
-	// If truncation happened above, we already handled. So just assign embedded; ensure width.
-	// Use visibleWidth to pad if needed? Embedded already width-exact by construction.
-	// For safety, if visibleWidth != width due to rounding, pad/truncate via visibleWidth
-	if (visibleWidth(embedded) !== width) {
-		// Fallback: truncate/pad using visibleWidth
-		result[bottomIdx] = embedded;
-	}
-	return result;
-}
 function embedBottomBorder(
 	lines: string[],
 	width: number,
