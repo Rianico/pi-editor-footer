@@ -162,7 +162,7 @@ function embedTopRightBorder(
   // Strip then rebuild: we need to preserve left part and insert right
   // Simple approach: truncate existing to width - displayW - 3, then add " " + displayRight + " " + glow("─")
   const availableForLeft = Math.max(0, width - displayW - 3);
-  let leftPart = truncateToWidth(existing, availableForLeft, "");
+  const leftPart = truncateToWidth(existing, availableForLeft, "");
   // Ensure leftPart ends with glow dash if truncated
   const rightSegment = ` ${displayRight} ${getGlow("─")}`;
   const leftW2 = visibleWidth(leftPart);

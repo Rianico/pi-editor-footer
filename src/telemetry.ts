@@ -96,6 +96,8 @@ interface TurnTiming {
   generationMs: number;
   stallMs: number;
   stallCount: number;
+  liveEstimatedTokens: number;
+  liveDeltaChars: number;
 }
 
 function isAssistantMessage(message: AgentMessage): boolean {
@@ -107,6 +109,40 @@ function round(value: number, decimals: number): number {
   return Math.round(value * factor) / factor;
 }
 
+/** Fallback token estimate when pi-coding-agent's estimateTokens is unavailable. ~4 chars per token. */
+function estimateTokensFallback(content: unknown): number {
+  try {
+    if (typeof content === "string")
+      return Math.max(0, Math.ceil(content.length / 4));
+    if (Array.isArray(content)) {
+      let total = 0;
+      for (const block of content) {
+        if (typeof block === "string")
+          total += Math.ceil((block as string).length / 4);
+        else if (block && typeof block === "object") {
+          const b = block as Record<string, unknown>;
+          if (typeof b.text === "string")
+            total += Math.ceil((b.text as string).length / 4);
+          else if (typeof b.content === "string")
+            total += Math.ceil((b.content as string).length / 4);
+          else total += Math.ceil(JSON.stringify(block).length / 4);
+        }
+      }
+      return total;
+    }
+    if (content && typeof content === "object")
+      return Math.ceil(JSON.stringify(content).length / 4);
+  } catch {
+    void 0;
+  }
+  return 0;
+}
+
+function estimateMessageTokens(msg: AgentMessage): number {
+  // Prefer pi-coding-agent's estimate if message already has token-ish length; fallback to content heuristic
+  const c = (msg as unknown as { content?: unknown })?.content;
+  return estimateTokensFallback(c);
+}
 export function fmtTokens(n: number): string {
   if (n < 1000) return n.toString();
   if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
@@ -173,6 +209,15 @@ export class TurnTelemetryTracker {
       outputTokens += m.usage.output;
       totalTokens += m.usage.totalTokens;
       costUsd += m.usage.cost.total;
+    }
+    // During streaming no message has ended yet — use live estimate so TPS refreshes in real time
+    if (outputTokens === 0 && turn.liveEstimatedTokens > 0) {
+      outputTokens = turn.liveEstimatedTokens;
+      totalTokens = turn.liveEstimatedTokens;
+    } else if (turn.liveEstimatedTokens > outputTokens) {
+      // streaming extension of current message — reflect growth even before message_end
+      outputTokens = turn.liveEstimatedTokens;
+      totalTokens = Math.max(totalTokens, turn.liveEstimatedTokens);
     }
     const measurementMs = genMs > 0 && outputTokens > 0 ? genMs : null;
     const tps =
@@ -244,6 +289,8 @@ export class TurnTelemetryTracker {
       generationMs: 0,
       stallMs: 0,
       stallCount: 0,
+      liveEstimatedTokens: 0,
+      liveDeltaChars: 0,
     };
   }
 
@@ -275,6 +322,15 @@ export class TurnTelemetryTracker {
     if (!turn || !current || !isAssistantMessage(message)) return;
 
     const now = this.now();
+    // Track live estimated tokens for real-time TPS during streaming
+    turn.liveDeltaChars += streamEvent.delta.length;
+    const estFromContent = estimateMessageTokens(message);
+    const estFromDelta = Math.ceil(turn.liveDeltaChars / 4);
+    turn.liveEstimatedTokens = Math.max(
+      estFromContent,
+      estFromDelta,
+      turn.liveEstimatedTokens,
+    );
     if (current.firstOutputMs === null) {
       current.firstOutputMs = now;
       turn.firstTokenMs ??= now;
