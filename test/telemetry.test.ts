@@ -33,7 +33,13 @@ function makeMessage(output = 20, input = 50): AssistantMessage {
       input,
       output,
       totalTokens,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: totalTokens * 0.000004 },
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: totalTokens * 0.000004,
+      },
     },
     stopReason: "stop",
     timestamp: Date.now(),
@@ -44,7 +50,11 @@ function update(
   message: AssistantMessage,
   delta = "x",
   type = "text_delta",
-): { type: "message_update"; message: AssistantMessage; assistantMessageEvent: { type: string; delta: string } } {
+): {
+  type: "message_update";
+  message: AssistantMessage;
+  assistantMessageEvent: { type: string; delta: string };
+} {
   return {
     type: "message_update",
     message: message as unknown as AssistantMessage & { role: string },
@@ -52,14 +62,33 @@ function update(
   };
 }
 
-function startTurn(tracker: TurnTelemetryTracker, message: AssistantMessage, turnIndex = 0): void {
+function startTurn(
+  tracker: TurnTelemetryTracker,
+  message: AssistantMessage,
+  turnIndex = 0,
+): void {
   tracker.handle({ type: "turn_start", turnIndex, timestamp: Date.now() });
-  tracker.handle({ type: "message_start", message: message as unknown as AssistantMessage & { role: string } });
+  tracker.handle({
+    type: "message_start",
+    message: message as unknown as AssistantMessage & { role: string },
+  });
 }
 
-function endTurn(tracker: TurnTelemetryTracker, message: AssistantMessage, turnIndex = 0) {
-  tracker.handle({ type: "message_end", message: message as unknown as AssistantMessage & { role: string } });
-  return tracker.handle({ type: "turn_end", turnIndex, message: message as unknown as AssistantMessage & { role: string }, toolResults: [] });
+function endTurn(
+  tracker: TurnTelemetryTracker,
+  message: AssistantMessage,
+  turnIndex = 0,
+) {
+  tracker.handle({
+    type: "message_end",
+    message: message as unknown as AssistantMessage & { role: string },
+  });
+  return tracker.handle({
+    type: "turn_end",
+    turnIndex,
+    message: message as unknown as AssistantMessage & { role: string },
+    toolResults: [],
+  });
 }
 
 describe("TurnTelemetryTracker", () => {
@@ -90,7 +119,7 @@ describe("TurnTelemetryTracker", () => {
     });
     assert.equal(
       formatTurnTelemetry(telemetry!, theme, fullConfig),
-      "> TPS 4.0 tok/s | ~ TTFT 4.0s | + 5.0s | ↑ 50 | ↓ 20 | $ $4.00/M",
+      "> TPS 4.0 tok/s | ~ TTFT 4.0s | + 5.0s | ↑ 50 | ↓ 20 | $4.00/M",
     );
   });
 
@@ -101,9 +130,20 @@ describe("TurnTelemetryTracker", () => {
 
     tracker.handle({ type: "turn_start", turnIndex: 0, timestamp: Date.now() });
     now = 5000;
-    tracker.handle({ type: "message_start", message: message as unknown as AssistantMessage & { role: string } });
-    tracker.handle({ type: "message_end", message: message as unknown as AssistantMessage & { role: string } });
-    const telemetry = tracker.handle({ type: "turn_end", turnIndex: 0, message: message as unknown as AssistantMessage & { role: string }, toolResults: [] })!;
+    tracker.handle({
+      type: "message_start",
+      message: message as unknown as AssistantMessage & { role: string },
+    });
+    tracker.handle({
+      type: "message_end",
+      message: message as unknown as AssistantMessage & { role: string },
+    });
+    const telemetry = tracker.handle({
+      type: "turn_end",
+      turnIndex: 0,
+      message: message as unknown as AssistantMessage & { role: string },
+      toolResults: [],
+    })!;
 
     assert.equal(telemetry.tps, 4);
     assert.equal(telemetry.ttftMs, 5000);
@@ -155,7 +195,10 @@ describe("TurnTelemetryTracker", () => {
     assert.ok(stalled.tps! < uninterrupted.tps!);
     assert.equal(stalled.stallMs, 3300);
     assert.equal(stalled.stallCount, 2);
-    assert.match(formatTurnTelemetry(stalled, theme, fullConfig), /! stall 2x \/ 3\.3s/);
+    assert.match(
+      formatTurnTelemetry(stalled, theme, fullConfig),
+      /! stall 2x \/ 3\.3s/,
+    );
   });
 
   test("getLastTelemetry returns last turn", () => {

@@ -252,9 +252,11 @@ export function renderFooter(
     }
   }
   if (segments.cost) {
-    stats.push(
-      theme.fg("warning", `${glyphs.cost} $${totals.cost.toFixed(3)}`),
-    );
+    const costValue = totals.cost.toFixed(3);
+    // Avoid "$ $0.000" when the cost glyph itself is "$" (ascii mode) — glyph already is the currency symbol
+    const costText =
+      glyphs.cost === "$" ? `$${costValue}` : `${glyphs.cost} $${costValue}`;
+    stats.push(theme.fg("warning", costText));
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
 

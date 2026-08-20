@@ -538,12 +538,10 @@ export function formatTurnTelemetry(
     );
   }
   if (config.cost && telemetry.rateUsdPerMTokens !== null) {
-    parts.push(
-      theme.fg(
-        "warning",
-        `${g.cost} $${telemetry.rateUsdPerMTokens.toFixed(2)}/M`,
-      ),
-    );
+    const rate = telemetry.rateUsdPerMTokens.toFixed(2);
+    // Avoid "$ $0.16/M" when the cost glyph itself is "$" (ascii) — glyph already is the currency symbol
+    const costText = g.cost === "$" ? `$${rate}/M` : `${g.cost} $${rate}/M`;
+    parts.push(theme.fg("warning", costText));
   }
   if (parts.length === 0) return "";
   // Use theme dim for separator if not custom
