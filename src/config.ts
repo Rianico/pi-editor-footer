@@ -109,15 +109,17 @@ function deepMerge<T>(base: T, override: unknown): T {
   return result as T;
 }
 
+function isBoolean(v: unknown): v is boolean {
+  return typeof v === "boolean";
+}
+
 function validate(config: ThemeConfig): ThemeConfig {
-  // workspaceDisplay
   if (
     config.workspaceDisplay !== "path" &&
     config.workspaceDisplay !== "name"
   ) {
     config.workspaceDisplay = DEFAULT_CONFIG.workspaceDisplay;
   }
-  // cursorStyle
   if (
     config.cursorStyle !== "block" &&
     config.cursorStyle !== "bar" &&
@@ -125,7 +127,6 @@ function validate(config: ThemeConfig): ThemeConfig {
   ) {
     config.cursorStyle = DEFAULT_CONFIG.cursorStyle;
   }
-  // icons.mode
   if (
     config.icons.mode !== "auto" &&
     config.icons.mode !== "nerd" &&
@@ -133,52 +134,141 @@ function validate(config: ThemeConfig): ThemeConfig {
   ) {
     config.icons.mode = DEFAULT_CONFIG.icons.mode;
   }
+  if (!isBoolean(config.enabled)) {
+    config.enabled = DEFAULT_CONFIG.enabled;
+  }
+  const fs = config.footerSegments as unknown as Record<string, unknown>;
+  const dfs = DEFAULT_CONFIG.footerSegments as unknown as Record<
+    string,
+    boolean
+  >;
+  for (const k of Object.keys(dfs)) {
+    if (!isBoolean(fs[k])) fs[k] = dfs[k];
+  }
+  const t = config.telemetry as unknown as Record<string, unknown>;
+  const dt = DEFAULT_CONFIG.telemetry as unknown as Record<string, boolean>;
+  for (const k of Object.keys(dt)) {
+    if (!isBoolean(t[k])) t[k] = dt[k];
+  }
   return config;
 }
 
-export function ensureConfigExists(): void {
-  const path = getConfigPath();
-  if (existsSync(path)) return;
-  try {
-    const dir = join(path, "..");
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(path, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", "utf8");
-  } catch {
-    // best-effort
+// ---------------------------------------------------------------------------
+// ConfigStore — deep module owning validation + persistence behind one seam
+// ---------------------------------------------------------------------------
+
+export interface ConfigStoreDeps {
+  readFile?: (path: string, encoding: string) => string;
+  writeFile?: (path: string, data: string, encoding: string) => void;
+  exists?: (path: string) => boolean;
+  mkdirSync?: (path: string, opts: { recursive: boolean }) => void;
+  path?: string;
+}
+
+type Listener = (cfg: ThemeConfig, prev: ThemeConfig) => void;
+
+export class ConfigStore {
+  private readonly readFile: (path: string, encoding: string) => string;
+  private readonly writeFile: (
+    path: string,
+    data: string,
+    encoding: string,
+  ) => void;
+  private readonly exists: (path: string) => boolean;
+  private readonly mkdirSyncFn: (
+    path: string,
+    opts: { recursive: boolean },
+  ) => void;
+  private readonly explicitPath: string | undefined;
+  private listeners = new Set<Listener>();
+
+  constructor(deps: ConfigStoreDeps = {}) {
+    this.readFile =
+      deps.readFile ??
+      ((p: string, enc: string) =>
+        readFileSync(p, enc as BufferEncoding) as unknown as string);
+    this.writeFile =
+      deps.writeFile ??
+      ((p: string, d: string, enc: string) =>
+        writeFileSync(p, d, enc as BufferEncoding));
+    this.exists = deps.exists ?? existsSync;
+    this.mkdirSyncFn = deps.mkdirSync ?? mkdirSync;
+    this.explicitPath = deps.path;
+  }
+
+  getPath(): string {
+    return this.explicitPath ?? getConfigPath();
+  }
+
+  get(): ThemeConfig {
+    const p = this.getPath();
+    if (!this.exists(p)) {
+      try {
+        const dir = join(p, "..");
+        if (!this.exists(dir)) this.mkdirSyncFn(dir, { recursive: true });
+        this.writeFile(
+          p,
+          JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n",
+          "utf8",
+        );
+      } catch {
+        // best-effort
+      }
+      return structuredClone(DEFAULT_CONFIG);
+    }
+    try {
+      const raw = this.readFile(p, "utf8");
+      const parsed: unknown = JSON.parse(raw);
+      const merged = deepMerge(structuredClone(DEFAULT_CONFIG), parsed);
+      return validate(merged);
+    } catch (err) {
+      console.warn(
+        `[pi-skill-desc] config parse error (${p}): ${err instanceof Error ? err.message : String(err)} — using defaults`,
+      );
+      return structuredClone(DEFAULT_CONFIG);
+    }
+  }
+
+  patch(patch: Partial<ThemeConfig> & Record<string, unknown>): ThemeConfig {
+    const prev = this.get();
+    const merged = validate(deepMerge(prev, patch) as ThemeConfig);
+    const p = this.getPath();
+    try {
+      const dir = join(p, "..");
+      if (!this.exists(dir)) this.mkdirSyncFn(dir, { recursive: true });
+      this.writeFile(p, JSON.stringify(merged, null, 2) + "\n", "utf8");
+    } catch {
+      // best-effort
+    }
+    for (const fn of this.listeners) {
+      try {
+        fn(merged, prev);
+      } catch {
+        // subscriber error should not break store
+      }
+    }
+    return merged;
+  }
+
+  subscribe(fn: Listener): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
 }
 
+// Default singleton for backward-compat free functions
+const defaultStore = new ConfigStore();
+
+export function ensureConfigExists(): void {
+  void defaultStore.get();
+}
+
 export function loadConfig(): ThemeConfig {
-  const path = getConfigPath();
-  if (!existsSync(path)) {
-    ensureConfigExists();
-    return structuredClone(DEFAULT_CONFIG);
-  }
-  try {
-    const raw = readFileSync(path, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    const merged = deepMerge(structuredClone(DEFAULT_CONFIG), parsed);
-    return validate(merged);
-  } catch (err) {
-    console.warn(
-      `[pi-skill-desc] config parse error (${path}): ${err instanceof Error ? err.message : String(err)} — using defaults`,
-    );
-    return structuredClone(DEFAULT_CONFIG);
-  }
+  return defaultStore.get();
 }
 
 export function saveConfig(
   patch: Partial<ThemeConfig> & Record<string, unknown>,
 ): ThemeConfig {
-  const current = loadConfig();
-  const merged = validate(deepMerge(current, patch) as ThemeConfig);
-  const path = getConfigPath();
-  try {
-    const dir = join(path, "..");
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(path, JSON.stringify(merged, null, 2) + "\n", "utf8");
-  } catch {
-    // best-effort
-  }
-  return merged;
+  return defaultStore.patch(patch);
 }
