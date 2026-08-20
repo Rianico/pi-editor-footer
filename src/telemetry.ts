@@ -539,10 +539,7 @@ export function formatTurnTelemetry(
   }
   if (config.cost && telemetry.rateUsdPerMTokens !== null) {
     const rate = telemetry.rateUsdPerMTokens.toFixed(2);
-    // "$0.16/M" is short for "$0.16 per million tokens" — make it explicit to avoid "weird /M" confusion
-    // Keep single "$" when glyph is "$" (ascii), otherwise show icon + " $rate per M"
-    const costText =
-      g.cost === "$" ? `$${rate} per M` : `${g.cost} $${rate} per M`;
+    const costText = g.cost === "$" ? `$${rate}` : `${g.cost} $${rate}`;
     parts.push(theme.fg("warning", costText));
   }
   if (parts.length === 0) return "";
