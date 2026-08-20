@@ -266,7 +266,8 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		try {
 			const cwd = process.cwd();
 			const rawCwd = formatCwd(cwd);
-			const displayCwd = currentConfig.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
+			const displayCwd =
+				currentConfig.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
 			editor.setBottomLeftText(displayCwd);
 		} catch {}
 		editor.onHighlight = (item) => {
@@ -461,6 +462,41 @@ export default function (pi: ExtensionAPILike): void {
 			} catch (_e) {
 				void _e;
 			}
+			// initial git/runtime population so footer isn't empty at startup (onBranchChange only fires on change)
+			void (async () => {
+				try {
+					const cwd =
+						(
+							ctx as unknown as { sessionManager?: { getCwd: () => string } }
+						).sessionManager?.getCwd?.() ??
+						(ctx as unknown as { cwd?: string }).cwd ??
+						process.cwd();
+					const git = await readGitStatus(cwd);
+					footerState = { ...footerState, git } as FooterState;
+					try {
+						const rawCwd = formatCwd(cwd);
+						const displayCwd =
+							currentConfig.workspaceDisplay === "name"
+								? basenamePath(rawCwd)
+								: rawCwd;
+						const gitLabel = git.branch
+							? `${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ""}${git.behind > 0 ? ` ↓${git.behind}` : ""}`
+							: git.commit?.detached && git.commit.oid
+								? `HEAD ${git.commit.oid.slice(0, 7)}`
+								: "";
+						const leftText = gitLabel ? `${displayCwd}  ${gitLabel}` : displayCwd;
+						installedEditor?.setBottomLeftText(leftText);
+					} catch {}
+					(
+						globalThis as unknown as { __footerRender?: () => void }
+					).__footerRender?.();
+					const runtime = await readRuntimeInfo(cwd);
+					footerState = { ...footerState, runtime } as FooterState;
+					(
+						globalThis as unknown as { __footerRender?: () => void }
+					).__footerRender?.();
+				} catch {}
+			})();
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 			// initial bottom border left: location (cwd/workspace switch) — git will be added after fetch
 			try {
