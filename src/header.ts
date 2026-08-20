@@ -8,9 +8,6 @@ export type WorkspaceDisplay = "path" | "name";
 
 export interface HeaderThemeLike {
   fg(style: string, s: string): string;
-  dim(s: string): string;
-  bold(s: string): string;
-  muted(s: string): string;
 }
 
 export interface HeaderDeps {
@@ -81,12 +78,12 @@ export function renderHeader(
     .slice(0, 3)
     .map((t) => (t.startsWith("/") ? t : `/${t}`));
   const tipsText =
-    tips.length > 0 ? tips.map((t) => theme.dim(t)).join("  ") : "";
+    tips.length > 0 ? tips.map((t) => theme.fg("dim", t)).join("  ") : "";
 
   // At very narrow widths, just show cwd with icon, truncated.
   if (width < 24 || tipsText === "") {
     const raw = `${icon} ${cwdText}`;
-    const truncated = truncateToWidth(raw, width, theme.dim("..."));
+    const truncated = truncateToWidth(raw, width, theme.fg("dim", "..."));
     return [truncated];
   }
 
@@ -95,7 +92,7 @@ export function renderHeader(
   // Reserve for tips; if not enough room, drop tips.
   if (tipsW + gapW + 10 > width) {
     const raw = `${icon} ${cwdText}`;
-    return [truncateToWidth(raw, width, theme.dim("..."))];
+    return [truncateToWidth(raw, width, theme.fg("dim", "..."))];
   }
 
   // Allocate widths
@@ -109,7 +106,7 @@ export function renderHeader(
   const leftVisible = visibleWidth(leftText);
   const pad = Math.max(gapW, width - leftVisible - tipsW);
   const line = leftText + " ".repeat(pad) + tipsText;
-  return [truncateToWidth(line, width, theme.dim("..."))];
+  return [truncateToWidth(line, width, theme.fg("dim", "..."))];
 }
 
 // Minimal widget installer — keeps header always on when enabled.

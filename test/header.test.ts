@@ -9,10 +9,7 @@ import {
 } from "../src/header.js";
 
 const theme: HeaderThemeLike = {
-  fg: (_s, text) => text,
-  dim: (s) => s,
-  bold: (s) => s,
-  muted: (s) => s,
+  fg: (_style: string, text: string) => text,
 };
 
 describe("formatCwd", () => {
@@ -59,7 +56,11 @@ describe("renderHeader", () => {
   it("shows cwd with icon and hints at wide width", () => {
     const lines = renderHeader(
       80,
-      { cwd: "/tmp/my-workspace", workspaceDisplay: "path", tipCommands: ["theme", "model-info"] },
+      {
+        cwd: "/tmp/my-workspace",
+        workspaceDisplay: "path",
+        tipCommands: ["theme", "model-info"],
+      },
       theme,
     );
     assert.equal(lines.length, 1);
@@ -70,12 +71,20 @@ describe("renderHeader", () => {
   it("honours workspaceDisplay=name (basename only)", () => {
     const wide = renderHeader(
       80,
-      { cwd: "/home/user/projects/my-workspace", workspaceDisplay: "name", tipCommands: ["theme"] },
+      {
+        cwd: "/home/user/projects/my-workspace",
+        workspaceDisplay: "name",
+        tipCommands: ["theme"],
+      },
       theme,
     );
     const pathMode = renderHeader(
       80,
-      { cwd: "/home/user/projects/my-workspace", workspaceDisplay: "path", tipCommands: ["theme"] },
+      {
+        cwd: "/home/user/projects/my-workspace",
+        workspaceDisplay: "path",
+        tipCommands: ["theme"],
+      },
       theme,
     );
     assert.ok(wide[0]!.includes("my-workspace"));
@@ -86,7 +95,11 @@ describe("renderHeader", () => {
   it("drops tips at narrow width", () => {
     const lines = renderHeader(
       20,
-      { cwd: "/tmp/ws", workspaceDisplay: "path", tipCommands: ["theme", "model-info"] },
+      {
+        cwd: "/tmp/ws",
+        workspaceDisplay: "path",
+        tipCommands: ["theme", "model-info"],
+      },
       theme,
     );
     assert.equal(lines.length, 1);
@@ -95,11 +108,25 @@ describe("renderHeader", () => {
   });
 
   it("returns empty for missing cwd", () => {
-    assert.deepEqual(renderHeader(80, { cwd: "", workspaceDisplay: "path", tipCommands: ["theme"] }, theme), []);
+    assert.deepEqual(
+      renderHeader(
+        80,
+        { cwd: "", workspaceDisplay: "path", tipCommands: ["theme"] },
+        theme,
+      ),
+      [],
+    );
   });
 
   it("returns empty for zero width", () => {
-    assert.deepEqual(renderHeader(0, { cwd: "/tmp/x", workspaceDisplay: "path", tipCommands: ["x"] }, theme), []);
+    assert.deepEqual(
+      renderHeader(
+        0,
+        { cwd: "/tmp/x", workspaceDisplay: "path", tipCommands: ["x"] },
+        theme,
+      ),
+      [],
+    );
   });
 
   it("truncates long cwd via truncatePath", () => {
@@ -129,7 +156,12 @@ describe("renderHeader", () => {
   it("respects custom cwd icon", () => {
     const lines = renderHeader(
       80,
-      { cwd: "/tmp/ws", workspaceDisplay: "path", tipCommands: [], iconCwd: "" },
+      {
+        cwd: "/tmp/ws",
+        workspaceDisplay: "path",
+        tipCommands: [],
+        iconCwd: "",
+      },
       theme,
     );
     assert.ok(lines[0]!.includes(""));

@@ -113,8 +113,8 @@ let headerCleanup: (() => void) | null = null;
 let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let currentConfig: ThemeConfig = loadConfig();
-let telemetryTracker = new TurnTelemetryTracker();
-let footerState: FooterState = createInitialState();
+const telemetryTracker = new TurnTelemetryTracker();
+const footerState: FooterState = createInitialState();
 let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
@@ -452,9 +452,13 @@ export default function (pi: ExtensionAPILike): void {
 						scheduleGitRefresh: () => {},
 					},
 				);
-			} catch {}
+			} catch (_e) {
+				void _e;
+			}
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
-		} catch {}
+		} catch (_e) {
+			void _e;
+		}
 
 		// Re-arm the ownership watchdog with this session's ctx.
 		if (watchTimer !== null) {
@@ -501,7 +505,9 @@ export default function (pi: ExtensionAPILike): void {
 					currentConfig.telemetry,
 				);
 				installedEditor.setTelemetryText(text);
-			} catch {}
+			} catch (_e) {
+				void _e;
+			}
 		}
 	});
 
