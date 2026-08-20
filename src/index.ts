@@ -8,9 +8,19 @@ import {
 	type TUI,
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
+import { installFooter } from "./footer.js";
+import { createInitialState } from "./state.js";
+import type { FooterState } from "./state.js";
+import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
+import { readGitStatus } from "./git.js";
+import { readRuntimeInfo } from "./runtime.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
+import { loadConfig, saveConfig } from "./config.js";
+import type { ThemeConfig } from "./config.js";
+import { registerThemeSettingsCommand } from "./theme-settings.js";
+import { formatCwd, basenamePath } from "./utils.js";
 
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -70,6 +80,10 @@ export interface ExtensionAPILike {
 		event: "session_shutdown",
 		handler: (event: unknown, ctx: ExtensionContextLike) => void,
 	): void;
+	on(
+		event: string,
+		handler: (event: unknown, ctx: ExtensionContextLike) => void,
+	): void;
 	registerShortcut(
 		shortcut: string,
 		options: { description?: string; handler: () => void },
@@ -78,10 +92,7 @@ export interface ExtensionAPILike {
 		name: string,
 		options: {
 			description?: string;
-			handler: (
-				args: string,
-				ctx: ExtensionContextLike,
-			) => void | Promise<void>;
+			handler: (args: string, ctx: ExtensionContextLike) => void | Promise<void>;
 		},
 	): void;
 }
@@ -101,7 +112,12 @@ let tuiRef: TUI | null = null;
 let shortcutsRegistered = false;
 // eslint-disable-next-line prefer-const -- toggled by the /model-info command
 let glowEnabled = true;
+let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
+let lastSessionCtx: ExtensionContextLike | null = null;
+let currentConfig: ThemeConfig = loadConfig();
+const telemetryTracker = new TurnTelemetryTracker();
+let footerState: FooterState = createInitialState();
 let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
@@ -219,12 +235,7 @@ function scrollWindow(delta: -1 | 1): void {
 		MAX_LINES,
 		0,
 	);
-	scrollOffset = scroll(
-		scrollOffset,
-		delta,
-		contentLinesFrom(lines),
-		MAX_LINES,
-	);
+	scrollOffset = scroll(scrollOffset, delta, contentLinesFrom(lines), MAX_LINES);
 	tuiRef?.requestRender();
 }
 
@@ -251,6 +262,9 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		installedEditor = editor;
 		editor.setModelInfo(currentModelInfo);
 		editor.glowEnabled = glowEnabled;
+		editor.setCursorStyle(currentConfig.cursorStyle);
+		// bottom border left is intentionally empty (cwd removed per user request; cwd lives in footer)
+		editor.setBottomLeftText("");
 		editor.onHighlight = (item) => {
 			currentItem = item;
 			scrollOffset = 0; // a new candidate restarts the scroll
@@ -317,6 +331,7 @@ assertInternals();
 export default function (pi: ExtensionAPILike): void {
 	let watchTimer: ReturnType<typeof setInterval> | null = null;
 	let deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
+	let headerCleanupInner: (() => void) | null = null;
 
 	// Toggle the border glow + model label (off restores pi's stock border).
 	// Replaces model-info-widget's command, which is inert now that we own the
@@ -330,6 +345,74 @@ export default function (pi: ExtensionAPILike): void {
 				`Model info border ${glowEnabled ? "shown" : "hidden"}`,
 				"info",
 			);
+		},
+	});
+	// Lightweight theme command (identity stub, spec 02) — reads config; full dialog lands later.
+	// pi-lsz-theme settings window (like tui-theme)
+	registerThemeSettingsCommand(pi, {
+		getConfig: () => currentConfig,
+		onConfigChanged: (cfg) => {
+			const prevEnabled = currentConfig.enabled;
+			currentConfig = saveConfig(cfg as unknown as Partial<ThemeConfig>);
+			// handle enabled toggle — recover or remove footer immediately
+			if (prevEnabled !== currentConfig.enabled) {
+				if (!currentConfig.enabled) {
+					footerCleanup?.();
+					footerCleanup = null;
+					(globalThis as unknown as { __footerRender?: () => void }).__footerRender = undefined;
+				} else if (lastSessionCtx) {
+					try {
+						footerCleanup?.();
+						const ctx2 = lastSessionCtx;
+						footerCleanup = installFooter(
+							ctx2 as unknown as Parameters<typeof installFooter>[0],
+							() => footerState,
+							() => currentConfig,
+							() => ({
+								provider: currentModelInfo.provider,
+								model: currentModelInfo.modelId,
+								effort: currentModelInfo.level,
+							}),
+							{
+								setRequestRender: (fn) => {
+									(globalThis as unknown as { __footerRender?: () => void }).__footerRender = fn ?? undefined;
+								},
+								scheduleGitRefresh: () => {
+									void (async () => {
+										try {
+											const cwd = (ctx2 as unknown as { sessionManager?: { getCwd: () => string } }).sessionManager?.getCwd?.() ?? (ctx2 as unknown as { cwd?: string }).cwd ?? process.cwd();
+											const git = await readGitStatus(cwd);
+											footerState = { ...footerState, git } as FooterState;
+											installedEditor?.setBottomLeftText("");
+											(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+											const runtime = await readRuntimeInfo(cwd);
+											footerState = { ...footerState, runtime } as FooterState;
+											(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+										} catch (_e) { void _e; }
+									})();
+								},
+							},
+						);
+						// immediate population
+						void (async () => {
+							try {
+								const cwd = (ctx2 as unknown as { sessionManager?: { getCwd: () => string } }).sessionManager?.getCwd?.() ?? (ctx2 as unknown as { cwd?: string }).cwd ?? process.cwd();
+								const git = await readGitStatus(cwd);
+								footerState = { ...footerState, git } as FooterState;
+								(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+								const runtime = await readRuntimeInfo(cwd);
+								footerState = { ...footerState, runtime } as FooterState;
+								(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+							} catch (_e) { void _e; }
+						})();
+					} catch (_e) { void _e; }
+				}
+			}
+			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
+			tuiRef?.requestRender();
+		},
+		onOverlayClosed: () => {
+			tuiRef?.requestRender();
 		},
 	});
 	pi.on("session_start", (_event, ctx) => {
@@ -361,9 +444,97 @@ export default function (pi: ExtensionAPILike): void {
 		}
 
 		currentModelInfo = modelInfoOf(ctx);
+	lastSessionCtx = ctx;
 
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
+
+		// header disabled — first line workspace/hints removed per user request; cwd preserved in footer below input
+		if (!currentConfig.enabled) {
+			footerCleanup?.();
+			footerCleanup = null;
+			(globalThis as unknown as { __footerRender?: () => void }).__footerRender = undefined;
+		} else {
+		try {
+			// footer
+			try {
+				footerCleanup?.();
+				footerCleanup = installFooter(
+					ctx as unknown as Parameters<typeof installFooter>[0],
+					() => footerState,
+					() => currentConfig,
+					() => ({
+						provider: currentModelInfo.provider,
+						model: currentModelInfo.modelId,
+						effort: currentModelInfo.level,
+					}),
+					{
+						setRequestRender: (fn) => {
+							(
+								globalThis as unknown as { __footerRender?: () => void }
+							).__footerRender = fn ?? undefined;
+						},
+						scheduleGitRefresh: () => {
+							void (async () => {
+								try {
+									const cwd =
+										(
+											ctx as unknown as { sessionManager?: { getCwd: () => string } }
+										).sessionManager?.getCwd?.() ??
+										(ctx as unknown as { cwd?: string }).cwd ??
+										process.cwd();
+									const git = await readGitStatus(cwd);
+									footerState = { ...footerState, git } as FooterState;
+									// bottom border left: location + git (right of cwd)
+					installedEditor?.setBottomLeftText("");
+									(
+										globalThis as unknown as { __footerRender?: () => void }
+									).__footerRender?.();
+									const runtime = await readRuntimeInfo(cwd);
+									footerState = { ...footerState, runtime } as FooterState;
+									(
+										globalThis as unknown as { __footerRender?: () => void }
+									).__footerRender?.();
+								} catch (_e) {
+					void _e;
+				}
+							})();
+						},
+					},
+				);
+			} catch (_e) {
+				void _e;
+			}
+			// initial git/runtime population so footer isn't empty at startup (onBranchChange only fires on change)
+			void (async () => {
+				try {
+					const cwd =
+						(
+							ctx as unknown as { sessionManager?: { getCwd: () => string } }
+						).sessionManager?.getCwd?.() ??
+						(ctx as unknown as { cwd?: string }).cwd ??
+						process.cwd();
+					const git = await readGitStatus(cwd);
+					footerState = { ...footerState, git } as FooterState;
+					installedEditor?.setBottomLeftText("");
+					(
+						globalThis as unknown as { __footerRender?: () => void }
+					).__footerRender?.();
+					const runtime = await readRuntimeInfo(cwd);
+					footerState = { ...footerState, runtime } as FooterState;
+					(
+						globalThis as unknown as { __footerRender?: () => void }
+					).__footerRender?.();
+				} catch (_e) {
+					void _e;
+				}
+			})();
+			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
+			installedEditor?.setBottomLeftText("");
+		} catch (_e) {
+			void _e;
+		}
+		} // end if (!enabled) else
 
 		// Re-arm the ownership watchdog with this session's ctx.
 		if (watchTimer !== null) {
@@ -377,6 +548,11 @@ export default function (pi: ExtensionAPILike): void {
 	// session's ctx must be dead before then — otherwise its next tick hits the
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
 	pi.on("session_shutdown", () => {
+	lastSessionCtx = null;
+		headerCleanupInner?.();
+		headerCleanupInner = null;
+		footerCleanup?.();
+		footerCleanup = null;
 		if (deferredInstallTimer !== null) {
 			clearTimeout(deferredInstallTimer);
 			deferredInstallTimer = null;
@@ -387,12 +563,37 @@ export default function (pi: ExtensionAPILike): void {
 		}
 	});
 
+	// telemetry wiring — right-bottom border (live, theme-respecting)
+	pi.on("agent_start", (e) => telemetryTracker.handle(e as never));
+	pi.on("turn_start", (e) => telemetryTracker.handle(e as never));
+	pi.on("message_start", (e) => telemetryTracker.handle(e as never));
+	pi.on("message_update", (e) => telemetryTracker.handle(e as never));
+	pi.on("message_end", (e) => telemetryTracker.handle(e as never));
+	pi.on("turn_end", (e) => telemetryTracker.handle(e as never));
+	pi.on("agent_settled", (e, c) => {
+		const tel = telemetryTracker.handle(e as never);
+		if (tel && installedEditor && currentConfig.telemetry.enabled) {
+			try {
+				const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
+				const text = formatTurnTelemetry(
+					tel,
+					themeArg as never,
+					currentConfig.telemetry,
+				);
+				installedEditor.setTelemetryText(text);
+			} catch (_e) {
+				void _e;
+			}
+		}
+	});
+
 	// Keep the border label/glow current when the model or thinking level changes.
 	pi.on("model_select", (_event, ctx) => {
 		if (ctx.mode !== "tui") {
 			return;
 		}
 		currentModelInfo = modelInfoOf(ctx);
+	lastSessionCtx = ctx;
 		installedEditor?.setModelInfo(currentModelInfo);
 	});
 	pi.on("thinking_level_select", (_event, ctx) => {
@@ -400,6 +601,7 @@ export default function (pi: ExtensionAPILike): void {
 			return;
 		}
 		currentModelInfo = modelInfoOf(ctx);
+	lastSessionCtx = ctx;
 		installedEditor?.setModelInfo(currentModelInfo);
 	});
 }
