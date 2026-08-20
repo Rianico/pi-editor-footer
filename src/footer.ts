@@ -449,7 +449,6 @@ export function installFooter(
 
   // Fallback: widget belowEditor
   if (ctx.ui.setWidget) {
-    const themeForWidget = themeStub;
     ctx.ui.setWidget(
       "theme-footer",
       () => ({

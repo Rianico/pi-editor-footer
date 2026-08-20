@@ -142,7 +142,7 @@ export function installHeader(
   }
 
   // Create a TUI component that renders the header at current width.
-  const factory = (tui: unknown, theme: unknown) => {
+  const factory = (_tui: unknown, theme: unknown) => {
     const th = theme as HeaderThemeLike;
     return {
       invalidate(): void {},

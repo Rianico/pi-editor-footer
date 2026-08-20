@@ -8,7 +8,6 @@ import {
 	type TUI,
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
-import { installHeader } from "./header.js";
 import { installFooter } from "./footer.js";
 import { createInitialState } from "./state.js";
 import type { FooterState } from "./state.js";
@@ -18,7 +17,7 @@ import { readRuntimeInfo } from "./runtime.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
-import { loadConfig, saveConfig, getConfigPath } from "./config.js";
+import { loadConfig, saveConfig } from "./config.js";
 import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
 
@@ -112,7 +111,6 @@ let tuiRef: TUI | null = null;
 let shortcutsRegistered = false;
 // eslint-disable-next-line prefer-const -- toggled by the /model-info command
 let glowEnabled = true;
-let headerCleanup: (() => void) | null = null;
 let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let currentConfig: ThemeConfig = loadConfig();
@@ -391,23 +389,8 @@ export default function (pi: ExtensionAPILike): void {
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
 
-		// theme-header + footer integration (real config)
+		// header disabled — first line workspace/hints removed per user request; cwd preserved in footer below input
 		try {
-			headerCleanupInner?.();
-			headerCleanup = headerCleanupInner = installHeader(
-				ctx as unknown as Parameters<typeof installHeader>[0],
-				() => ({
-					enabled: currentConfig.enabled,
-					workspaceDisplay: currentConfig.workspaceDisplay,
-				}),
-				() =>
-					(
-						ctx as unknown as { sessionManager?: { getCwd: () => string } }
-					).sessionManager?.getCwd?.() ??
-					(ctx as unknown as { cwd?: string }).cwd ??
-					process.cwd(),
-				() => ["theme", "model-info", "help"],
-			);
 			// footer
 			try {
 				footerCleanup?.();
@@ -472,7 +455,6 @@ export default function (pi: ExtensionAPILike): void {
 	pi.on("session_shutdown", () => {
 		headerCleanupInner?.();
 		headerCleanupInner = null;
-		headerCleanup = null;
 		footerCleanup?.();
 		footerCleanup = null;
 		if (deferredInstallTimer !== null) {
