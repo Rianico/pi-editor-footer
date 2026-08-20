@@ -197,8 +197,9 @@ export function renderFooter(
   if (segments.sessionName) {
     const sessionName = ctx.sessionName;
     if (sessionName) {
+      const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
       leftParts.push({
-        text: `${theme.fg("dim", glyphs.session)} ${theme.fg("text", truncateToWidth(sessionName, 24, theme.fg("dim", "...")))}`,
+        text: `${sep}${theme.fg("dim", glyphs.session)} ${theme.fg("text", truncateToWidth(sessionName, 24, theme.fg("dim", "...")))}`,
         priority: 2,
       });
     }
@@ -214,10 +215,16 @@ export function renderFooter(
       state.runtime,
       config.icons.mode,
     );
-    if (runtimeSeg) leftParts.push({ text: runtimeSeg, priority: 4 });
+    if (runtimeSeg) {
+      const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
+      leftParts.push({ text: `${sep}${runtimeSeg}`, priority: 4 });
+    }
   }
   const timerSeg = renderTimerSegment(theme, state, glyphs);
-  if (timerSeg) leftParts.push({ text: timerSeg, priority: 1 });
+  if (timerSeg) {
+    const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
+    leftParts.push({ text: `${sep}${timerSeg}`, priority: 1 });
+  }
 
   const stats: string[] = [];
   if (segments.tokens) {

@@ -6,7 +6,7 @@ import {
 	type SelectList,
 	type TUI,
 } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
 	applyModelInfo,
 	type ModelInfo,
@@ -20,7 +20,6 @@ const CURSOR_STYLE_SEQUENCES: Partial<Record<CursorStyle, string>> = {
 	underline: "\x1b[4 q",
 };
 const DEFAULT_CURSOR_STYLE_SEQUENCE = "\x1b[0 q";
-const CURSOR_MARKER = "\x1b[7m";
 
 function stripAnsi(s: string): string {
 	return s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -30,7 +29,7 @@ function removeSoftwareCursor(line: string, cursorMarker = ""): string {
 	return line.replace(
 		/\x1b\[7m([\s\S]*?)\x1b\[0m/g,
 		(_match, cursor: string) => {
-			const replacement = cursorMarker ? `${cursorMarker}${cursor}\x1b[0m` : cursor;
+			const replacement = `${cursorMarker}${cursor}`;
 			cursorMarker = "";
 			return replacement;
 		},
