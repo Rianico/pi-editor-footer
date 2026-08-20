@@ -243,16 +243,16 @@ function buildLabel(
 	level: string,
 	contextWindow: number,
 ): string {
-	const providerPart = provider !== "" ? theme.fg("dim", `${provider}/`) : "";
+	const providerPart = provider === "" ? "" : theme.fg("dim", `${provider}/`);
 	const modelPart = theme.fg(
 		"accent",
-		theme.bold(modelId !== "" ? modelId : "unknown"),
+		theme.bold(modelId === "" ? "unknown" : modelId),
 	);
 	const levelPart = theme.getThinkingBorderColor(level)(level);
 	const ctxText =
-		formatContextWindow(contextWindow) !== ""
-			? `${theme.fg("dim", " · ")}${theme.fg("muted", formatContextWindow(contextWindow))}`
-			: "";
+		formatContextWindow(contextWindow) === ""
+			? ""
+			: `${theme.fg("dim", " · ")}${theme.fg("muted", formatContextWindow(contextWindow))}`;
 	return `${providerPart}${modelPart}${theme.fg("dim", " · ")}${levelPart}${ctxText}`;
 }
 
