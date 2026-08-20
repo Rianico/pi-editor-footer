@@ -176,7 +176,7 @@ export function renderFooter(
   if (segments.cwd) {
     const maxCwd = Math.min(30, Math.max(10, Math.floor(width * 0.4)));
     const rawCwd = formatCwd(ctx.cwd);
-    const displayCwd = rawCwd;
+    const displayCwd = config.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
     const cwdPrefix = `${theme.fg("mdLink", glyphs.cwd)} `;
     const accent = (text: string) => theme.fg("accent", text);
     leftParts.push({
@@ -242,9 +242,6 @@ export function renderFooter(
     );
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
-  if (statsBlock) {
-    leftParts.push({ text: statsBlock, priority: 3 });
-  }
 
   // Context
   let contextText = "";
@@ -273,17 +270,20 @@ export function renderFooter(
         contextCompact = compact;
     }
   }
+  // Tokens right next to context bar (user request): combine them as single right block
+  const rightBlock = [statsBlock, contextText].filter(Boolean).join("  ");
+  const rightCompact = statsBlock && contextCompact ? `${statsBlock}  ${contextCompact}` : statsBlock || contextCompact;
   const allParts: PrioritizedSegment[] = [...leftParts];
-  if (contextText) {
+  if (rightBlock) {
     allParts.push({
-      text: contextText,
-      compactText: contextCompact,
+      text: rightBlock,
+      compactText: rightCompact,
       priority: 4,
     });
   }
 
   const fitted = fitSegmentsByPriority(allParts, width, theme.fg("dim", "..."));
-  const fittedContext = contextText ? (fitted.pop() ?? "") : "";
+  const fittedContext = rightBlock ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
 
 

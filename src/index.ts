@@ -262,14 +262,8 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		editor.setModelInfo(currentModelInfo);
 		editor.glowEnabled = glowEnabled;
 		editor.setCursorStyle(currentConfig.cursorStyle);
-		// initial bottom border left: location (cwd/workspace) — set here so it survives deferred install race
-		try {
-			const cwd = process.cwd();
-			const rawCwd = formatCwd(cwd);
-			const displayCwd =
-				currentConfig.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
-			editor.setBottomLeftText(displayCwd);
-		} catch {}
+		// bottom border left is intentionally empty (cwd removed per user request; cwd lives in footer)
+		editor.setBottomLeftText("");
 		editor.onHighlight = (item) => {
 			currentItem = item;
 			scrollOffset = 0; // a new candidate restarts the scroll
@@ -430,22 +424,7 @@ export default function (pi: ExtensionAPILike): void {
 									const git = await readGitStatus(cwd);
 									footerState = { ...footerState, git } as FooterState;
 									// bottom border left: location + git (right of cwd)
-									try {
-										const rawCwd2 = formatCwd(cwd);
-										const displayCwd2 =
-											currentConfig.workspaceDisplay === "name"
-												? basenamePath(rawCwd2)
-												: rawCwd2;
-										const gitLabel2 = git.branch
-											? `${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ""}${git.behind > 0 ? ` ↓${git.behind}` : ""}`
-											: git.commit?.detached && git.commit.oid
-												? `HEAD ${git.commit.oid.slice(0, 7)}`
-												: "";
-										const leftText2 = gitLabel2
-											? `${displayCwd2}  ${gitLabel2}`
-											: displayCwd2;
-										installedEditor?.setBottomLeftText(leftText2);
-									} catch {}
+					installedEditor?.setBottomLeftText("");
 									(
 										globalThis as unknown as { __footerRender?: () => void }
 									).__footerRender?.();
@@ -454,7 +433,9 @@ export default function (pi: ExtensionAPILike): void {
 									(
 										globalThis as unknown as { __footerRender?: () => void }
 									).__footerRender?.();
-								} catch {}
+								} catch (_e) {
+					void _e;
+				}
 							})();
 						},
 					},
@@ -473,20 +454,7 @@ export default function (pi: ExtensionAPILike): void {
 						process.cwd();
 					const git = await readGitStatus(cwd);
 					footerState = { ...footerState, git } as FooterState;
-					try {
-						const rawCwd = formatCwd(cwd);
-						const displayCwd =
-							currentConfig.workspaceDisplay === "name"
-								? basenamePath(rawCwd)
-								: rawCwd;
-						const gitLabel = git.branch
-							? `${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ""}${git.behind > 0 ? ` ↓${git.behind}` : ""}`
-							: git.commit?.detached && git.commit.oid
-								? `HEAD ${git.commit.oid.slice(0, 7)}`
-								: "";
-						const leftText = gitLabel ? `${displayCwd}  ${gitLabel}` : displayCwd;
-						installedEditor?.setBottomLeftText(leftText);
-					} catch {}
+					installedEditor?.setBottomLeftText("");
 					(
 						globalThis as unknown as { __footerRender?: () => void }
 					).__footerRender?.();
@@ -495,24 +463,12 @@ export default function (pi: ExtensionAPILike): void {
 					(
 						globalThis as unknown as { __footerRender?: () => void }
 					).__footerRender?.();
-				} catch {}
+				} catch (_e) {
+					void _e;
+				}
 			})();
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
-			// initial bottom border left: location (cwd/workspace switch) — git will be added after fetch
-			try {
-				const cwd0 =
-					(
-						ctx as unknown as { sessionManager?: { getCwd: () => string } }
-					).sessionManager?.getCwd?.() ??
-					(ctx as unknown as { cwd?: string }).cwd ??
-					process.cwd();
-				const rawCwd0 = formatCwd(cwd0);
-				const displayCwd0 =
-					currentConfig.workspaceDisplay === "name"
-						? basenamePath(rawCwd0)
-						: rawCwd0;
-				installedEditor?.setBottomLeftText(displayCwd0);
-			} catch {}
+			installedEditor?.setBottomLeftText("");
 		} catch (_e) {
 			void _e;
 		}

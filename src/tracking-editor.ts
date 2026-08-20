@@ -64,7 +64,7 @@ function isBorderLine(line: string): boolean {
  * Embed telemetry text right-aligned on the bottom border line.
  * Left dashes are glow-colored, telemetry keeps its own ANSI colors.
  */
-function embedTelemetry(
+function _embedTelemetry(
 	lines: string[],
 	width: number,
 	telemetryText: string,

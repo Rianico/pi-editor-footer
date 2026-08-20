@@ -45,7 +45,7 @@ describe("footer", () => {
     }
   });
 
-  test("workspaceDisplay does not affect footer (cwd is in bottom border)", () => {
+  test("workspaceDisplay switches cwd format (path vs name)", () => {
     const state = makeState();
     const configPath = { ...DEFAULT_CONFIG, workspaceDisplay: "path" as const };
     const configName = { ...DEFAULT_CONFIG, workspaceDisplay: "name" as const };
@@ -55,8 +55,9 @@ describe("footer", () => {
     const linesName = renderFooter(80, state, configName, theme as never, {
       cwd: "/Users/test/long/path/to/project",
     });
-    // cwd now lives in bottom border left, not footer — footer should be same for both
-    assert.equal(linesPath[0], linesName[0]);
+    assert.ok(linesPath[0]!.includes("/Users/test/long/path/to/project") || linesPath[0]!.includes("long/path/to/project"));
+    assert.ok(linesName[0]!.includes("project"));
+    assert.ok(!linesName[0]!.includes("/Users/test/long/path/to/project"));
   });
 
   test("respects footerSegments toggles", () => {

@@ -37,7 +37,7 @@ interface ExtensionContext {
     ): Promise<T>;
   };
 }
-import type { ThemeConfig, CursorStyle, IconMode } from "./config.ts";
+import type { ThemeConfig, CursorStyle, IconMode, WorkspaceDisplay } from "./config.ts";
 
 const TABS = ["general", "appearance", "footer", "telemetry"] as const;
 type Tab = (typeof TABS)[number];
@@ -61,6 +61,7 @@ const COPY = {
     enabled: "Enabled",
     cursorStyle: "Cursor style",
     iconMode: "Icon mode",
+    workspaceDisplay: "Workspace display",
     cwd: "CWD",
     sessionName: "Session name",
     gitBranch: "Git branch",
@@ -80,6 +81,7 @@ const COPY = {
   values: {
     on: "On",
     off: "Off",
+    workspaceDisplays: { path: "Full path", name: "Name only" } as Record<WorkspaceDisplay, string>,
     cursorStyles: {
       block: "Block",
       bar: "Bar",
@@ -97,6 +99,10 @@ function cycleCursor(config: ThemeConfig): ThemeConfig {
   const idx = order.indexOf(config.cursorStyle);
   const next = order[(idx + 1) % order.length]!;
   return { ...config, cursorStyle: next };
+}
+function cycleWorkspaceDisplay(config: ThemeConfig): ThemeConfig {
+  const next: WorkspaceDisplay = config.workspaceDisplay === "path" ? "name" : "path";
+  return { ...config, workspaceDisplay: next };
 }
 function cycleIconMode(config: ThemeConfig): ThemeConfig {
   const order: IconMode[] = ["auto", "nerd", "ascii"];
@@ -139,6 +145,11 @@ function buildGeneralItems(config: ThemeConfig): SettingItem[] {
       id: "enabled",
       label: COPY.labels.enabled,
       currentValue: config.enabled ? COPY.values.on : COPY.values.off,
+    },
+    {
+      id: "workspaceDisplay",
+      label: COPY.labels.workspaceDisplay,
+      currentValue: COPY.values.workspaceDisplays[config.workspaceDisplay],
     },
     {
       id: "cursorStyle",
@@ -249,6 +260,7 @@ function handleSettingChange(
 ): ThemeConfig {
   if (tab === "general") {
     if (itemId === "enabled") return { ...config, enabled: !config.enabled };
+    if (itemId === "workspaceDisplay") return cycleWorkspaceDisplay(config);
     if (itemId === "cursorStyle") return cycleCursor(config);
   }
   if (tab === "appearance") {
