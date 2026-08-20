@@ -9,10 +9,15 @@ import {
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
 import { installHeader } from "./header.js";
+import { installFooter } from "./footer.js";
+import { createInitialState } from "./state.js";
+import type { FooterState } from "./state.js";
+import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
-import { getConfigPath, loadConfig } from "./config.js";
+import { loadConfig, saveConfig, getConfigPath } from "./config.js";
+import type { ThemeConfig } from "./config.js";
 
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -72,6 +77,10 @@ export interface ExtensionAPILike {
 		event: "session_shutdown",
 		handler: (event: unknown, ctx: ExtensionContextLike) => void,
 	): void;
+	on(
+		event: string,
+		handler: (event: unknown, ctx: ExtensionContextLike) => void,
+	): void;
 	registerShortcut(
 		shortcut: string,
 		options: { description?: string; handler: () => void },
@@ -101,8 +110,11 @@ let shortcutsRegistered = false;
 // eslint-disable-next-line prefer-const -- toggled by the /model-info command
 let glowEnabled = true;
 let headerCleanup: (() => void) | null = null;
-// theme-header integration — minimal header widget (spec 04)
+let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
+let currentConfig: ThemeConfig = loadConfig();
+let telemetryTracker = new TurnTelemetryTracker();
+let footerState: FooterState = createInitialState();
 let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
@@ -247,6 +259,7 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		installedEditor = editor;
 		editor.setModelInfo(currentModelInfo);
 		editor.glowEnabled = glowEnabled;
+		editor.setCursorStyle(currentConfig.cursorStyle);
 		editor.onHighlight = (item) => {
 			currentItem = item;
 			scrollOffset = 0; // a new candidate restarts the scroll
@@ -333,6 +346,30 @@ export default function (pi: ExtensionAPILike): void {
 	pi.registerCommand("theme", {
 		description: "Show theme config (workspace / cursor / telemetry)",
 		handler: async (_args, ctx) => {
+			const arg = _args.trim().toLowerCase();
+			if (arg === "workspace" || arg === "ws" || arg === "toggle") {
+				const cfg = loadConfig();
+				const next: ThemeConfig["workspaceDisplay"] =
+					cfg.workspaceDisplay === "path" ? "name" : "path";
+				currentConfig = saveConfig({
+					workspaceDisplay: next,
+				} as unknown as Partial<ThemeConfig>);
+				ctx.ui.notify(`workspaceDisplay → ${next} (${getConfigPath()})`, "info");
+				tuiRef?.requestRender();
+				return;
+			}
+			if (arg === "cursor" || arg === "cursorStyle") {
+				const cfg = loadConfig();
+				const order: ThemeConfig["cursorStyle"][] = ["block", "bar", "underline"];
+				const idx = order.indexOf(cfg.cursorStyle);
+				const next = order[(idx + 1) % order.length]!;
+				currentConfig = saveConfig({
+					cursorStyle: next,
+				} as unknown as Partial<ThemeConfig>);
+				installedEditor?.setCursorStyle(next);
+				ctx.ui.notify(`cursorStyle → ${next}`, "info");
+				return;
+			}
 			const cfg = loadConfig();
 			const cfgPath = getConfigPath();
 			ctx.ui.notify(
@@ -381,15 +418,42 @@ export default function (pi: ExtensionAPILike): void {
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
 
-		// theme-header integration
+		// theme-header + footer integration (real config)
 		try {
 			headerCleanupInner?.();
 			headerCleanup = headerCleanupInner = installHeader(
 				ctx as unknown as Parameters<typeof installHeader>[0],
-				() => ({ enabled: true, workspaceDisplay: "path" as const }),
-				() => (ctx as unknown as { cwd?: string }).cwd ?? process.cwd(),
+				() => ({
+					enabled: currentConfig.enabled,
+					workspaceDisplay: currentConfig.workspaceDisplay,
+				}),
+				() =>
+					(
+						ctx as unknown as { sessionManager?: { getCwd: () => string } }
+					).sessionManager?.getCwd?.() ??
+					(ctx as unknown as { cwd?: string }).cwd ??
+					process.cwd(),
 				() => ["theme", "model-info", "help"],
 			);
+			// footer
+			try {
+				footerCleanup?.();
+				footerCleanup = installFooter(
+					ctx as unknown as Parameters<typeof installFooter>[0],
+					() => footerState,
+					() => currentConfig,
+					() => ({
+						provider: currentModelInfo.provider,
+						model: currentModelInfo.modelId,
+						effort: currentModelInfo.level,
+					}),
+					{
+						setRequestRender: (fn) => {},
+						scheduleGitRefresh: () => {},
+					},
+				);
+			} catch {}
+			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 		} catch {}
 
 		// Re-arm the ownership watchdog with this session's ctx.
@@ -407,6 +471,8 @@ export default function (pi: ExtensionAPILike): void {
 		headerCleanupInner?.();
 		headerCleanupInner = null;
 		headerCleanup = null;
+		footerCleanup?.();
+		footerCleanup = null;
 		if (deferredInstallTimer !== null) {
 			clearTimeout(deferredInstallTimer);
 			deferredInstallTimer = null;
@@ -414,6 +480,28 @@ export default function (pi: ExtensionAPILike): void {
 		if (watchTimer !== null) {
 			clearInterval(watchTimer);
 			watchTimer = null;
+		}
+	});
+
+	// telemetry wiring — right-bottom border (live, theme-respecting)
+	pi.on("agent_start", (e) => telemetryTracker.handle(e as never));
+	pi.on("turn_start", (e) => telemetryTracker.handle(e as never));
+	pi.on("message_start", (e) => telemetryTracker.handle(e as never));
+	pi.on("message_update", (e) => telemetryTracker.handle(e as never));
+	pi.on("message_end", (e) => telemetryTracker.handle(e as never));
+	pi.on("turn_end", (e) => telemetryTracker.handle(e as never));
+	pi.on("agent_settled", (e, c) => {
+		const tel = telemetryTracker.handle(e as never);
+		if (tel && installedEditor && currentConfig.telemetry.enabled) {
+			try {
+				const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
+				const text = formatTurnTelemetry(
+					tel,
+					themeArg as never,
+					currentConfig.telemetry,
+				);
+				installedEditor.setTelemetryText(text);
+			} catch {}
 		}
 	});
 
