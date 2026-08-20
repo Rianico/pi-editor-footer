@@ -24,8 +24,8 @@ import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 import { loadConfig, saveConfig } from "./config.js";
 import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
-import { formatCwd, basenamePath } from "./utils.js";
-
+import { formatContextBar } from "./footer.js";
+import { resolveGlyphs, resolveIconMode } from "./icons.js";
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
  * uses. The authoritative types live in @earendil-works/pi-coding-agent — a
@@ -289,12 +289,44 @@ function refreshLiveTelemetry(): void {
 	}
 }
 
+function refreshContextBar(): void {
+	if (!installedEditor || !lastSessionCtx) return;
+	if (!currentConfig.footerSegments.context) {
+		installedEditor.setBottomLeftText("");
+		return;
+	}
+	try {
+		const ctxAny = lastSessionCtx as unknown as {
+			getContextUsage?: () => {
+				percent?: number;
+				tokens?: number;
+				contextWindow?: number;
+			};
+		};
+		const usage = ctxAny.getContextUsage?.();
+		if (!usage || !usage.contextWindow) {
+			installedEditor.setBottomLeftText("");
+			return;
+		}
+		const theme = lastSessionCtx.ui.theme as unknown as any;
+		const glyphs = resolveGlyphs(currentConfig.icons.mode);
+		const isAscii = resolveIconMode(currentConfig.icons.mode) === "ascii";
+		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10);
+		installedEditor.setBottomLeftText(text);
+	} catch {
+		void 0;
+	}
+}
+
 function startLiveTick(): void {
 	if (liveTickTimer !== null) return;
 	liveTickTimer = setInterval(() => {
 		if (runActivityTracker.isRunning()) {
 			refreshTopBorder();
 			refreshLiveTelemetry();
+			refreshContextBar();
+		} else {
+			refreshContextBar();
 		}
 	}, 1000);
 	// don't block process exit
@@ -330,7 +362,7 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		editor.glowEnabled = glowEnabled;
 		editor.setCursorStyle(currentConfig.cursorStyle);
 		// bottom border left is intentionally empty (cwd removed per user request; cwd lives in footer)
-		editor.setBottomLeftText("");
+		refreshContextBar();
 		editor.onHighlight = (item) => {
 			currentItem = item;
 			scrollOffset = 0; // a new candidate restarts the scroll
@@ -457,7 +489,7 @@ export default function (pi: ExtensionAPILike): void {
 												process.cwd();
 											const git = await readGitStatus(cwd);
 											footerState = { ...footerState, git } as FooterState;
-											installedEditor?.setBottomLeftText("");
+											refreshContextBar();
 											(
 												globalThis as unknown as { __footerRender?: () => void }
 											).__footerRender?.();
@@ -580,7 +612,7 @@ export default function (pi: ExtensionAPILike): void {
 										const git = await readGitStatus(cwd);
 										footerState = { ...footerState, git } as FooterState;
 										// bottom border left: location + git (right of cwd)
-										installedEditor?.setBottomLeftText("");
+										refreshContextBar();
 										(
 											globalThis as unknown as { __footerRender?: () => void }
 										).__footerRender?.();
@@ -610,7 +642,7 @@ export default function (pi: ExtensionAPILike): void {
 							process.cwd();
 						const git = await readGitStatus(cwd);
 						footerState = { ...footerState, git } as FooterState;
-						installedEditor?.setBottomLeftText("");
+						refreshContextBar();
 						(
 							globalThis as unknown as { __footerRender?: () => void }
 						).__footerRender?.();
@@ -624,7 +656,7 @@ export default function (pi: ExtensionAPILike): void {
 					}
 				})();
 				installedEditor?.setCursorStyle(currentConfig.cursorStyle);
-				installedEditor?.setBottomLeftText("");
+				refreshContextBar();
 			} catch (_e) {
 				void _e;
 			}
@@ -684,6 +716,7 @@ export default function (pi: ExtensionAPILike): void {
 	const refreshAllLive = (): void => {
 		refreshTopBorder();
 		refreshLiveTelemetry();
+		refreshContextBar();
 	};
 
 	pi.on("agent_start", (e) => {

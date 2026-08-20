@@ -9,7 +9,7 @@ import type { RuntimeInfo } from "./runtime.js";
 import type { FooterState, ModelMeta, UsageTotals } from "./state.js";
 import { getUsageTotals } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
-import { resolveGlyphs, resolveIconMode, runtimeSymbol } from "./icons.js";
+import { resolveGlyphs, runtimeSymbol } from "./icons.js";
 import {
   alignRight,
   fitSegmentsByPriority,
@@ -28,12 +28,7 @@ import {
   providerColor,
   stressColor,
 } from "./color-policy.js";
-import {
-  fmtTokens,
-  formatDuration,
-  formatProviderLabel,
-  sanitizeStatus,
-} from "./format.js";
+import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
 
 function renderBar(
   theme: Theme,
@@ -55,6 +50,29 @@ function renderBar(
     theme.fg("dim", emptyCell.repeat(empty)) +
     theme.fg("dim", "]")
   );
+}
+
+export function formatContextBar(
+  contextUsage:
+    | { percent?: number; tokens?: number; contextWindow?: number }
+    | undefined,
+  theme: Theme,
+  glyphs: IconGlyphs,
+  isAscii: boolean,
+  barWidth = 10,
+): string {
+  const contextWindow = contextUsage?.contextWindow ?? 0;
+  if (contextWindow <= 0) return "";
+  const contextPct = contextUsage?.percent ?? 0;
+  const pctText = theme.fg(
+    stressColor(contextPct),
+    `${contextPct.toFixed(1)}%`,
+  );
+  const contextTokens = contextUsage?.tokens ?? 0;
+  const ctxText = `${theme.fg("text", fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg("text", fmtTokens(contextWindow))}`;
+  const contextIcon = theme.fg(stressColor(contextPct), glyphs.context);
+  const bar = renderBar(theme, contextPct, barWidth, isAscii);
+  return `${contextIcon} ${bar} ${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
 }
 
 function renderGitSegment(
@@ -168,13 +186,6 @@ export function renderFooter(
     cost: 0,
     latestCacheHitRate: undefined,
   };
-  const meta = ctx.getModelMeta
-    ? ctx.getModelMeta()
-    : {
-        provider: formatProviderLabel(ctx.model?.provider),
-        model: ctx.model?.name ?? ctx.model?.id ?? "no-model",
-        effort: undefined as string | undefined,
-      };
 
   const leftParts: PrioritizedSegment[] = [];
   if (segments.cwd) {
@@ -260,39 +271,8 @@ export function renderFooter(
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
 
-  // Context
-  let contextText = "";
-  let contextCompact: string | undefined;
-  if (segments.context) {
-    const contextUsage = ctx.contextUsage;
-    const contextWindow = contextUsage?.contextWindow ?? 0;
-    if (contextWindow > 0) {
-      const contextPct = contextUsage?.percent ?? 0;
-      const pctText = theme.fg(
-        stressColor(contextPct),
-        `${contextPct.toFixed(1)}%`,
-      );
-      const contextTokens = contextUsage?.tokens ?? 0;
-      const ctxText = `${theme.fg("text", fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg("text", fmtTokens(contextWindow))}`;
-      const contextIcon = theme.fg(stressColor(contextPct), glyphs.context);
-      const reserved =
-        visibleWidth(contextIcon) +
-        visibleWidth(pctText) +
-        visibleWidth(ctxText) +
-        7;
-      const barWidth = Math.max(4, Math.min(12, width - reserved));
-      contextText = `${contextIcon} ${renderBar(theme, contextPct, barWidth, resolveIconMode(config.icons.mode) === "ascii")} ${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
-      const compact = `${theme.fg(stressColor(contextPct), glyphs.context)} ${theme.fg(stressColor(contextPct), `${contextPct.toFixed(1)}%`)}`;
-      if (visibleWidth(compact) < visibleWidth(contextText))
-        contextCompact = compact;
-    }
-  }
-  // Tokens right next to context bar (user request): combine them as single right block
-  const rightBlock = [statsBlock, contextText].filter(Boolean).join("  ");
-  const rightCompact =
-    statsBlock && contextCompact
-      ? `${statsBlock}  ${contextCompact}`
-      : statsBlock || contextCompact;
+  const rightBlock = statsBlock;
+  const rightCompact = statsBlock;
   const allParts: PrioritizedSegment[] = [...leftParts];
   if (rightBlock) {
     allParts.push({
