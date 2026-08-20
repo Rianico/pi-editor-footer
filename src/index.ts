@@ -79,10 +79,7 @@ export interface ExtensionAPILike {
 		name: string,
 		options: {
 			description?: string;
-			handler: (
-				args: string,
-				ctx: ExtensionContextLike,
-			) => void | Promise<void>;
+			handler: (args: string, ctx: ExtensionContextLike) => void | Promise<void>;
 		},
 	): void;
 }
@@ -220,12 +217,7 @@ function scrollWindow(delta: -1 | 1): void {
 		MAX_LINES,
 		0,
 	);
-	scrollOffset = scroll(
-		scrollOffset,
-		delta,
-		contentLinesFrom(lines),
-		MAX_LINES,
-	);
+	scrollOffset = scroll(scrollOffset, delta, contentLinesFrom(lines), MAX_LINES);
 	tuiRef?.requestRender();
 }
 
@@ -339,7 +331,17 @@ export default function (pi: ExtensionAPILike): void {
 		handler: async (_args, ctx) => {
 			const cfg = loadConfig();
 			const cfgPath = getConfigPath();
-			ctx.ui.notify("Theme config: workspaceDisplay=" + cfg.workspaceDisplay + " cursor=" + cfg.cursorStyle + " telemetry=" + (cfg.telemetry.enabled ? "on" : "off") + " — " + cfgPath, "info");
+			ctx.ui.notify(
+				"Theme config: workspaceDisplay=" +
+					cfg.workspaceDisplay +
+					" cursor=" +
+					cfg.cursorStyle +
+					" telemetry=" +
+					(cfg.telemetry.enabled ? "on" : "off") +
+					" — " +
+					cfgPath,
+				"info",
+			);
 		},
 	});
 	pi.on("session_start", (_event, ctx) => {
