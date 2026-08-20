@@ -8,6 +8,7 @@ import {
 	type TUI,
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
+import { installHeader } from "./header.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
@@ -99,6 +100,8 @@ let tuiRef: TUI | null = null;
 let shortcutsRegistered = false;
 // eslint-disable-next-line prefer-const -- toggled by the /model-info command
 let glowEnabled = true;
+let headerCleanup: (() => void) | null = null;
+// theme-header integration — minimal header widget (spec 04)
 let installedEditor: TrackingEditor | null = null;
 let currentModelInfo: ModelInfo = {
 	provider: "",
@@ -310,6 +313,7 @@ assertInternals();
 export default function (pi: ExtensionAPILike): void {
 	let watchTimer: ReturnType<typeof setInterval> | null = null;
 	let deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
+	let headerCleanupInner: (() => void) | null = null;
 
 	// Toggle the border glow + model label (off restores pi's stock border).
 	// Replaces model-info-widget's command, which is inert now that we own the
@@ -377,6 +381,17 @@ export default function (pi: ExtensionAPILike): void {
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
 
+		// theme-header integration
+		try {
+			headerCleanupInner?.();
+			headerCleanup = headerCleanupInner = installHeader(
+				ctx as unknown as Parameters<typeof installHeader>[0],
+				() => ({ enabled: true, workspaceDisplay: "path" as const }),
+				() => (ctx as unknown as { cwd?: string }).cwd ?? process.cwd(),
+				() => ["theme", "model-info", "help"],
+			);
+		} catch {}
+
 		// Re-arm the ownership watchdog with this session's ctx.
 		if (watchTimer !== null) {
 			clearInterval(watchTimer);
@@ -389,6 +404,9 @@ export default function (pi: ExtensionAPILike): void {
 	// session's ctx must be dead before then — otherwise its next tick hits the
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
 	pi.on("session_shutdown", () => {
+		headerCleanupInner?.();
+		headerCleanupInner = null;
+		headerCleanup = null;
 		if (deferredInstallTimer !== null) {
 			clearTimeout(deferredInstallTimer);
 			deferredInstallTimer = null;
