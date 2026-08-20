@@ -20,6 +20,7 @@ import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 import { loadConfig, saveConfig } from "./config.js";
 import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
+import { formatCwd, basenamePath } from "./utils.js";
 
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -420,6 +421,23 @@ export default function (pi: ExtensionAPILike): void {
 										process.cwd();
 									const git = await readGitStatus(cwd);
 									footerState = { ...footerState, git } as FooterState;
+									// bottom border left: location + git (right of cwd)
+									try {
+										const rawCwd2 = formatCwd(cwd);
+										const displayCwd2 =
+											currentConfig.workspaceDisplay === "name"
+												? basenamePath(rawCwd2)
+												: rawCwd2;
+										const gitLabel2 = git.branch
+											? `${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ""}${git.behind > 0 ? ` ↓${git.behind}` : ""}`
+											: git.commit?.detached && git.commit.oid
+												? `HEAD ${git.commit.oid.slice(0, 7)}`
+												: "";
+										const leftText2 = gitLabel2
+											? `${displayCwd2}  ${gitLabel2}`
+											: displayCwd2;
+										installedEditor?.setBottomLeftText(leftText2);
+									} catch {}
 									(
 										globalThis as unknown as { __footerRender?: () => void }
 									).__footerRender?.();
@@ -437,6 +455,21 @@ export default function (pi: ExtensionAPILike): void {
 				void _e;
 			}
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
+			// initial bottom border left: location (cwd/workspace switch) — git will be added after fetch
+			try {
+				const cwd0 =
+					(
+						ctx as unknown as { sessionManager?: { getCwd: () => string } }
+					).sessionManager?.getCwd?.() ??
+					(ctx as unknown as { cwd?: string }).cwd ??
+					process.cwd();
+				const rawCwd0 = formatCwd(cwd0);
+				const displayCwd0 =
+					currentConfig.workspaceDisplay === "name"
+						? basenamePath(rawCwd0)
+						: rawCwd0;
+				installedEditor?.setBottomLeftText(displayCwd0);
+			} catch {}
 		} catch (_e) {
 			void _e;
 		}

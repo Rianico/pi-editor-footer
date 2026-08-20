@@ -9,59 +9,77 @@ const theme = {
   fg: (_style: string, text: string) => text,
 };
 
-function makeState(overrides: Partial<ReturnType<typeof createInitialState>> = {}) {
+function makeState(
+  overrides: Partial<ReturnType<typeof createInitialState>> = {},
+) {
   return { ...createInitialState(), ...overrides };
 }
 
 describe("footer", () => {
-  test("renders two lines at normal width", () => {
+  test("renders one line at normal width", () => {
     const state = makeState();
     const lines = renderFooter(80, state, DEFAULT_CONFIG, theme as never, {
       cwd: "/Users/test/project",
     });
-    assert.equal(lines.length, 2);
+    assert.equal(lines.length, 1);
     assert.ok(lines[0]!.length > 0);
-    assert.ok(lines[1]!.length > 0);
   });
 
   test("sheds segments at narrow width", () => {
     const state = makeState({
-      git: { ...emptyGitStatus(), branch: "feature/very-long-branch-name-that-exceeds", staged: 2, modified: 3 },
+      git: {
+        ...emptyGitStatus(),
+        branch: "feature/very-long-branch-name-that-exceeds",
+        staged: 2,
+        modified: 3,
+      },
       runtime: { name: "nodejs", version: "20.0.0" },
     });
     const narrow = renderFooter(30, state, DEFAULT_CONFIG, theme as never, {
       cwd: "/Users/test/project",
     });
-    assert.equal(narrow.length, 2);
+    assert.equal(narrow.length, 1);
     // Should not exceed width (visible width approximated without ANSI)
     for (const line of narrow) {
       assert.ok(line.length <= 80);
     }
   });
 
-  test("respects workspaceDisplay name", () => {
+  test("workspaceDisplay does not affect footer (cwd is in bottom border)", () => {
     const state = makeState();
-    const config = { ...DEFAULT_CONFIG, workspaceDisplay: "name" as const };
-    const lines = renderFooter(80, state, config, theme as never, {
+    const configPath = { ...DEFAULT_CONFIG, workspaceDisplay: "path" as const };
+    const configName = { ...DEFAULT_CONFIG, workspaceDisplay: "name" as const };
+    const linesPath = renderFooter(80, state, configPath, theme as never, {
       cwd: "/Users/test/long/path/to/project",
     });
-    assert.ok(lines[0]!.includes("project"));
-    assert.ok(!lines[0]!.includes("/Users/test/long/path/to/project"));
+    const linesName = renderFooter(80, state, configName, theme as never, {
+      cwd: "/Users/test/long/path/to/project",
+    });
+    // cwd now lives in bottom border left, not footer — footer should be same for both
+    assert.equal(linesPath[0], linesName[0]);
   });
 
   test("respects footerSegments toggles", () => {
     const state = makeState({ git: { ...emptyGitStatus(), branch: "main" } });
     const config = {
       ...DEFAULT_CONFIG,
-      footerSegments: { ...DEFAULT_CONFIG.footerSegments, gitBranch: false, gitStatus: false },
+      footerSegments: {
+        ...DEFAULT_CONFIG.footerSegments,
+        gitBranch: false,
+        gitStatus: false,
+      },
     };
-    const lines = renderFooter(80, state, config, theme as never, { cwd: "/tmp" });
+    const lines = renderFooter(80, state, config, theme as never, {
+      cwd: "/tmp",
+    });
     assert.ok(!lines[0]!.includes("main"));
   });
 
   test("handles zero width", () => {
     const state = makeState();
-    const lines = renderFooter(0, state, DEFAULT_CONFIG, theme as never, { cwd: "/tmp" });
+    const lines = renderFooter(0, state, DEFAULT_CONFIG, theme as never, {
+      cwd: "/tmp",
+    });
     assert.equal(lines[0], "");
   });
 });

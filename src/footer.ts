@@ -173,29 +173,6 @@ export function renderFooter(
       };
 
   const leftParts: PrioritizedSegment[] = [];
-  if (segments.cwd) {
-    const maxCwd = Math.min(30, Math.max(10, Math.floor(width * 0.4)));
-    const rawCwd = formatCwd(ctx.cwd);
-    const displayCwd = rawCwd;
-    const cwdPrefix = `${theme.fg("mdLink", glyphs.cwd)} `;
-    const accent = (text: string) => theme.fg("accent", text);
-    leftParts.push({
-      text: `${cwdPrefix}${accent(truncatePath(displayCwd, maxCwd))}`,
-      compactText: `${cwdPrefix}${accent(truncatePath(basenamePath(displayCwd), maxCwd))}`,
-      priority: 5,
-      truncate: (_text, maxWidth, ellipsis) => {
-        const pathWidth = maxWidth - visibleWidth(cwdPrefix);
-        if (pathWidth <= visibleWidth(ellipsis)) {
-          return truncateToWidth(
-            `${cwdPrefix}${accent(basenamePath(displayCwd))}`,
-            maxWidth,
-            ellipsis,
-          );
-        }
-        return `${cwdPrefix}${accent(truncatePath(basenamePath(displayCwd), pathWidth))}`;
-      },
-    });
-  }
   if (segments.sessionName) {
     const sessionName = ctx.sessionName;
     if (sessionName) {
@@ -205,8 +182,6 @@ export function renderFooter(
       });
     }
   }
-  const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
-  if (gitSeg) leftParts.push({ text: gitSeg, priority: 4 });
   if (segments.runtime) {
     const runtimeSeg = renderRuntimeSegment(
       theme,
@@ -282,10 +257,11 @@ export function renderFooter(
     );
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
+  if (statsBlock) {
+    leftParts.push({ text: statsBlock, priority: 3 });
+  }
 
-  const line2 = statsBlock;
-
-  const mainLines = (line2 ? [line1, line2] : [line1]).map((line) =>
+  const mainLines = [line1].map((line) =>
     truncateToWidth(line, width, theme.fg("dim", "...")),
   );
   if (segments.extensionStatuses && ctx.extensionStatuses) {

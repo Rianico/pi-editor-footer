@@ -115,6 +115,45 @@ function embedTelemetry(
 	}
 	return result;
 }
+function embedBottomBorder(
+	lines: string[],
+	width: number,
+	leftText: string,
+	rightText: string,
+	getGlow: (s: string) => string,
+): string[] {
+	if ((!leftText && !rightText) || lines.length === 0) return lines;
+	let bottomIdx = -1;
+	for (let i = lines.length - 1; i >= 0; i--) {
+		if (isBorderLine(lines[i] ?? "")) {
+			bottomIdx = i;
+			break;
+		}
+	}
+	if (bottomIdx === -1) return lines;
+	const leftW = leftText ? visibleWidth(leftText) : 0;
+	const rightW = rightText ? visibleWidth(rightText) : 0;
+	const maxLeft = rightText ? Math.max(0, width - rightW - 6) : width - 3;
+	const maxRight = leftText ? Math.max(0, width - leftW - 6) : width - 3;
+	let displayLeft = leftText;
+	let displayRight = rightText;
+	if (leftW > maxLeft) displayLeft = truncateToWidth(leftText, maxLeft, "");
+	if (rightW > maxRight) displayRight = truncateToWidth(rightText, maxRight, "");
+	const leftSegment = displayLeft
+		? `${getGlow("─")}${" "}${displayLeft}${" "}`
+		: getGlow("─");
+	const rightSegment = displayRight
+		? `${" "}${displayRight}${" "}${getGlow("─")}`
+		: getGlow("─");
+	const used = visibleWidth(leftSegment) + visibleWidth(rightSegment);
+	const middleWidth = Math.max(0, width - used);
+	const middle = getGlow("─".repeat(middleWidth));
+	const embedded = `${leftSegment}${middle}${rightSegment}`;
+	const result = [...lines];
+	result[bottomIdx] = truncateToWidth(embedded, width, "");
+	if (visibleWidth(embedded) !== width) result[bottomIdx] = embedded;
+	return result;
+}
 
 interface KeybindingsLike {
 	matches(data: string, keybinding: string): boolean;
@@ -159,6 +198,7 @@ export class TrackingEditor extends Editor {
 
 	private cursorStyle: CursorStyle = "block";
 	private telemetryText = "";
+	private bottomLeftText = "";
 	private previewHardwareCursor = false;
 
 	constructor(
@@ -215,6 +255,15 @@ export class TrackingEditor extends Editor {
 	setTelemetryText(text: string): void {
 		this.telemetryText = text;
 		this.tui.requestRender();
+	}
+
+	setBottomLeftText(text: string): void {
+		this.bottomLeftText = text;
+		this.tui.requestRender();
+	}
+
+	getBottomLeftText(): string {
+		return this.bottomLeftText;
 	}
 
 	getTelemetryText(): string {
@@ -280,13 +329,11 @@ export class TrackingEditor extends Editor {
 		}
 
 		// Embed telemetry on bottom border (theme-respecting, right-aligned, truncated)
-		if (this.telemetryText) {
+		// Embed location (left) and telemetry (right) on bottom border
+		if (this.bottomLeftText || this.telemetryText) {
 			const theme = this.getLiveTheme();
-			// Build glow function for dashes: replicate model-info's brightening via thinking level
-			// Use theme.getThinkingBorderColor as fallback (model-info's buildGlow brightens but theme call is acceptable)
 			const glow = (s: string): string => {
 				try {
-					// Prefer model-info glow logic if available via theme brightening; fallback to thinking color
 					const maybeGlow = (
 						theme as unknown as {
 							getThinkingBorderColor?: (l: string) => (s: string) => string;
@@ -295,11 +342,17 @@ export class TrackingEditor extends Editor {
 					if (typeof maybeGlow === "function")
 						return maybeGlow.call(theme, this.modelInfo.level)(s);
 				} catch (_err) {
-					// fallback to plain border on theme error
+					void _err;
 				}
 				return s;
 			};
-			lines = embedTelemetry(lines, width, this.telemetryText, glow);
+			lines = embedBottomBorder(
+				lines,
+				width,
+				this.bottomLeftText,
+				this.telemetryText,
+				glow,
+			);
 		}
 
 		return lines;
