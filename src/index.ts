@@ -18,6 +18,7 @@ import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 import { loadConfig, saveConfig, getConfigPath } from "./config.js";
 import type { ThemeConfig } from "./config.js";
+import { registerThemeSettingsCommand } from "./theme-settings.js";
 
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -343,46 +344,16 @@ export default function (pi: ExtensionAPILike): void {
 		},
 	});
 	// Lightweight theme command (identity stub, spec 02) — reads config; full dialog lands later.
-	pi.registerCommand("theme", {
-		description: "Show theme config (workspace / cursor / telemetry)",
-		handler: async (_args, ctx) => {
-			const arg = _args.trim().toLowerCase();
-			if (arg === "workspace" || arg === "ws" || arg === "toggle") {
-				const cfg = loadConfig();
-				const next: ThemeConfig["workspaceDisplay"] =
-					cfg.workspaceDisplay === "path" ? "name" : "path";
-				currentConfig = saveConfig({
-					workspaceDisplay: next,
-				} as unknown as Partial<ThemeConfig>);
-				ctx.ui.notify(`workspaceDisplay → ${next} (${getConfigPath()})`, "info");
-				tuiRef?.requestRender();
-				return;
-			}
-			if (arg === "cursor" || arg === "cursorStyle") {
-				const cfg = loadConfig();
-				const order: ThemeConfig["cursorStyle"][] = ["block", "bar", "underline"];
-				const idx = order.indexOf(cfg.cursorStyle);
-				const next = order[(idx + 1) % order.length]!;
-				currentConfig = saveConfig({
-					cursorStyle: next,
-				} as unknown as Partial<ThemeConfig>);
-				installedEditor?.setCursorStyle(next);
-				ctx.ui.notify(`cursorStyle → ${next}`, "info");
-				return;
-			}
-			const cfg = loadConfig();
-			const cfgPath = getConfigPath();
-			ctx.ui.notify(
-				"Theme config: workspaceDisplay=" +
-					cfg.workspaceDisplay +
-					" cursor=" +
-					cfg.cursorStyle +
-					" telemetry=" +
-					(cfg.telemetry.enabled ? "on" : "off") +
-					" — " +
-					cfgPath,
-				"info",
-			);
+	// pi-lsz-theme settings window (like tui-theme)
+	registerThemeSettingsCommand(pi, {
+		getConfig: () => currentConfig,
+		onConfigChanged: (cfg) => {
+			currentConfig = saveConfig(cfg as unknown as Partial<ThemeConfig>);
+			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
+			tuiRef?.requestRender();
+		},
+		onOverlayClosed: () => {
+			tuiRef?.requestRender();
 		},
 	});
 	pi.on("session_start", (_event, ctx) => {

@@ -259,21 +259,6 @@ export function renderFooter(
   const fittedContext = contextText ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
 
-  const modelParts: string[] = [];
-  modelParts.push(theme.fg("mdLink", glyphs.model));
-  if (meta.provider && meta.provider !== "Unknown") {
-    modelParts.push(
-      theme.fg(providerColor(ctx.model?.provider ?? "none"), meta.provider),
-    );
-  }
-  modelParts.push(theme.fg("text", meta.model));
-  if (meta.effort && meta.effort !== "off") {
-    modelParts.push(
-      theme.fg(effortColor(meta.effort), `${glyphs.thinking} ${meta.effort}`),
-    );
-  }
-  const modelBlock = modelParts.join(theme.fg("dim", " · "));
-
   const stats: string[] = [];
   if (segments.tokens) {
     stats.push(
@@ -299,9 +284,9 @@ export function renderFooter(
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
 
-  const line2 = alignRight(modelBlock, statsBlock, width, theme);
+  const line2 = statsBlock;
 
-  const mainLines = [line1, line2].map((line) =>
+  const mainLines = (line2 ? [line1, line2] : [line1]).map((line) =>
     truncateToWidth(line, width, theme.fg("dim", "...")),
   );
   if (segments.extensionStatuses && ctx.extensionStatuses) {
