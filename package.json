@@ -1,11 +1,11 @@
 {
   "name": "pi-editor-footer",
-  "private": true,
   "type": "module",
   "description": "Pi TUI theme \u2014 project-aware footer, model border, and skill detail window (TrackingEditor, live theme)",
   "scripts": {
     "test": "node --import tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --project tsconfig.build.json"
   },
   "devDependencies": {
     "@earendil-works/pi-tui": "0.84.2",
@@ -13,5 +13,13 @@
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
-  "version": "0.1.0"
+  "version": "0.1.1",
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "docs"
+  ]
 }
