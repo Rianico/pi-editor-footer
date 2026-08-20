@@ -6,31 +6,125 @@ import {
 	type SelectList,
 	type TUI,
 } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
 	applyModelInfo,
 	type ModelInfo,
 	type ThemeLike,
 } from "./model-info.js";
 
+export type CursorStyle = "block" | "bar" | "underline";
+
+const CURSOR_STYLE_SEQUENCES: Partial<Record<CursorStyle, string>> = {
+	bar: "\x1b[6 q",
+	underline: "\x1b[4 q",
+};
+const DEFAULT_CURSOR_STYLE_SEQUENCE = "\x1b[0 q";
+const CURSOR_MARKER = "\x1b[7m";
+
+function stripAnsi(s: string): string {
+	return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function removeSoftwareCursor(line: string, cursorMarker = ""): string {
+	return line.replace(
+		/\x1b\[7m([\s\S]*?)\x1b\[0m/g,
+		(_match, cursor: string) => {
+			const replacement = `${cursorMarker}${cursor}`;
+			cursorMarker = "";
+			return replacement;
+		},
+	);
+}
+
+function configureCursor(tui: TUI, cursorStyle: CursorStyle): void {
+	if (cursorStyle === "block") return;
+	const setShow = (
+		tui as unknown as { setShowHardwareCursor?: (v: boolean) => void }
+	).setShowHardwareCursor;
+	if (typeof setShow === "function") setShow.call(tui, true);
+	const seq = CURSOR_STYLE_SEQUENCES[cursorStyle];
+	const term = (tui as unknown as { terminal?: { write: (s: string) => void } })
+		.terminal;
+	if (seq && term && typeof term.write === "function") term.write(seq);
+}
+
+function isPlainBorder(line: string): boolean {
+	return /^─+$/.test(stripAnsi(line));
+}
+function isScrollBorder(line: string): boolean {
+	return /^─── [↑↓] \d+ more/.test(stripAnsi(line));
+}
+function isBorderLine(line: string): boolean {
+	const plain = stripAnsi(line);
+	return /^─+$/.test(plain) || /^─── [↑↓] \d+ more/.test(plain);
+}
+
 /**
- * Minimal structural view of pi's KeybindingsManager.
- *
- * pi-tui's own `Keybinding` type only covers `tui.*` names, but pi-coding-agent's
- * runtime bindings additionally define `app.*` actions (app.interrupt, app.exit,
- * app.clipboard.pasteImage, ...) which the original CustomEditor matches by string
- * id. Mirror the runtime contract: `matches` accepts any binding id string.
+ * Embed telemetry text right-aligned on the bottom border line.
+ * Left dashes are glow-colored, telemetry keeps its own ANSI colors.
  */
+function embedTelemetry(
+	lines: string[],
+	width: number,
+	telemetryText: string,
+	getGlow: (s: string) => string,
+): string[] {
+	if (!telemetryText || lines.length === 0) return lines;
+	const tWidth = visibleWidth(telemetryText);
+	if (tWidth <= 0) return lines;
+	// Find bottom border index (last border-like line)
+	let bottomIdx = -1;
+	for (let i = lines.length - 1; i >= 0; i--) {
+		if (isBorderLine(lines[i] ?? "")) {
+			bottomIdx = i;
+			break;
+		}
+	}
+	if (bottomIdx === -1) return lines;
+
+	// Truncate telemetry if too wide (reserve 2 pad spaces + 1 right dash min)
+	const maxTelemetryWidth = Math.max(0, width - 3);
+	let displayText = telemetryText;
+	let displayWidth = tWidth;
+	if (tWidth > maxTelemetryWidth) {
+		displayText = truncateToWidth(telemetryText, maxTelemetryWidth, "");
+		displayWidth = visibleWidth(displayText);
+	}
+	const pad = " ";
+	const rightDash = 1;
+	const leftDash = Math.max(0, width - displayWidth - 2 - rightDash);
+	// Build bottom line: left glow dashes + pad + telemetry + pad + right glow dash
+	const embedded =
+		getGlow("─".repeat(leftDash)) +
+		pad +
+		displayText +
+		pad +
+		getGlow("─".repeat(rightDash));
+	// Ensure visible width equals requested width (truncate if ANSI miscount)
+	const result = [...lines];
+	result[bottomIdx] = truncateToWidth(embedded, width, "");
+	// truncateToWidth strips? We used it without theme; need to ensure we keep ANSI.
+	// Actually truncateToWidth from pi-tui handles ANSI; our embedded already ANSI, but we passed without theme fg for ellipsis.
+	// If truncation happened above, we already handled. So just assign embedded; ensure width.
+	// Use visibleWidth to pad if needed? Embedded already width-exact by construction.
+	// For safety, if visibleWidth != width due to rounding, pad/truncate via visibleWidth
+	if (visibleWidth(embedded) !== width) {
+		// Fallback: truncate/pad using visibleWidth
+		result[bottomIdx] = embedded;
+	}
+	return result;
+}
+
 interface KeybindingsLike {
 	matches(data: string, keybinding: string): boolean;
 }
 
-/** Shape of the popup's suggestion payload passed to applyAutocompleteSuggestions. */
 interface AutocompleteSuggestionsLike {
 	prefix: string;
 	items: SelectItem[];
 }
 
-/** The two pi-tui internals this editor observes (ADR-0001, accessed via cast). */
 interface EditorInternals {
 	autocompleteList?: SelectList;
 	applyAutocompleteSuggestions?: (
@@ -39,37 +133,19 @@ interface EditorInternals {
 	) => void;
 }
 
-/**
- * The input editor for this extension.
- *
- * Replicates pi's CustomEditor exactly (see docs/reference/pi-tui-internals.md)
- * so that interactive mode's setCustomEditorComponent duck-typing wires every app
- * handler onto it, then additionally observes which candidate is highlighted in
- * the native completion popup and reports it through `onHighlight`.
- *
- * It also owns the editor slot exclusively (ADR-0001 + the model-info-widget
- * conflict): the model label + thinking-level border glow that
- * model-info-widget's ModelInfoEditor used to render is applied here instead
- * (see model-info.ts), because pi allows only ONE custom editor.
- */
 export class TrackingEditor extends Editor {
 	keybindings: KeybindingsLike;
 	actionHandlers = new Map<string, () => void>();
 
-	// Special handlers that can be dynamically replaced (wired by interactive mode).
 	onEscape?: () => void;
 	onCtrlD?: () => void;
 	onPasteImage?: () => void;
-	/** Handler for extension-registered shortcuts. Returns true if handled. */
 	onExtensionShortcut?: (data: string) => boolean;
 
-	/** Emits the highlighted completion-popup candidate, or null when the popup is closed. */
 	onHighlight?: (item: SelectItem | null) => void;
 
-	/** Whether the model-info border glow/label is rendered. */
 	glowEnabled = true;
 
-	/** The last SelectList instance whose onSelectionChange we wired. */
 	private lastWiredList?: SelectList;
 
 	private modelInfo: ModelInfo = {
@@ -80,6 +156,10 @@ export class TrackingEditor extends Editor {
 	};
 
 	private readonly getLiveTheme: () => ThemeLike;
+
+	private cursorStyle: CursorStyle = "block";
+	private telemetryText = "";
+	private previewHardwareCursor = false;
 
 	constructor(
 		tui: TUI,
@@ -94,32 +174,53 @@ export class TrackingEditor extends Editor {
 		this.patchApplyAutocompleteSuggestions();
 	}
 
-	/** Register a handler for an app action (used by interactive mode's duck-typing). */
 	onAction(action: string, handler: () => void): void {
 		this.actionHandlers.set(action, handler);
 	}
 
-	/** Update the model/thinking info shown in the border label. */
 	setModelInfo(info: ModelInfo): void {
 		this.modelInfo = info;
 		this.tui.requestRender();
 	}
 
-	/** Toggle the border glow + model label (off restores pi's stock border). */
 	setGlowEnabled(enabled: boolean): void {
 		this.glowEnabled = enabled;
 		this.tui.requestRender();
 	}
 
-	/**
-	 * Instance-patch the (TS-private) `applyAutocompleteSuggestions` so we re-wire
-	 * the freshly created popup list and report the initial best-match highlight
-	 * after every suggestion refresh — the programmatic `setSelectedIndex` used
-	 * there does NOT fire `onSelectionChange`.
-	 *
-	 * ADR-0001 blast radius: if pi renames the internals the patch stops firing;
-	 * we warn loudly at construction instead of failing silently.
-	 */
+	setCursorStyle(style: CursorStyle): void {
+		const changed = style !== this.cursorStyle;
+		this.previewHardwareCursor = style !== "block";
+		this.cursorStyle = style;
+		if (changed) {
+			const tuiAny = this.tui as unknown as {
+				setShowHardwareCursor?: (v: boolean) => void;
+				terminal?: { write: (s: string) => void };
+			};
+			if (style === "block") {
+				if (tuiAny.terminal) tuiAny.terminal.write(DEFAULT_CURSOR_STYLE_SEQUENCE);
+				if (typeof tuiAny.setShowHardwareCursor === "function")
+					tuiAny.setShowHardwareCursor(false);
+			} else {
+				configureCursor(this.tui, style);
+			}
+		}
+		this.tui.requestRender();
+	}
+
+	getCursorStyle(): CursorStyle {
+		return this.cursorStyle;
+	}
+
+	setTelemetryText(text: string): void {
+		this.telemetryText = text;
+		this.tui.requestRender();
+	}
+
+	getTelemetryText(): string {
+		return this.telemetryText;
+	}
+
 	private patchApplyAutocompleteSuggestions(): void {
 		const internals = this as unknown as EditorInternals;
 		const original = internals.applyAutocompleteSuggestions;
@@ -135,10 +236,6 @@ export class TrackingEditor extends Editor {
 		};
 	}
 
-	/**
-	 * Emit the current highlight: null when the popup is closed, otherwise the
-	 * selected item. Also wires `onSelectionChange` on a newly created list.
-	 */
 	private syncHighlight(): void {
 		const list = this.currentAutocompleteList();
 		if (!list) {
@@ -156,51 +253,85 @@ export class TrackingEditor extends Editor {
 		return (this as unknown as EditorInternals).autocompleteList;
 	}
 
-	override render(width: number): string[] {
+	private renderBase(width: number): string[] {
 		const lines = super.render(width);
-		if (!this.glowEnabled || lines.length === 0) {
-			return lines;
-		}
-		return applyModelInfo(lines, width, this.getLiveTheme(), this.modelInfo);
+		if (this.cursorStyle === "block") return lines;
+		let cursorMarker =
+			this.previewHardwareCursor &&
+			!(this as unknown as { focused?: boolean }).focused
+				? CURSOR_MARKER
+				: "";
+		if ((this as unknown as { focused?: boolean }).focused)
+			this.previewHardwareCursor = false;
+		return lines.map((line) => {
+			const rendered = removeSoftwareCursor(line, cursorMarker);
+			if (rendered !== line) cursorMarker = "";
+			return rendered;
+		});
 	}
 
-	/** Replication of pi's CustomEditor.handleInput (verbatim logic, plus highlight sync). */
+	override render(width: number): string[] {
+		let lines = this.renderBase(width);
+		if (lines.length === 0) return lines;
+
+		// Apply model-info glow/label on top (and bottom recolor) if enabled
+		if (this.glowEnabled) {
+			lines = applyModelInfo(lines, width, this.getLiveTheme(), this.modelInfo);
+		}
+
+		// Embed telemetry on bottom border (theme-respecting, right-aligned, truncated)
+		if (this.telemetryText) {
+			const theme = this.getLiveTheme();
+			// Build glow function for dashes: replicate model-info's brightening via thinking level
+			// Use theme.getThinkingBorderColor as fallback (model-info's buildGlow brightens but theme call is acceptable)
+			const glow = (s: string): string => {
+				try {
+					// Prefer model-info glow logic if available via theme brightening; fallback to thinking color
+					const maybeGlow = (
+						theme as unknown as {
+							getThinkingBorderColor?: (l: string) => (s: string) => string;
+						}
+					).getThinkingBorderColor;
+					if (typeof maybeGlow === "function")
+						return maybeGlow.call(theme, this.modelInfo.level)(s);
+				} catch (_err) {
+					// fallback to plain border on theme error
+				}
+				return s;
+			};
+			lines = embedTelemetry(lines, width, this.telemetryText, glow);
+		}
+
+		return lines;
+	}
+
 	override handleInput(data: string): void {
-		// Check extension-registered shortcuts first.
 		if (this.onExtensionShortcut?.(data)) {
 			return;
 		}
-		// Check for clipboard paste keybinding.
 		if (this.keybindings.matches(data, "app.clipboard.pasteImage")) {
 			this.onPasteImage?.();
 			return;
 		}
-		// Escape/interrupt — only if autocomplete is NOT active.
 		if (this.keybindings.matches(data, "app.interrupt")) {
 			if (!this.isShowingAutocomplete()) {
-				// Use dynamic onEscape if set, otherwise registered handler.
-				const handler =
-					this.onEscape ?? this.actionHandlers.get("app.interrupt");
+				const handler = this.onEscape ?? this.actionHandlers.get("app.interrupt");
 				if (handler) {
 					handler();
 					return;
 				}
 			}
-			// Let parent handle escape for autocomplete cancellation.
 			super.handleInput(data);
-			this.syncHighlight(); // escape closes the popup here — report it gone
+			this.syncHighlight();
 			return;
 		}
-		// Exit (Ctrl+D) — only when editor is empty.
 		if (this.keybindings.matches(data, "app.exit")) {
 			if (this.getText().length === 0) {
 				const handler = this.onCtrlD ?? this.actionHandlers.get("app.exit");
 				if (handler) handler();
 				return;
 			}
-			// Fall through to editor handling for delete-char-forward when not empty.
 		}
-		// Explicit history bindings take precedence over app actions while focused.
 		if (
 			this.keybindings.matches(data, "tui.editor.historyPrevious") ||
 			this.keybindings.matches(data, "tui.editor.historyNext")
@@ -208,7 +339,6 @@ export class TrackingEditor extends Editor {
 			super.handleInput(data);
 			return;
 		}
-		// Check all other app actions.
 		for (const [action, handler] of this.actionHandlers) {
 			if (
 				action !== "app.interrupt" &&
@@ -219,7 +349,6 @@ export class TrackingEditor extends Editor {
 				return;
 			}
 		}
-		// Pass to parent for editor handling.
 		super.handleInput(data);
 		this.syncHighlight();
 	}
