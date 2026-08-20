@@ -230,8 +230,7 @@ function buildGlow(theme: ThemeLike, level: string): (s: string) => string {
 function formatContextWindow(tokens: number): string {
 	if (!Number.isFinite(tokens) || tokens <= 0) return "";
 	if (tokens >= 1_000_000) {
-		const m = tokens / 1_000_000;
-		return `${Number.isInteger(m) ? m : m.toFixed(1)}m`;
+		return `${(tokens / 1_000_000).toFixed(1)}M`;
 	}
 	const k = tokens / 1000;
 	return `${Number.isInteger(k) ? k : k.toFixed(1)}k`;
@@ -278,17 +277,10 @@ function embedLabel(
 	glow: (s: string) => string,
 ): string {
 	// Padding collapses gracefully on very narrow terminals.
-	const padCount = Math.min(
-		LABEL_PAD,
-		Math.max(0, Math.floor((width - 1) / 2)),
-	);
+	const padCount = Math.min(LABEL_PAD, Math.max(0, Math.floor((width - 1) / 2)));
 	const padding = padCount * 2;
 	// Reserve at least one border char on each side.
-	const labelText = truncateToWidth(
-		label,
-		Math.max(0, width - 2 - padding),
-		"",
-	);
+	const labelText = truncateToWidth(label, Math.max(0, width - 2 - padding), "");
 	const lw = visibleWidth(labelText);
 	const leftWidth = Math.max(0, Math.min(2, width - lw - padding));
 	const rightWidth = Math.max(0, width - lw - leftWidth - padding);

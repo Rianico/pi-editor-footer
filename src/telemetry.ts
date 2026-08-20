@@ -539,8 +539,10 @@ export function formatTurnTelemetry(
   }
   if (config.cost && telemetry.rateUsdPerMTokens !== null) {
     const rate = telemetry.rateUsdPerMTokens.toFixed(2);
-    // Avoid "$ $0.16/M" when the cost glyph itself is "$" (ascii) — glyph already is the currency symbol
-    const costText = g.cost === "$" ? `$${rate}/M` : `${g.cost} $${rate}/M`;
+    // "$0.16/M" is short for "$0.16 per million tokens" — make it explicit to avoid "weird /M" confusion
+    // Keep single "$" when glyph is "$" (ascii), otherwise show icon + " $rate per M"
+    const costText =
+      g.cost === "$" ? `$${rate} per M` : `${g.cost} $${rate} per M`;
     parts.push(theme.fg("warning", costText));
   }
   if (parts.length === 0) return "";
