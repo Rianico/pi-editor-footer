@@ -262,6 +262,13 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		editor.setModelInfo(currentModelInfo);
 		editor.glowEnabled = glowEnabled;
 		editor.setCursorStyle(currentConfig.cursorStyle);
+		// initial bottom border left: location (cwd/workspace) — set here so it survives deferred install race
+		try {
+			const cwd = process.cwd();
+			const rawCwd = formatCwd(cwd);
+			const displayCwd = currentConfig.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
+			editor.setBottomLeftText(displayCwd);
+		} catch {}
 		editor.onHighlight = (item) => {
 			currentItem = item;
 			scrollOffset = 0; // a new candidate restarts the scroll

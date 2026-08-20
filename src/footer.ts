@@ -173,6 +173,29 @@ export function renderFooter(
       };
 
   const leftParts: PrioritizedSegment[] = [];
+  if (segments.cwd) {
+    const maxCwd = Math.min(30, Math.max(10, Math.floor(width * 0.4)));
+    const rawCwd = formatCwd(ctx.cwd);
+    const displayCwd = rawCwd;
+    const cwdPrefix = `${theme.fg("mdLink", glyphs.cwd)} `;
+    const accent = (text: string) => theme.fg("accent", text);
+    leftParts.push({
+      text: `${cwdPrefix}${accent(truncatePath(displayCwd, maxCwd))}`,
+      compactText: `${cwdPrefix}${accent(truncatePath(basenamePath(displayCwd), maxCwd))}`,
+      priority: 5,
+      truncate: (_text, maxWidth, ellipsis) => {
+        const pathWidth = maxWidth - visibleWidth(cwdPrefix);
+        if (pathWidth <= visibleWidth(ellipsis)) {
+          return truncateToWidth(
+            `${cwdPrefix}${accent(basenamePath(displayCwd))}`,
+            maxWidth,
+            ellipsis,
+          );
+        }
+        return `${cwdPrefix}${accent(truncatePath(basenamePath(displayCwd), pathWidth))}`;
+      },
+    });
+  }
   if (segments.sessionName) {
     const sessionName = ctx.sessionName;
     if (sessionName) {
@@ -182,6 +205,8 @@ export function renderFooter(
       });
     }
   }
+  const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
+  if (gitSeg) leftParts.push({ text: gitSeg, priority: 4 });
   if (segments.runtime) {
     const runtimeSeg = renderRuntimeSegment(
       theme,
@@ -192,6 +217,34 @@ export function renderFooter(
   }
   const timerSeg = renderTimerSegment(theme, state, glyphs);
   if (timerSeg) leftParts.push({ text: timerSeg, priority: 1 });
+
+  const stats: string[] = [];
+  if (segments.tokens) {
+    stats.push(
+      theme.fg("accent", `${glyphs.input} ${fmtTokens(totals.input)}`),
+    );
+    stats.push(
+      theme.fg("success", `${glyphs.output} ${fmtTokens(totals.output)}`),
+    );
+    const hasCacheTokens = totals.cacheRead > 0 || totals.cacheWrite > 0;
+    if (hasCacheTokens && totals.latestCacheHitRate !== undefined) {
+      stats.push(
+        theme.fg(
+          cacheHitColor(totals.latestCacheHitRate),
+          `${glyphs.cacheHit} ${totals.latestCacheHitRate.toFixed(1)}%`,
+        ),
+      );
+    }
+  }
+  if (segments.cost) {
+    stats.push(
+      theme.fg("warning", `${glyphs.cost} $${totals.cost.toFixed(3)}`),
+    );
+  }
+  const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
+  if (statsBlock) {
+    leftParts.push({ text: statsBlock, priority: 3 });
+  }
 
   // Context
   let contextText = "";
@@ -233,33 +286,6 @@ export function renderFooter(
   const fittedContext = contextText ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
 
-  const stats: string[] = [];
-  if (segments.tokens) {
-    stats.push(
-      theme.fg("accent", `${glyphs.input} ${fmtTokens(totals.input)}`),
-    );
-    stats.push(
-      theme.fg("success", `${glyphs.output} ${fmtTokens(totals.output)}`),
-    );
-    const hasCacheTokens = totals.cacheRead > 0 || totals.cacheWrite > 0;
-    if (hasCacheTokens && totals.latestCacheHitRate !== undefined) {
-      stats.push(
-        theme.fg(
-          cacheHitColor(totals.latestCacheHitRate),
-          `${glyphs.cacheHit} ${totals.latestCacheHitRate.toFixed(1)}%`,
-        ),
-      );
-    }
-  }
-  if (segments.cost) {
-    stats.push(
-      theme.fg("warning", `${glyphs.cost} $${totals.cost.toFixed(3)}`),
-    );
-  }
-  const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
-  if (statsBlock) {
-    leftParts.push({ text: statsBlock, priority: 3 });
-  }
 
   const mainLines = [line1].map((line) =>
     truncateToWidth(line, width, theme.fg("dim", "...")),
