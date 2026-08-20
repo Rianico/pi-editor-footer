@@ -30,7 +30,7 @@ function removeSoftwareCursor(line: string, cursorMarker = ""): string {
 	return line.replace(
 		/\x1b\[7m([\s\S]*?)\x1b\[0m/g,
 		(_match, cursor: string) => {
-			const replacement = `${cursorMarker}${cursor}`;
+			const replacement = cursorMarker ? `${cursorMarker}${cursor}\x1b[0m` : cursor;
 			cursorMarker = "";
 			return replacement;
 		},
@@ -305,11 +305,7 @@ export class TrackingEditor extends Editor {
 	private renderBase(width: number): string[] {
 		const lines = super.render(width);
 		if (this.cursorStyle === "block") return lines;
-		let cursorMarker =
-			this.previewHardwareCursor &&
-			!(this as unknown as { focused?: boolean }).focused
-				? CURSOR_MARKER
-				: "";
+		let cursorMarker = "";
 		if ((this as unknown as { focused?: boolean }).focused)
 			this.previewHardwareCursor = false;
 		return lines.map((line) => {

@@ -206,7 +206,10 @@ export function renderFooter(
     }
   }
   const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
-  if (gitSeg) leftParts.push({ text: gitSeg, priority: 4 });
+  if (gitSeg) {
+    const sep = leftParts.length > 0 ? `${theme.fg("dim", " · ")}` : "";
+    leftParts.push({ text: `${sep}${gitSeg}`, priority: 4 });
+  }
   if (segments.runtime) {
     const runtimeSeg = renderRuntimeSegment(
       theme,
