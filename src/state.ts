@@ -1,7 +1,8 @@
 import type { GitStatus } from "./git.js";
 import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
-import { fmtTokens, formatProviderLabel } from "./utils.js";
+import { fmtTokens } from "./format.js";
+import { formatProviderLabel } from "./format.js";
 
 export interface FooterState {
   git: GitStatus;

@@ -12,22 +12,28 @@ import type { IconGlyphs } from "./icons.js";
 import { resolveGlyphs, resolveIconMode, runtimeSymbol } from "./icons.js";
 import {
   alignRight,
-  basenamePath,
-  cacheHitColor,
-  effortColor,
   fitSegmentsByPriority,
-  fmtTokens,
-  formatCwd,
-  formatDuration,
-  formatProviderLabel,
-  providerColor,
-  sanitizeStatus,
-  stressColor,
-  truncateBranch,
-  truncatePath,
   type PrioritizedSegment,
   type Theme,
-} from "./utils.js";
+} from "./layout.js";
+import {
+  basenamePath,
+  formatCwd,
+  truncateBranch,
+  truncatePath,
+} from "./path-format.js";
+import {
+  cacheHitColor,
+  effortColor,
+  providerColor,
+  stressColor,
+} from "./color-policy.js";
+import {
+  fmtTokens,
+  formatDuration,
+  formatProviderLabel,
+  sanitizeStatus,
+} from "./format.js";
 
 function renderBar(
   theme: Theme,
@@ -174,7 +180,8 @@ export function renderFooter(
   if (segments.cwd) {
     const maxCwd = Math.min(30, Math.max(10, Math.floor(width * 0.4)));
     const rawCwd = formatCwd(ctx.cwd);
-    const displayCwd = config.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
+    const displayCwd =
+      config.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
     const cwdPrefix = `${theme.fg("mdLink", glyphs.cwd)} `;
     const accent = (text: string) => theme.fg("accent", text);
     leftParts.push({
@@ -280,7 +287,10 @@ export function renderFooter(
   }
   // Tokens right next to context bar (user request): combine them as single right block
   const rightBlock = [statsBlock, contextText].filter(Boolean).join("  ");
-  const rightCompact = statsBlock && contextCompact ? `${statsBlock}  ${contextCompact}` : statsBlock || contextCompact;
+  const rightCompact =
+    statsBlock && contextCompact
+      ? `${statsBlock}  ${contextCompact}`
+      : statsBlock || contextCompact;
   const allParts: PrioritizedSegment[] = [...leftParts];
   if (rightBlock) {
     allParts.push({
@@ -293,7 +303,6 @@ export function renderFooter(
   const fitted = fitSegmentsByPriority(allParts, width, theme.fg("dim", "..."));
   const fittedContext = rightBlock ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
-
 
   const mainLines = [line1].map((line) =>
     truncateToWidth(line, width, theme.fg("dim", "...")),
