@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-20
+
+### Fixed
+- `npm:pi-editor-footer` not being discovered when installed via `pi install npm:pi-editor-footer` — added `pi.extensions` (`dist/index.js`) and `keywords` so pi loads the theme from `~/.pi/agent/npm/node_modules`
+
 ## [0.1.1] - 2026-08-20
+
 
 ### Fixed
 - `npm:pi-editor-footer` now works when installed via `pi install npm:pi-editor-footer` — added `main` (`dist/index.js`), `files`, and `build` (`tsc --project tsconfig.build.json`) so pi can discover the extension from `~/.pi/agent/npm/node_modules`
