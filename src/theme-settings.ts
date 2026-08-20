@@ -37,7 +37,12 @@ interface ExtensionContext {
     ): Promise<T>;
   };
 }
-import type { ThemeConfig, CursorStyle, IconMode, WorkspaceDisplay } from "./config.ts";
+import type {
+  ThemeConfig,
+  CursorStyle,
+  IconMode,
+  WorkspaceDisplay,
+} from "./config.ts";
 
 const TABS = ["general", "appearance", "footer", "telemetry"] as const;
 type Tab = (typeof TABS)[number];
@@ -81,7 +86,10 @@ const COPY = {
   values: {
     on: "On",
     off: "Off",
-    workspaceDisplays: { path: "Full path", name: "Name only" } as Record<WorkspaceDisplay, string>,
+    workspaceDisplays: { path: "Full path", name: "Name only" } as Record<
+      WorkspaceDisplay,
+      string
+    >,
     cursorStyles: {
       block: "Block",
       bar: "Bar",
@@ -101,7 +109,8 @@ function cycleCursor(config: ThemeConfig): ThemeConfig {
   return { ...config, cursorStyle: next };
 }
 function cycleWorkspaceDisplay(config: ThemeConfig): ThemeConfig {
-  const next: WorkspaceDisplay = config.workspaceDisplay === "path" ? "name" : "path";
+  const next: WorkspaceDisplay =
+    config.workspaceDisplay === "path" ? "name" : "path";
   return { ...config, workspaceDisplay: next };
 }
 function cycleIconMode(config: ThemeConfig): ThemeConfig {
@@ -422,41 +431,11 @@ export function registerThemeSettingsCommand(
     onOverlayClosed?: () => void;
   },
 ): void {
-  pi.registerCommand("pi-lsz-theme", {
+  pi.registerCommand("pi-footer", {
     description:
-      "Open pi-lsz-theme settings (workspace, cursor, footer, telemetry)",
+      "Open pi-footer settings (workspace, cursor, footer, telemetry)",
     handler: async (_args: string, ctx: ExtensionContext) => {
       if (!ctx.hasUI) return;
-      // Also expose as /theme for backwards compat — the dialog is the same
-      await ctx.ui.custom<void>(
-        (tui: TUI, theme: Theme, _kb: unknown, done: (v: void) => void) => {
-          const ui = new SettingsUi(
-            theme as Theme,
-            hooks.getConfig(),
-            (config) => hooks.onConfigChanged(config),
-            () => done(undefined),
-          );
-          return {
-            render: (w: number) => ui.render(w),
-            invalidate: () => ui.invalidate(),
-            handleInput: (data: string) => {
-              ui.handleInput(data);
-              tui.requestRender();
-            },
-          };
-        },
-        { overlay: true },
-      );
-      hooks.onOverlayClosed?.();
-    },
-  });
-
-  // keep /theme as alias that also opens the window (so typing /theme same as /pi-lsz-theme window)
-  pi.registerCommand("theme", {
-    description: "Open pi-lsz-theme settings",
-    handler: async (_args: string, ctx: ExtensionContext) => {
-      if (!ctx.hasUI) return;
-      // delegate by invoking the same custom UI — avoid recursion
       await ctx.ui.custom<void>(
         (tui: TUI, theme: Theme, _kb: unknown, done: (v: void) => void) => {
           const ui = new SettingsUi(
