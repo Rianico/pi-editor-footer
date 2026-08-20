@@ -51,12 +51,11 @@ export class TrackingEditor extends Editor {
     contextWindow: 0,
   };
 
-  private readonly getLiveTheme: () => ThemeLike;
-
   private readonly cursorPolicy: CursorPolicy;
   private readonly borderRenderer: BorderRenderer;
   private telemetryText = "";
   private bottomLeftText = "";
+  private topRightText = "";
 
   constructor(
     tui: TUI,
@@ -67,7 +66,6 @@ export class TrackingEditor extends Editor {
   ) {
     super(tui, theme, options);
     this.keybindings = keybindings;
-    this.getLiveTheme = getLiveTheme;
     this.cursorPolicy = new CursorPolicy(tui);
     this.borderRenderer = new BorderRenderer(
       getLiveTheme,
@@ -93,7 +91,8 @@ export class TrackingEditor extends Editor {
   setCursorStyle(style: CursorStyle): void {
     const prev = this.cursorPolicy.getStyle();
     this.cursorPolicy.setStyle(style);
-    if (prev === style) this.tui.requestRender(); else this.tui.requestRender();
+    if (prev === style) this.tui.requestRender();
+    else this.tui.requestRender();
   }
 
   getCursorStyle(): CursorStyle {
@@ -118,6 +117,14 @@ export class TrackingEditor extends Editor {
     return this.telemetryText;
   }
 
+  setTopRightText(text: string): void {
+    this.topRightText = text;
+    this.tui.requestRender();
+  }
+
+  getTopRightText(): string {
+    return this.topRightText;
+  }
   private patchApplyAutocompleteSuggestions(): void {
     const internals = this as unknown as EditorInternals;
     const original = internals.applyAutocompleteSuggestions;
@@ -164,6 +171,7 @@ export class TrackingEditor extends Editor {
       glowEnabled: this.glowEnabled,
       telemetryText: this.telemetryText,
       bottomLeftText: this.bottomLeftText,
+      topRightText: this.topRightText,
     });
     return lines;
   }

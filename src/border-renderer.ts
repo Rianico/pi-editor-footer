@@ -32,21 +32,41 @@ export class BorderRenderer {
       glowEnabled: boolean;
       telemetryText?: string;
       bottomLeftText?: string;
+      topRightText?: string;
     },
   ): string[] {
     let out = [...lines];
     if (out.length === 0) return out;
 
-    // Top glow + label
-    if (opts.glowEnabled) {
-      out = applyModelInfo(
-        out,
-        width,
-        this.getLiveTheme(),
-        this.getModelInfo(),
-      );
+    // Top glow + label (+ optional right side for run activity)
+    if (opts.glowEnabled || opts.topRightText) {
+      if (opts.glowEnabled) {
+        out = applyModelInfo(
+          out,
+          width,
+          this.getLiveTheme(),
+          this.getModelInfo(),
+        );
+      }
+      if (opts.topRightText) {
+        const theme = this.getLiveTheme();
+        const glow = (s: string): string => {
+          try {
+            const maybeGlow = (
+              theme as unknown as {
+                getThinkingBorderColor?: (l: string) => (s: string) => string;
+              }
+            ).getThinkingBorderColor;
+            if (typeof maybeGlow === "function")
+              return maybeGlow.call(theme, this.getModelInfo().level)(s);
+          } catch {
+            // ignore
+          }
+          return s;
+        };
+        out = embedTopRightBorder(out, width, opts.topRightText, glow);
+      }
     }
-
     // Bottom embedding (telemetry left/right)
     if (opts.telemetryText || opts.bottomLeftText) {
       const theme = this.getLiveTheme();
@@ -114,5 +134,44 @@ function embedBottomBorder(
   const result = [...lines];
   result[bottomIdx] = truncateToWidth(embedded, width, "");
   if (visibleWidth(embedded) !== width) result[bottomIdx] = embedded;
+  return result;
+}
+
+function embedTopRightBorder(
+  lines: string[],
+  width: number,
+  rightText: string,
+  getGlow: (s: string) => string,
+): string[] {
+  if (!rightText || lines.length === 0) return lines;
+  // Top border is always lines[0] — unless it's a scroll indicator, treat similarly
+  const top = lines[0] ?? "";
+  const plainTop = stripAnsi(top);
+  // If top is scroll indicator, don't embed right — keep glow recolor only
+  if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
+  const rightW = visibleWidth(rightText);
+  // left label already embedded by applyModelInfo — its visible width is width - middle - right
+  // We need to truncate right if too wide, preserving at least 10 chars for left
+  const maxRight = Math.max(0, width - 12);
+  let displayRight = rightText;
+  if (rightW > maxRight)
+    displayRight = truncateToWidth(rightText, maxRight, "");
+  const displayW = visibleWidth(displayRight);
+  // Rebuild top: keep existing left-embedded line, replace its right tail
+  const existing = lines[0] ?? "";
+  // Strip then rebuild: we need to preserve left part and insert right
+  // Simple approach: truncate existing to width - displayW - 3, then add " " + displayRight + " " + glow("─")
+  const availableForLeft = Math.max(0, width - displayW - 3);
+  let leftPart = truncateToWidth(existing, availableForLeft, "");
+  // Ensure leftPart ends with glow dash if truncated
+  const rightSegment = ` ${displayRight} ${getGlow("─")}`;
+  const leftW2 = visibleWidth(leftPart);
+  const rightW2 = visibleWidth(rightSegment);
+  const middleWidth = Math.max(0, width - leftW2 - rightW2);
+  const middle = getGlow("─".repeat(middleWidth));
+  const embedded = `${leftPart}${middle}${rightSegment}`;
+  const result = [...lines];
+  result[0] = truncateToWidth(embedded, width, "");
+  if (visibleWidth(embedded) !== width) result[0] = embedded;
   return result;
 }

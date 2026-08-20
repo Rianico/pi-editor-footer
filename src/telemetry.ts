@@ -140,6 +140,65 @@ export class TurnTelemetryTracker {
   getLastTelemetry(): TurnTelemetry | null {
     return this.lastTelemetry;
   }
+  /** Live snapshot while a turn is running — for real-time border refresh. Returns null when idle. */
+  peekLive(): TurnTelemetry | null {
+    const turn = this.turn;
+    if (!turn) return null;
+    const now = this.now();
+    const elapsed = Math.max(0, now - turn.startMs);
+    // before first token — show running duration only
+    if (turn.firstTokenMs === null) {
+      return {
+        tps: null,
+        ttftMs: 0,
+        totalMs: elapsed,
+        inputTokens: 0,
+        outputTokens: 0,
+        stallMs: turn.stallMs,
+        stallCount: turn.stallCount,
+        rateUsdPerMTokens: null,
+        generationMs: elapsed,
+        totalTokens: 0,
+        costUsd: 0,
+        measurementMs: null,
+      };
+    }
+    const genMs = Math.max(0, now - turn.firstTokenMs);
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let totalTokens = 0;
+    let costUsd = 0;
+    for (const m of turn.messages) {
+      inputTokens += m.usage.input;
+      outputTokens += m.usage.output;
+      totalTokens += m.usage.totalTokens;
+      costUsd += m.usage.cost.total;
+    }
+    const measurementMs = genMs > 0 && outputTokens > 0 ? genMs : null;
+    const tps =
+      measurementMs === null
+        ? null
+        : round(outputTokens / (measurementMs / 1000), 1);
+    const validCost = Number.isFinite(costUsd) && costUsd > 0;
+    const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
+    return {
+      tps,
+      ttftMs: turn.firstTokenMs - turn.startMs,
+      totalMs: elapsed,
+      inputTokens,
+      outputTokens,
+      stallMs: turn.stallMs,
+      stallCount: turn.stallCount,
+      rateUsdPerMTokens:
+        validCost && validTokens
+          ? round(costUsd / (totalTokens / 1_000_000), 2)
+          : null,
+      generationMs: genMs,
+      totalTokens,
+      costUsd: validCost ? costUsd : 0,
+      measurementMs,
+    };
+  }
 
   handle(event: TelemetryEvent): TurnTelemetry | undefined {
     switch (event.type) {

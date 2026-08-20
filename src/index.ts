@@ -12,6 +12,10 @@ import { installFooter } from "./footer.js";
 import { createInitialState } from "./state.js";
 import type { FooterState } from "./state.js";
 import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
+import {
+	createRunActivityTracker,
+	formatRunActivityTopRight,
+} from "./run-activity.js";
 import { readGitStatus } from "./git.js";
 import { readRuntimeInfo } from "./runtime.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
@@ -117,6 +121,8 @@ let installedEditor: TrackingEditor | null = null;
 let lastSessionCtx: ExtensionContextLike | null = null;
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
+const runActivityTracker = createRunActivityTracker();
+let liveTickTimer: ReturnType<typeof setInterval> | null = null;
 let footerState: FooterState = createInitialState();
 let currentModelInfo: ModelInfo = {
 	provider: "",
@@ -248,6 +254,66 @@ function modelInfoOf(ctx: ExtensionContextLike): ModelInfo {
 	};
 }
 
+/** Real-time: refresh the top-right run-activity border (turn · duration · tools · failed). */
+function refreshTopBorder(): void {
+	if (!installedEditor || !lastSessionCtx) return;
+	try {
+		const theme = lastSessionCtx.ui.theme as unknown as {
+			fg(s: string, t: string): string;
+		};
+		const snap = runActivityTracker.getSnapshot();
+		const text = formatRunActivityTopRight(snap, theme as never);
+		installedEditor.setTopRightText(text);
+	} catch {
+		void 0;
+	}
+}
+
+/** Real-time: refresh the bottom telemetry border from live peek. */
+function refreshLiveTelemetry(): void {
+	if (!installedEditor || !currentConfig.telemetry.enabled) return;
+	try {
+		const live = telemetryTracker.peekLive();
+		if (!live) return;
+		const theme = (lastSessionCtx as unknown as { ui?: { theme?: unknown } })?.ui
+			?.theme;
+		const text = formatTurnTelemetry(
+			live,
+			theme as never,
+			currentConfig.telemetry,
+		);
+		// Only show live telemetry while a turn is actually running; otherwise keep last final
+		if (live.totalMs > 0) installedEditor.setTelemetryText(text);
+	} catch {
+		void 0;
+	}
+}
+
+function startLiveTick(): void {
+	if (liveTickTimer !== null) return;
+	liveTickTimer = setInterval(() => {
+		if (runActivityTracker.isRunning()) {
+			refreshTopBorder();
+			refreshLiveTelemetry();
+		}
+	}, 1000);
+	// don't block process exit
+	if (
+		liveTickTimer &&
+		typeof (liveTickTimer as unknown as { unref?: () => void }).unref ===
+			"function"
+	) {
+		(liveTickTimer as unknown as { unref(): void }).unref();
+	}
+}
+
+function stopLiveTick(): void {
+	if (liveTickTimer !== null) {
+		clearInterval(liveTickTimer);
+		liveTickTimer = null;
+	}
+}
+
 /**
  * Install the TrackingEditor as the input editor and wire it up.
  *
@@ -359,7 +425,8 @@ export default function (pi: ExtensionAPILike): void {
 				if (!currentConfig.enabled) {
 					footerCleanup?.();
 					footerCleanup = null;
-					(globalThis as unknown as { __footerRender?: () => void }).__footerRender = undefined;
+					(globalThis as unknown as { __footerRender?: () => void }).__footerRender =
+						undefined;
 				} else if (lastSessionCtx) {
 					try {
 						footerCleanup?.();
@@ -375,20 +442,33 @@ export default function (pi: ExtensionAPILike): void {
 							}),
 							{
 								setRequestRender: (fn) => {
-									(globalThis as unknown as { __footerRender?: () => void }).__footerRender = fn ?? undefined;
+									(
+										globalThis as unknown as { __footerRender?: () => void }
+									).__footerRender = fn ?? undefined;
 								},
 								scheduleGitRefresh: () => {
 									void (async () => {
 										try {
-											const cwd = (ctx2 as unknown as { sessionManager?: { getCwd: () => string } }).sessionManager?.getCwd?.() ?? (ctx2 as unknown as { cwd?: string }).cwd ?? process.cwd();
+											const cwd =
+												(
+													ctx2 as unknown as { sessionManager?: { getCwd: () => string } }
+												).sessionManager?.getCwd?.() ??
+												(ctx2 as unknown as { cwd?: string }).cwd ??
+												process.cwd();
 											const git = await readGitStatus(cwd);
 											footerState = { ...footerState, git } as FooterState;
 											installedEditor?.setBottomLeftText("");
-											(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+											(
+												globalThis as unknown as { __footerRender?: () => void }
+											).__footerRender?.();
 											const runtime = await readRuntimeInfo(cwd);
 											footerState = { ...footerState, runtime } as FooterState;
-											(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
-										} catch (_e) { void _e; }
+											(
+												globalThis as unknown as { __footerRender?: () => void }
+											).__footerRender?.();
+										} catch (_e) {
+											void _e;
+										}
 									})();
 								},
 							},
@@ -396,16 +476,29 @@ export default function (pi: ExtensionAPILike): void {
 						// immediate population
 						void (async () => {
 							try {
-								const cwd = (ctx2 as unknown as { sessionManager?: { getCwd: () => string } }).sessionManager?.getCwd?.() ?? (ctx2 as unknown as { cwd?: string }).cwd ?? process.cwd();
+								const cwd =
+									(
+										ctx2 as unknown as { sessionManager?: { getCwd: () => string } }
+									).sessionManager?.getCwd?.() ??
+									(ctx2 as unknown as { cwd?: string }).cwd ??
+									process.cwd();
 								const git = await readGitStatus(cwd);
 								footerState = { ...footerState, git } as FooterState;
-								(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+								(
+									globalThis as unknown as { __footerRender?: () => void }
+								).__footerRender?.();
 								const runtime = await readRuntimeInfo(cwd);
 								footerState = { ...footerState, runtime } as FooterState;
-								(globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
-							} catch (_e) { void _e; }
+								(
+									globalThis as unknown as { __footerRender?: () => void }
+								).__footerRender?.();
+							} catch (_e) {
+								void _e;
+							}
 						})();
-					} catch (_e) { void _e; }
+					} catch (_e) {
+						void _e;
+					}
 				}
 			}
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
@@ -444,7 +537,7 @@ export default function (pi: ExtensionAPILike): void {
 		}
 
 		currentModelInfo = modelInfoOf(ctx);
-	lastSessionCtx = ctx;
+		lastSessionCtx = ctx;
 
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
@@ -453,87 +546,88 @@ export default function (pi: ExtensionAPILike): void {
 		if (!currentConfig.enabled) {
 			footerCleanup?.();
 			footerCleanup = null;
-			(globalThis as unknown as { __footerRender?: () => void }).__footerRender = undefined;
+			(globalThis as unknown as { __footerRender?: () => void }).__footerRender =
+				undefined;
 		} else {
-		try {
-			// footer
 			try {
-				footerCleanup?.();
-				footerCleanup = installFooter(
-					ctx as unknown as Parameters<typeof installFooter>[0],
-					() => footerState,
-					() => currentConfig,
-					() => ({
-						provider: currentModelInfo.provider,
-						model: currentModelInfo.modelId,
-						effort: currentModelInfo.level,
-					}),
-					{
-						setRequestRender: (fn) => {
-							(
-								globalThis as unknown as { __footerRender?: () => void }
-							).__footerRender = fn ?? undefined;
-						},
-						scheduleGitRefresh: () => {
-							void (async () => {
-								try {
-									const cwd =
-										(
-											ctx as unknown as { sessionManager?: { getCwd: () => string } }
-										).sessionManager?.getCwd?.() ??
-										(ctx as unknown as { cwd?: string }).cwd ??
-										process.cwd();
-									const git = await readGitStatus(cwd);
-									footerState = { ...footerState, git } as FooterState;
-									// bottom border left: location + git (right of cwd)
-					installedEditor?.setBottomLeftText("");
-									(
-										globalThis as unknown as { __footerRender?: () => void }
-									).__footerRender?.();
-									const runtime = await readRuntimeInfo(cwd);
-									footerState = { ...footerState, runtime } as FooterState;
-									(
-										globalThis as unknown as { __footerRender?: () => void }
-									).__footerRender?.();
-								} catch (_e) {
-					void _e;
-				}
-							})();
-						},
-					},
-				);
-			} catch (_e) {
-				void _e;
-			}
-			// initial git/runtime population so footer isn't empty at startup (onBranchChange only fires on change)
-			void (async () => {
+				// footer
 				try {
-					const cwd =
-						(
-							ctx as unknown as { sessionManager?: { getCwd: () => string } }
-						).sessionManager?.getCwd?.() ??
-						(ctx as unknown as { cwd?: string }).cwd ??
-						process.cwd();
-					const git = await readGitStatus(cwd);
-					footerState = { ...footerState, git } as FooterState;
-					installedEditor?.setBottomLeftText("");
-					(
-						globalThis as unknown as { __footerRender?: () => void }
-					).__footerRender?.();
-					const runtime = await readRuntimeInfo(cwd);
-					footerState = { ...footerState, runtime } as FooterState;
-					(
-						globalThis as unknown as { __footerRender?: () => void }
-					).__footerRender?.();
+					footerCleanup?.();
+					footerCleanup = installFooter(
+						ctx as unknown as Parameters<typeof installFooter>[0],
+						() => footerState,
+						() => currentConfig,
+						() => ({
+							provider: currentModelInfo.provider,
+							model: currentModelInfo.modelId,
+							effort: currentModelInfo.level,
+						}),
+						{
+							setRequestRender: (fn) => {
+								(
+									globalThis as unknown as { __footerRender?: () => void }
+								).__footerRender = fn ?? undefined;
+							},
+							scheduleGitRefresh: () => {
+								void (async () => {
+									try {
+										const cwd =
+											(
+												ctx as unknown as { sessionManager?: { getCwd: () => string } }
+											).sessionManager?.getCwd?.() ??
+											(ctx as unknown as { cwd?: string }).cwd ??
+											process.cwd();
+										const git = await readGitStatus(cwd);
+										footerState = { ...footerState, git } as FooterState;
+										// bottom border left: location + git (right of cwd)
+										installedEditor?.setBottomLeftText("");
+										(
+											globalThis as unknown as { __footerRender?: () => void }
+										).__footerRender?.();
+										const runtime = await readRuntimeInfo(cwd);
+										footerState = { ...footerState, runtime } as FooterState;
+										(
+											globalThis as unknown as { __footerRender?: () => void }
+										).__footerRender?.();
+									} catch (_e) {
+										void _e;
+									}
+								})();
+							},
+						},
+					);
 				} catch (_e) {
 					void _e;
 				}
-			})();
-			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
-			installedEditor?.setBottomLeftText("");
-		} catch (_e) {
-			void _e;
-		}
+				// initial git/runtime population so footer isn't empty at startup (onBranchChange only fires on change)
+				void (async () => {
+					try {
+						const cwd =
+							(
+								ctx as unknown as { sessionManager?: { getCwd: () => string } }
+							).sessionManager?.getCwd?.() ??
+							(ctx as unknown as { cwd?: string }).cwd ??
+							process.cwd();
+						const git = await readGitStatus(cwd);
+						footerState = { ...footerState, git } as FooterState;
+						installedEditor?.setBottomLeftText("");
+						(
+							globalThis as unknown as { __footerRender?: () => void }
+						).__footerRender?.();
+						const runtime = await readRuntimeInfo(cwd);
+						footerState = { ...footerState, runtime } as FooterState;
+						(
+							globalThis as unknown as { __footerRender?: () => void }
+						).__footerRender?.();
+					} catch (_e) {
+						void _e;
+					}
+				})();
+				installedEditor?.setCursorStyle(currentConfig.cursorStyle);
+				installedEditor?.setBottomLeftText("");
+			} catch (_e) {
+				void _e;
+			}
 		} // end if (!enabled) else
 
 		// Re-arm the ownership watchdog with this session's ctx.
@@ -548,7 +642,11 @@ export default function (pi: ExtensionAPILike): void {
 	// session's ctx must be dead before then — otherwise its next tick hits the
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
 	pi.on("session_shutdown", () => {
-	lastSessionCtx = null;
+		stopLiveTick();
+		runActivityTracker.reset();
+		installedEditor?.setTopRightText("");
+		// keep last telemetry visible until next turn — clear only the live tick
+		lastSessionCtx = null;
 		headerCleanupInner?.();
 		headerCleanupInner = null;
 		footerCleanup?.();
@@ -563,15 +661,85 @@ export default function (pi: ExtensionAPILike): void {
 		}
 	});
 
-	// telemetry wiring — right-bottom border (live, theme-respecting)
-	pi.on("agent_start", (e) => telemetryTracker.handle(e as never));
-	pi.on("turn_start", (e) => telemetryTracker.handle(e as never));
-	pi.on("message_start", (e) => telemetryTracker.handle(e as never));
-	pi.on("message_update", (e) => telemetryTracker.handle(e as never));
-	pi.on("message_end", (e) => telemetryTracker.handle(e as never));
-	pi.on("turn_end", (e) => telemetryTracker.handle(e as never));
+	// telemetry + run-activity — real-time top-right and bottom borders
+	// top: <turn> · <turn_duration> · <tool calling number> · <failed tool calling number>
+	// bottom: live TPS/TTFT/duration/token/cost from peekLive()
+	const getToolCallId = (e: unknown): string => {
+		const ev = e as Record<string, unknown>;
+		return (
+			(ev.toolCallId as string) ??
+			(ev.toolCallID as string) ??
+			((ev.toolCall as Record<string, unknown>)?.id as string) ??
+			""
+		);
+	};
+	const getToolIsError = (e: unknown): boolean => {
+		const ev = e as Record<string, unknown>;
+		if (typeof ev.isError === "boolean") return ev.isError;
+		if (typeof ev.success === "boolean") return !ev.success;
+		const result = ev.result as Record<string, unknown> | undefined;
+		if (result && typeof result.isError === "boolean") return result.isError;
+		return false;
+	};
+	const refreshAllLive = (): void => {
+		refreshTopBorder();
+		refreshLiveTelemetry();
+	};
+
+	pi.on("agent_start", (e) => {
+		telemetryTracker.handle(e as never);
+		runActivityTracker.startRun();
+		startLiveTick();
+		refreshAllLive();
+	});
+	pi.on("turn_start", (e) => {
+		telemetryTracker.handle(e as never);
+		const turnIdx = (e as { turnIndex?: number })?.turnIndex ?? 0;
+		runActivityTracker.startTurn(turnIdx);
+		startLiveTick();
+		refreshAllLive();
+	});
+	// pi-atelier uses before_provider_request to mark request start for TTFT; pi-coding-agent emits "before_provider_request" — handle if present, else message_start covers it
+	pi.on("before_provider_request", () => {
+		// treat as request start for live TTFT estimate — tracker already handles message lifecycle, just refresh
+		refreshAllLive();
+	});
+	pi.on("message_start", (e) => {
+		telemetryTracker.handle(e as never);
+		refreshAllLive();
+	});
+	pi.on("message_update", (e) => {
+		telemetryTracker.handle(e as never);
+		refreshAllLive();
+	});
+	pi.on("message_end", (e) => {
+		telemetryTracker.handle(e as never);
+		refreshAllLive();
+	});
+	pi.on("tool_execution_start", (e) => {
+		telemetryTracker.handle(e as never);
+		runActivityTracker.startTool(getToolCallId(e));
+		refreshAllLive();
+	});
+	pi.on("tool_execution_end", (e) => {
+		runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
+		refreshAllLive();
+	});
+	// fallback for runtimes that emit "tool_result" instead of "tool_execution_end"
+	pi.on("tool_result", (e) => {
+		// avoid double-count if tool_execution_end already handled: finishTool is idempotent via Map
+		runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
+		refreshAllLive();
+	});
+	pi.on("turn_end", (e) => {
+		telemetryTracker.handle(e as never);
+		refreshAllLive();
+	});
 	pi.on("agent_settled", (e, c) => {
 		const tel = telemetryTracker.handle(e as never);
+		runActivityTracker.settle();
+		stopLiveTick();
+		// final settled telemetry overwrites live peek with authoritative totals
 		if (tel && installedEditor && currentConfig.telemetry.enabled) {
 			try {
 				const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
@@ -585,6 +753,8 @@ export default function (pi: ExtensionAPILike): void {
 				void _e;
 			}
 		}
+		// settled top border stays showing final turn stats until next run
+		refreshTopBorder();
 	});
 
 	// Keep the border label/glow current when the model or thinking level changes.
@@ -593,7 +763,7 @@ export default function (pi: ExtensionAPILike): void {
 			return;
 		}
 		currentModelInfo = modelInfoOf(ctx);
-	lastSessionCtx = ctx;
+		lastSessionCtx = ctx;
 		installedEditor?.setModelInfo(currentModelInfo);
 	});
 	pi.on("thinking_level_select", (_event, ctx) => {
@@ -601,7 +771,7 @@ export default function (pi: ExtensionAPILike): void {
 			return;
 		}
 		currentModelInfo = modelInfoOf(ctx);
-	lastSessionCtx = ctx;
+		lastSessionCtx = ctx;
 		installedEditor?.setModelInfo(currentModelInfo);
 	});
 }
