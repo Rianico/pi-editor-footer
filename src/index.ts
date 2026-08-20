@@ -11,6 +11,7 @@ import { TrackingEditor } from "./tracking-editor.js";
 import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
+import { getConfigPath, loadConfig } from "./config.js";
 
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -330,6 +331,15 @@ export default function (pi: ExtensionAPILike): void {
 				`Model info border ${glowEnabled ? "shown" : "hidden"}`,
 				"info",
 			);
+		},
+	});
+	// Lightweight theme command (identity stub, spec 02) — reads config; full dialog lands later.
+	pi.registerCommand("theme", {
+		description: "Show theme config (workspace / cursor / telemetry)",
+		handler: async (_args, ctx) => {
+			const cfg = loadConfig();
+			const cfgPath = getConfigPath();
+			ctx.ui.notify("Theme config: workspaceDisplay=" + cfg.workspaceDisplay + " cursor=" + cfg.cursorStyle + " telemetry=" + (cfg.telemetry.enabled ? "on" : "off") + " — " + cfgPath, "info");
 		},
 	});
 	pi.on("session_start", (_event, ctx) => {
