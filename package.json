@@ -1,8 +1,8 @@
 {
-  "name": "pi-skill-desc",
+  "name": "pi-editor-footer",
   "private": true,
   "type": "module",
-  "description": "Pi extension: a detail window that mirrors the completion popup's highlight with full candidate descriptions",
+  "description": "Pi TUI theme \u2014 project-aware footer, model border, and skill detail window (TrackingEditor, live theme)",
   "scripts": {
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"

@@ -1,142 +1,84 @@
-<h1 align="center">pi-skill-desc</h1>
+<h1 align="center">pi-editor-footer</h1>
 
-<p align="center">A detail window that mirrors the completion popup's highlight — showing each candidate's <b>full, untruncated description</b>.</p>
+<p align="center">A pi TUI theme — project-aware footer, model border, and skill detail window.</p>
 
-A [pi](https://pi.dev) extension for the built-in slash-command completion popup (`/` + tab). When the popup opens, a bordered window appears **above the input box** and shows the complete description of whatever candidate is currently highlighted. The native popup is untouched — the window appears with it, tracks the highlight through tab/arrows, and disappears with it.
+A [pi](https://pi.dev) extension that turns the editor chrome into a project-aware theme while preserving the skill-description detail window. It owns pi's single custom-editor slot via `TrackingEditor` and renders entirely against pi's live theme (no hardcoded colors).
 
-> **Scope & honesty.** The window is a companion to the native popup, never a replacement: no separate picker, no filter/finder, no reimplementation of completion. It exists to show text the popup itself truncates.
+## Features
 
-## Why you need this
+**Detail window** — bordered window above the input that mirrors the completion popup's highlight and shows the candidate's full description (wrapped at `width − 4`, cap 5 lines, `…` ellipsis, `offset/total` header, shrinks when empty). Lifecycle mirrors the popup (opens/closes with it); hidden for candidates without a description. Scroll with **shift+up/down** (fallback **alt+j/k**).
 
-The native popup shows each candidate as a **single truncated line** — a long description (e.g. `/grilling`, `/writing-for-agents`) is cut off mid-sentence before you can tell whether that's the command you want. There is no way to see the rest without guessing or opening the SKILL.md.
+**Model border** — top border shows `provider/model · thinking · contextWindow` with thinking-level glow via `getThinkingBorderColor`. Toggle with `/model-info` (off restores pi's stock border).
 
-The window fixes exactly that: it reads the popup's live highlight and renders the candidate's full description above the input, scrolled and wrapped to fit. Long descriptions scroll; short ones shrink the window; candidates without a description show nothing.
+**Footer** — single line below the input, responsive via `fitSegmentsByPriority` and `alignRight`:
+- Left: `cwd` (`·` `git branch` + status `[! ? + ↑↓]` + stashed/conflicted) `•` `runtime` (`node`/`python`/`rust`/`go`… + version) `•` `timer` (`working`/`done`)
+- Right: `tokens` (` input |  output |  $cost`) immediately next to `context` (` [bar] % · tokens/contextWindow`)
+- Separators: `·` between `cwd` and `git`, `•` as default between other left components; `tokens` sits directly left of the context bar
+- `cwd` respects `workspaceDisplay` (`~/development/ai/pi-skill-desc` vs `pi-skill-desc`, switchable in settings)
+- `context` bar uses `stressColor` and `renderBar` (12 cols max) with `•`/`·` handling
+- Extension statuses line (`wrapTextWithAnsi`) when `footerSegments.extensionStatuses`
 
-Honest limits: tracking relies on two **private pi-tui internals** (ADR-0001) — a pi update that renames them triggers a loud startup warning and the window stops appearing, it never shows wrong content. The extension also owns pi's single custom-editor slot, which is why the model-info glow was ported in (ADR-0002).
+All segments are toggleable via `footerSegments` (`cwd`, `sessionName`, `gitBranch`, `gitStatus`, `gitCommit`, `runtime`, `context`, `tokens`, `cost`, `extensionStatuses`). Footer is installed via `ctx.ui.setFooter` when available, fallback to `setWidget("theme-footer", …, {placement:"belowEditor"})`, and is fully removed when the extension is disabled (`enabled: false` restores pi's default footer).
+
+**Cursor** — `block` (software reverse, `setShowHardwareCursor(false)`), `bar` (`\x1b[6 q`), `underline` (`\x1b[4 q`) with hardware cursor (`setShowHardwareCursor(true)`). Style is previewed in real time: when the settings overlay is open (`!focused` + `previewHardwareCursor`), the software cursor ` \x1b[7m…\x1b[0m` is replaced with `CURSOR_MARKER` so the layout shows the hardware shape instantly; when focused the software cursor is removed and the hardware sequence is written.
+
+**Input border** — bottom border is kept clean (no `cwd`); right side shows telemetry when `telemetry.enabled` (`TPS`, `TTFT`, `duration`, `tokens`, `stalls`, `cost` via `TurnTelemetryTracker`).
+
+**Config** — single JSON `~/.pi/agent/pi-skill-desc.json` (validated at load, `DEFAULT_CONFIG` with `enabled:true`, `workspaceDisplay:"path"`, `cursorStyle:"block"`, `icons:"auto"`, all `footerSegments`/`telemetry` on). Settings dialog `/pi-footer` (General/Appearance/Footer/Telemetry, English, `Tab`/`↑↓`/`Enter`/`Esc`) live-edits and persists via `saveConfig`, with `cursorStyle` and `enabled` applying instantly and `workspaceDisplay` switching `cwd` format.
 
 ## Quick start
-
-```bash
-pi -e ./src/index.ts        # load the extension
-```
-
-Type `/`, press **tab** a few times. What you see:
-
-```
- ~/development/ai/pi-skill-desc (main)
-┌──────────────────────────────────────────────┐
-│ to-spec · skill  1/6                          │  ← header: accent+bold, scroll marker
-│ Turn the current conversation into a spec,    │  ← description: dim, wrapped at width−4
-│ …                                             │  ← more content below
-└──────────────────────────────────────────────┘
- /grilling █
-```
-
-Tab cycles the highlight; the window follows. **shift+down** scrolls long descriptions (universal fallback: **alt+k**). Escape or Enter closes popup and window together.
-
-## The window
-
-- **Cap:** 5 content lines. Two border rows are chrome *outside* the cap — the window is at most 7 rows tall and shrinks to fit short descriptions.
-- **Themed:** header is the theme's highlight (accent + bold), body is the theme's dim, borders use the theme's border color. The theme is read live, so a theme swap applies on the next render.
-- **Wrapping:** content wraps at `width − 4` (the two border columns on each side).
-- **Overflow marker:** when a description overflows, the header gains an `offset/total` marker (`1/6` → `2/6` …) so you always know where you are.
-- **Ellipsis:** while more content remains below, the last visible line is `…` (bottom-only — the top of the window always shows real content).
-- **Lifecycle:** mirrors the popup exactly — opens with it, closes with it (escape, selection, or typing). No idle timer.
-- **Hidden:** candidates without a description render nothing.
-
-## Scrolling
-
-| Terminal | shift+up / shift+down | alt+j / alt+k |
-| --- | --- | --- |
-| Kitty, iTerm2, recent WezTerm/Windows Terminal | ✅ | ✅ |
-| Other terminals (shift+arrows aliased to plain arrows) | ❌ | ✅ |
-
-- ✅ works out of the box · ❌ sequence not distinguishable (no Kitty keyboard protocol)
-- shift+up/down must arrive as *modified-arrow* sequences to be told apart from plain arrows. Terminals that alias shift+arrows simply get no scroll — everything else still works.
-- **alt+j / alt+k** are the universal fallback: same one-line-per-press behavior, no protocol needed.
-- All scroll keys are inert while the window is hidden.
-
-## What it tracks
-
-Skills (`skill:<name>`, description from SKILL.md frontmatter), slash commands, templates, and extension commands. Tools never appear — they are agent-invoked, not slash-invocable. Pi's own source tags (`[t]` for this-session `-e` extensions, `[u]` for user-installed ones) appear in descriptions exactly as the popup renders them.
-
-## `/model-info`
-
-`/model-info` toggles the **border glow + model label** on the input box (off restores pi's stock border). The glow rendering is a port of the `model-info-widget` extension, which is now redundant: pi allows only one custom editor, this extension owns the slot, so the widget's editor never activates and its behavior was moved in here (ADR-0002). You can delete `~/.pi/agent/extensions/model-info-widget` and lose nothing.
-
-Note: the native footer shows the model + thinking level on its right side regardless — the border label is a duplicate of that. Toggle it off if you'd rather not see the model twice.
-
-## Install
-
-Load it with pi:
 
 ```bash
 pi -e ./src/index.ts
 ```
 
-or install it persistently by symlinking into the global extensions directory:
+Type `/` → popup opens, detail window appears above input, header shows model top, footer shows `cwd · git • runtime` left and `tokens  context` right. `/pi-footer` opens settings; `/model-info` toggles border glow.
 
-```bash
-mkdir -p ~/.pi/agent/extensions
-ln -s /path/to/pi-skill-desc ~/.pi/agent/extensions/pi-skill-desc
-```
+## Why you need this
 
-(The extension only activates in TUI mode, at session start. After installing, restart pi or run `/reload`.)
+The native popup truncates long skill descriptions mid-sentence; the detail window shows the full text without guessing. The native footer shows only context; this footer adds the project context you actually need — which branch, how many files changed, which runtime, how many tokens — while keeping the context bar for the limit.
 
 ## Breakage mode
 
-The extension observes the popup's highlight through two **private pi-tui internals** (see `docs/adr/0001-tracking-editor-for-skill-descriptions.md`): the `autocompleteList` field and the `applyAutocompleteSuggestions` method. At load it asserts both exist and prints a warning:
-
-```
-[pi-skill-desc] pi-tui internals changed — highlight tracking may be broken ...
-```
-
-when they don't. Failures are loud, never silent: if pi renames these internals in an update, the extension warns at startup and the window simply never appears (or freezes on the first highlight) instead of showing wrong descriptions.
+Highlight tracking observes two private `pi-tui` internals (`autocompleteList`, `applyAutocompleteSuggestions` per ADR-0001). At load it asserts both and warns `[pi-skill-desc] pi-tui internals changed…` if pi renames them; the window then never appears rather than showing wrong content. Single editor slot ownership is per ADR-0002.
 
 ## Manual verification
 
-1. Load the extension (`pi -e ./src/index.ts`).
-2. Type `/` — the completion popup opens.
-3. Press tab (or arrow down) a few times. The detail window above the input should show each highlighted candidate's full description as you cycle.
-4. Find a long description (e.g. `/grilling` or `/writing-for-agents`) — press **shift+down** repeatedly: the text scrolls, and the header's scroll marker advances (`1/9` → `2/9` …). shift+up scrolls back. If shift+arrows don't scroll in your terminal, try **alt+k** / **alt+j**.
-5. Press escape (or select with enter/return): popup and detail window close together.
-6. Type a description-less candidate (e.g. a plain path completion): the window stays hidden.
-7. Run **`/model-info`** — the input border loses its glow/label; run it again to restore.
+1. `pi -e ./src/index.ts` (or `pi -ne -e ./src/index.ts` to isolate)
+2. `/` → tab through candidates, detail window follows; `shift+down` scrolls long text
+3. Footer: `cwd` (`·` `git`) `•` `runtime` left, `tokens` right next to `[bar] %` right; `/pi-footer` → General → `Workspace display` toggles `~/…/pi-skill-desc` vs `pi-skill-desc`
+4. Cursor: `/pi-footer` → General → `Cursor style` cycles `block`/`bar`/`underline`, shape updates in real time (bar shows `|`, underline `_`)
+5. Disable: `/pi-footer` → General → `Enabled: Off` → footer reverts to pi's default (relative time / model); re-enable restores theme
 
 ## Project structure
 
 ```
-pi-skill-desc/
+pi-editor-footer/
 ├── src/
-│   ├── index.ts               # extension entry: editor install, window widget, scroll keys, /model-info, self-check
-│   ├── tracking-editor.ts     # CustomEditor subclass that observes the popup highlight (ADR-0001)
-│   ├── detail-render.ts       # pure renderer: wrap, scroll, header marker, bottom ellipsis (tested)
-│   ├── window-presentation.ts # pure: bordered, themed box — header accent+bold, body dim (tested)
-│   └── model-info.ts          # border glow + model label (port of model-info-widget, ADR-0002)
+│   ├── index.ts               # extension entry, widget/header/footer install, /model-info
+│   ├── tracking-editor.ts     # TrackingEditor (Editor slot, highlight, border, cursor)
+│   ├── footer.ts              # renderFooter / installFooter (cwd·git • runtime • tokens·context)
+│   ├── header.ts              # header disabled, cwd preserved in footer
+│   ├── detail-render.ts       # wrap/scroll/ellipsis (tested)
+│   ├── window-presentation.ts # bordered themed box (tested)
+│   ├── model-info.ts          # top border glow+label
+│   ├── git.ts                 # readGitStatus (branch/ahead/behind + staged/modified/...)
+│   ├── runtime.ts             # readRuntimeInfo (node/python/rust/go/… via lockfiles)
+│   ├── telemetry.ts           # TurnTelemetryTracker + formatTurnTelemetry
+│   ├── config.ts              # ThemeConfig + load/save
+│   ├── theme-settings.ts      # /pi-footer dialog
+│   └── state.ts               # FooterState
 ├── test/
-│   ├── detail-render.test.ts        # 17 cases
-│   └── window-presentation.test.ts  # 6 cases
 └── docs/
-    ├── adr/
-    │   ├── 0001-tracking-editor-for-skill-descriptions.md   # private-internals tracking, blast radius
-    │   └── 0002-own-editor-slot-port-model-info-glow.md     # editor-slot ownership, glow port
-    ├── agents/                 # issue-tracker, triage-labels, domain glossary
-    └── reference/pi-tui-internals.md
+    ├── adr/0001-tracking-editor-for-skill-descriptions.md
+    └── adr/0002-own-editor-slot-port-model-info-glow.md
 ```
 
 ## Development
 
-- `npm test` — the pure renderer suite (`node:test` + `tsx`, 23 cases)
-- `npm run typecheck` — strict TypeScript check
-
-Editor wiring (highlight observation, widget install, scroll keys) is verified manually in a live session rather than unit-tested; the two pure modules above carry the automated coverage.
-
-## Docs
-
-- ADR-0001 — why tracking goes through private pi-tui internals, and the blast radius if they change
-- ADR-0002 — why the extension owns pi's single editor slot, and how the model-info glow was ported
-- `docs/reference/pi-tui-internals.md` — the observed internals this extension depends on
+- `npm test` — `node:test` + `tsx` (87 cases)
+- `npm run typecheck` — strict TS
 
 ## License
 
-No license is declared yet; until one is added, all rights reserved. (Repository is currently private.)
+No license declared yet; all rights reserved. (Private repository.)
