@@ -241,7 +241,7 @@ export function buildLabel(
 	provider: string,
 	modelId: string,
 	level: string,
-	contextWindow: number,
+	_contextWindow: number,
 ): string {
 	const providerPart = provider === "" ? "" : theme.fg("dim", `${provider}/`);
 	const modelPart = theme.fg(
@@ -249,11 +249,7 @@ export function buildLabel(
 		theme.bold(modelId === "" ? "unknown" : modelId),
 	);
 	const levelPart = theme.getThinkingBorderColor(level)(level);
-	const ctxText =
-		formatContextWindow(contextWindow) === ""
-			? ""
-			: `${theme.fg("dim", " · ")}${theme.fg("muted", formatContextWindow(contextWindow))}`;
-	return `${providerPart}${modelPart}${theme.fg("dim", " · ")}${levelPart}${ctxText}`;
+	return `${providerPart}${modelPart}${theme.fg("dim", " · ")}${levelPart}`;
 }
 
 // ---------------------------------------------------------------------------

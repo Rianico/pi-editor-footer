@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
 import { installFooter } from "./footer.js";
-import { createInitialState } from "./state.js";
+import { createInitialState, getUsageTotals } from "./state.js";
 import type { FooterState } from "./state.js";
 import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
 import {
@@ -311,7 +311,32 @@ function refreshContextBar(): void {
 		const theme = lastSessionCtx.ui.theme as unknown as any;
 		const glyphs = resolveGlyphs(currentConfig.icons.mode);
 		const isAscii = resolveIconMode(currentConfig.icons.mode) === "ascii";
-		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10);
+		let cacheHitRate: number | undefined;
+		try {
+			const totals = getUsageTotals(
+				lastSessionCtx as unknown as {
+					sessionManager?: {
+						getEntries(): {
+							type: string;
+							message?: {
+								role: string;
+								usage?: {
+									input?: number;
+									output?: number;
+									cacheRead?: number;
+									cacheWrite?: number;
+									cost?: { total?: number };
+								};
+							};
+						}[];
+					};
+				},
+			);
+			cacheHitRate = totals.latestCacheHitRate;
+		} catch {
+			void 0;
+		}
+		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10, cacheHitRate);
 		installedEditor.setTopContextText(text);
 	} catch {
 		void 0;

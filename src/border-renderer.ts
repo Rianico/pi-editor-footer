@@ -60,10 +60,10 @@ export class BorderRenderer {
         return s;
       };
       if (opts.glowEnabled) {
-        // Build left label; if context bar present, append it to the right of model info
+        // Build left label; if context bar present, append it to the right of model info with pipe separator
         let leftLabel = buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow);
         if (opts.topContextText) {
-          leftLabel = `${leftLabel}  ${opts.topContextText}`;
+          leftLabel = `${leftLabel} ${theme.fg("dim", "|")} ${opts.topContextText}`;
         }
         // Embed left (model+context) and optional right (run activity) in one pass to avoid double-truncate
         if (opts.topRightText) {
