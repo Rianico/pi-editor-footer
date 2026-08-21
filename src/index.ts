@@ -770,8 +770,9 @@ export default function (pi: ExtensionAPILike): void {
 		refreshAllLive();
 	});
 	pi.on("message_update", (e) => {
+		// Data layer: update liveDeltaChars/liveEstimatedTokens for later peekLive()
+		// Display layer throttled to REFRESH_MS (1 s) via liveTickTimer — not per delta, to avoid TUI jank
 		telemetryTracker.handle(e as never);
-		refreshAllLive();
 	});
 	pi.on("message_end", (e) => {
 		telemetryTracker.handle(e as never);
