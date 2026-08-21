@@ -261,7 +261,7 @@ export function renderFooter(
     const costValue = totals.cost.toFixed(2);
     // Avoid "$ $0.00" when the cost glyph itself is "$" (ascii mode) — glyph already is the currency symbol
     const costText =
-      glyphs.cost === "$" ? `$${costValue}` : `${glyphs.cost} $${costValue}`;
+      `$${costValue}`;
     stats.push(theme.fg("warning", costText));
   }
   if (segments.tokens) {

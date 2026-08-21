@@ -539,7 +539,7 @@ export function formatTurnTelemetry(
   }
   if (config.cost && telemetry.rateUsdPerMTokens !== null) {
     const rate = telemetry.rateUsdPerMTokens.toFixed(2);
-    const costText = g.cost === "$" ? `$${rate}` : `${g.cost} $${rate}`;
+    const costText = `$${rate}`;
     parts.push(theme.fg("warning", costText));
   }
   if (parts.length === 0) return "";
