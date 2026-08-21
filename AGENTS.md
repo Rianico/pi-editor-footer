@@ -55,6 +55,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - Bottom border `formatTurnTelemetry` was `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16 | ! stall 1x / 0.5s` with ` | ` joiner and spaces after every glyph plus `TPS`/`TTFT`/`stall` labels. User wants more compact.
 - Fix: `TPS`/`TTFT` labels removed (`>60.6 tok/s` not `> TPS …`, `~2.5s` not `~ TTFT …`), spaces after `>`/`~`/`+`/`↑`/`↓` removed (`↑395` not `↑ 395`), joiner `·` not ` | ` (` | ` → ` · `), stall `!2·3.3s` not `! stall 2x / 3.3s`. Now `> TPS 60.6 tok/s · ~ TTFT 2.5s · +8.3s · ↑395 · ↓505 · $0.16`.
 
+### Context bar/cache didn't follow `icons.mode`
+- Top context `formatContextBar` already took `glyphs`/`isAscii` from `resolveGlyphs`/`resolveIconMode`, but `src/index.ts:onConfigChanged` only did `setCursorStyle` + `requestRender` and never called `refreshContextBar`, so `nerd` (`` `` `█`/`░`) vs `ascii` (` #` `c` `#`/`-`) stayed stale until next 1 s tick. Footer `renderFooter` uses live `getConfig` so it followed, top didn't.
+- Fix: `refreshContextBar()` added right after `currentConfig = saveConfig(cfg)` in `onConfigChanged` (before `requestRender`), so both top context bar and its `| c` cache update immediately.
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.

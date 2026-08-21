@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Context bar and cache now follow icon mode (`nerd` ``/``/`█` vs `ascii` ` #`/`c`/`#`) — `refreshContextBar` called in `onConfigChanged` so top ` # [...] | c` updates immediately when `icons.mode` changes
 - Telemetry bottom border compacted (`>60.6 tok/s · ~2.5s · +8.3s · ↑395 · ↓505 · $0.16` not `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16`; TPS/TTFT labels preserved (`> TPS`/`~ TTFT`), no space after `↑`/`↓`/`>`/`~`/`+`, joiner `·` not ` | `, stall `!2·3.3s` not `! stall 2x / 3.3s`)
 - Footer cache omitted to the right of input/output (`↑ 395 | ↓ 505 | $0.16` not `| c 85.3%`; cache remains only in top context bar ` # [...] | c 0.0%`)
 - Nerd mode cost now `$0.00` not ` $0.00` (always single `$` in both footer `renderFooter` and telemetry `formatTurnTelemetry`, was `glyph === "$" ? `$ / ` : `glyph $` -> ` $`)
