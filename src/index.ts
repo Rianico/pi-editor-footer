@@ -120,7 +120,7 @@ let glowEnabled = true;
 let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let lastSessionCtx: ExtensionContextLike | null = null;
-let wallTimeText: string | null = null;
+let wallTimeHistory: string[] = [];
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
@@ -231,29 +231,31 @@ function updateWidget(ctx: ExtensionUIContextLike): void {
 	tuiRef?.requestRender();
 }
 
-function makeWallTimeWidget(text: string, ctx: ExtensionUIContextLike): import("@earendil-works/pi-tui").Component {
+function makeWallTimeWidget(history: string[], ctx: ExtensionUIContextLike): import("@earendil-works/pi-tui").Component {
 	return {
 		invalidate() {},
 		render(width: number): string[] {
 			const theme = ctx.theme as unknown as { fg(s: string, t: string): string };
-			// Left aligned dim line permanently between transcript (after agent_end, before next agent_start)
-			return [theme.fg("dim", text)];
+			// Left aligned dim timeline — one line per agent run, permanently between runs
+			// Rendered aboveEditor (between transcript bottom and input), stacked, dim, left aligned
+			return history.map((line) => theme.fg("dim", line));
 		},
 	};
 }
 
 function showWallTimeWidget(ctx: ExtensionUIContextLike, text: string): void {
-	wallTimeText = text;
+	wallTimeHistory.push(text);
+	const snapshot = [...wallTimeHistory];
 	ctx.setWidget("wall-time", (tui) => {
 		tuiRef = tui as unknown as typeof tuiRef;
-		return makeWallTimeWidget(text, ctx);
+		return makeWallTimeWidget(snapshot, ctx);
 	}, { placement: "aboveEditor" });
 	tuiRef?.requestRender();
 }
 
 function hideWallTimeWidget(ctx: ExtensionUIContextLike): void {
-	if (wallTimeText === null) return;
-	wallTimeText = null;
+	if (wallTimeHistory.length === 0) return;
+	wallTimeHistory = [];
 	ctx.setWidget("wall-time", undefined);
 	tuiRef?.requestRender();
 }
@@ -592,23 +594,17 @@ export default function (pi: ExtensionAPILike): void {
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 			refreshContextBar();
 			refreshLiveTelemetry();
-			// refresh wall time dim line if visible — respects timeline.* toggles
-			if (wallTimeText !== null && lastSessionCtx && footerState.lastDoneIn !== undefined) {
+			// refresh wall time dim timeline if visible — respects timeline.enabled (preserve history)
+			if (wallTimeHistory.length > 0 && lastSessionCtx) {
 				try {
 					if (!currentConfig.timeline.enabled) {
-						hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+						lastSessionCtx.ui.setWidget("wall-time", undefined);
 					} else {
-						const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
-						const glyphs = resolveGlyphs(currentConfig.icons.mode);
-						const parts: string[] = [];
-						if (currentConfig.timeline.wallTime) parts.push(`· ${formatDuration(footerState.lastDoneIn)} wall`);
-						if (currentConfig.timeline.tokens) {
-							parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
-							parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
-						}
-						if (currentConfig.timeline.cost && totals.cost > 0) parts.push(`$${totals.cost.toFixed(2)}`);
-						if (parts.length === 0) hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
-						else showWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike, parts.join(" · "));
+						const snapshot = [...wallTimeHistory];
+						lastSessionCtx.ui.setWidget("wall-time", (tui) => {
+							tuiRef = tui as unknown as typeof tuiRef;
+							return makeWallTimeWidget(snapshot, lastSessionCtx!.ui as unknown as ExtensionUIContextLike);
+						}, { placement: "aboveEditor" });
 					}
 				} catch {}
 			}
@@ -805,7 +801,7 @@ export default function (pi: ExtensionAPILike): void {
 	pi.on("agent_start", (e) => {
 		telemetryTracker.handle(e as never);
 		runActivityTracker.startRun();
-		if (lastSessionCtx) hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+		// timeline stays permanently between each run — do not hide on start
 		agentStartMs = Date.now();
 		footerState = { ...footerState, workingSince: agentStartMs, lastDoneIn: undefined };
 		startLiveTick();
