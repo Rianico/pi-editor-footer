@@ -322,15 +322,10 @@ export class TurnTelemetryTracker {
     if (!turn || !current || !isAssistantMessage(message)) return;
 
     const now = this.now();
-    // Track live estimated tokens for real-time TPS during streaming
+    // Data layer: cheap O(1) per delta — no external tokenizer, ~4 chars/token is enough for 1 s throttled display
     turn.liveDeltaChars += streamEvent.delta.length;
-    const estFromContent = estimateMessageTokens(message);
     const estFromDelta = Math.ceil(turn.liveDeltaChars / 4);
-    turn.liveEstimatedTokens = Math.max(
-      estFromContent,
-      estFromDelta,
-      turn.liveEstimatedTokens,
-    );
+    turn.liveEstimatedTokens = Math.max(estFromDelta, turn.liveEstimatedTokens);
     if (current.firstOutputMs === null) {
       current.firstOutputMs = now;
       turn.firstTokenMs ??= now;
