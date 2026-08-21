@@ -92,6 +92,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `src/telemetry.ts:peekLive()` computed `tps = outputTokens / (genMs/1000)` from `liveEstimatedTokens` (`liveDeltaChars/4`) and `src/index.ts` called `refreshAllLive()` (which does `formatTurnTelemetry` + `requestRender`) on **every** `message_update` delta (many per second during streaming) → TUI jank.
 - Fix: separate layers — **data layer** `TurnTelemetryTracker.handle(e)` still on every `message_update` (cheap counter bump), **display layer** `refreshLiveTelemetry()`/`refreshAllLive()` throttled to `REFRESH_MS = 1000` `liveTickTimer` while `isRunning`, plus `message_start`/`end`/`turn_end`/`agent_settled` for TTFT/final. Now TPS is approximately accurate (1 s granularity) but not high-rate.
 
+### Tokens `|` → `·`, title/command `pi-lsz-theme`/`pi-footer` → `pi-editor-footer`
+- Footer `renderFooter` `statsBlock` did `join(dim("|"))` → `↑ 1.2k | ↓ 800 | $0.12`; wall time dim line already `·`. User wants `·` for Tokens, so now `join(dim("·"))` → `↑ 1.2k · ↓ 800 · $0.12`. `extensionStatuses` keeps `|` (not Tokens).
+- Settings `src/theme-settings.ts:COPY.title` was `pi-lsz-theme Settings` (stale fork name) — now `pi-editor-footer Settings` aligned to `package.json:name`. `pi.registerCommand("pi-footer",…)` → `pi.registerCommand("pi-editor-footer",…)` with description `Open pi-editor-footer settings`.
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.

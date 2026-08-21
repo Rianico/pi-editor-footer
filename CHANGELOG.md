@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Tokens separator now `·` not `|` (`↑ 1.2k · ↓ 800 · $0.12` in footer stats and `· 8s wall · ↑ · ↓ · $` dim line)
+- Settings window title aligned to repo name `pi-editor-footer Settings` (was `pi-lsz-theme Settings`) and slash command renamed `pi-footer` → `pi-editor-footer`
 - Tokens/cost relocated from telemetry bottom to wall time dim line — bottom now `TPS 4.0 tok/s · TTFT 4.0s · 5.0s` (no `↑`/`↓`/`$`), dim line after `agent_end` is `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` (all `dim`, TUI-only, never exposed to model, via `FooterState.lastDoneIn` + `getUsageTotals` gated by `telemetry.tokens`/`cost`)
 - Git branch never folded — `renderGitSegment` no longer `truncateBranch(…,20)`, full `feature/very-long-…` shown; priority `6` (> cwd `5`) so `fitSegmentsByPriority` never omits branch before cwd/runtime/stats
 - Telemetry TPS display throttled to 1 s (data vs display separated) — `message_update` now only updates `liveDeltaChars`/`liveEstimatedTokens` in `TurnTelemetryTracker`, display `peekLive()` → `formatTurnTelemetry` only via `liveTickTimer` every `REFRESH_MS` and `message_start`/`end`/`turn_end`/`agent_settled` for approximately accurate TPS without per-delta TUI jank
