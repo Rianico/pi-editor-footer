@@ -84,6 +84,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `renderGitSegment` did `truncateBranch(git.branch, 20)` (`branch.slice(0,17) + "..."`) and `renderFooter` gave git `priority: 4` (same as stats/runtime, below cwd `5`), so long names were always `feature/add-obsidia...` even at 200 cols and omitted before cwd.
 - Fix: never fold branch — `renderGitSegment` now `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped.
 
+### Dimmed timeline between each agent run — stacked left-aligned permanent
+- User wants dimmed timeline **between each agent run**, not single last-run widget hidden on next start. `pi-tui v0.84.2` `ExtensionUIContext.setWidget` only exposes `placement: "aboveEditor" | "belowEditor"` (verified in `docs/reference/pi-tui-internals.md`), so true transcript-interleaved separators would require `sessionManager.addEntry` (exposed to model) — intentionally avoided.
+- Fix: `wallTimeHistory: string[]` in `src/index.ts` — `makeWallTimeWidget(history)` renders `history.map(dim)` stacked left-aligned `aboveEditor` (between transcript bottom and input), `showWallTimeWidget` pushes and snapshots, `agent_start` no longer hides, `session_shutdown` clears, `onConfigChanged` preserves history. Each `agent_settled` appends one `· wall · ↑·↓·$` (per `timeline.*`) so timeline is visible between each run and permanent.
+
 ### Wall time left aligned, permanent between agent_end and next input
 - Widget was centered `pad + dim` and hidden on `agent_start` made it feel transient. User wants left aligned and permanently visible in the gap between `agent_end`'s last message and the next `agent_start` input.
 - Fix: `makeWallTimeWidget` now `return [theme.fg("dim", text)]` left aligned, no centering pad; still `aboveEditor` between transcript and input, shown on `agent_settled` and hidden on next `agent_start`/`shutdown`, so it is permanently in the gap. Never `sessionManager.addEntry`.

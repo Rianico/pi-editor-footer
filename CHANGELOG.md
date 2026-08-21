@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Dimmed timeline relocated between each agent run — `wallTimeHistory[]` stacked dim lines left-aligned `aboveEditor` (between transcript bottom and input), one per `agent_settled` (`· 8s wall · ↑ 1.2k · ↓ 800 · $0.12`), permanent between runs, never exposed to model (pi-tui only exposes `aboveEditor`/`belowEditor` widgets, so stacking aboveEditor is the non-exposing compromise)
 - Wall time dim line left aligned and permanent between `agent_end` and next `agent_start` (`aboveEditor` `· 8s wall · ↑` dim left, not centered, stays in gap, never exposed)
 - Dim line after `agent_end` now with specified timeline metrics (`timeline.enabled`/`wallTime`/`tokens`/`cost` in `ThemeConfig`, `Timeline` tab in `/pi-editor-footer` settings) — `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim aboveEditor, never exposed to model
 - Wall time dim line after `agent_end` now positioned after last agent message in transcript (`aboveEditor` widget `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim, not footer second line) — visible right after `agent_end` message, hidden on next `agent_start`, never exposed to model
