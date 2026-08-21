@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Top border model label no longer shows context window (`provider/model · thinking` not `· 1.0M`; `buildLabel` ignores `contextWindow`)
+- Context bar now appends cache hit rate with pipe (` # [#####-------] 39.6% · 416k/1.0M | c 85.3%` via `formatContextBar(..., cacheHitRate)` from `getUsageTotals`) and model/context are pipe-separated (`model | context` via dim `|`)
 - Context bar moved from left bottom border to top border right of model info (`── model · thinking · 1.0M  # [#####-------] 39.6% · 416k/1.0M ── T1 · 8s` via `embedTopWithLeftAndRight`, `TrackingEditor.setTopContextText`)
 
 ## [0.2.0] - 2026-08-21
