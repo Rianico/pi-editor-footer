@@ -75,6 +75,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 ### Refresh `1000` → `REFRESH_MS`
 - `liveTickTimer` (telemetry/top/context `refreshAllLive` every `1000`) and `watchTimer` (editor ownership `ensureEditorOwnership` every `1000`) were hardcoded `1000`. User asked to set refresh rate to one second explicitly, so added `const REFRESH_MS = 1000` in `src/index.ts` and used it for both `setInterval(..., REFRESH_MS)`.
 
+### TPS per-delta jank — data vs display separation
+- `src/telemetry.ts:peekLive()` computed `tps = outputTokens / (genMs/1000)` from `liveEstimatedTokens` (`liveDeltaChars/4`) and `src/index.ts` called `refreshAllLive()` (which does `formatTurnTelemetry` + `requestRender`) on **every** `message_update` delta (many per second during streaming) → TUI jank.
+- Fix: separate layers — **data layer** `TurnTelemetryTracker.handle(e)` still on every `message_update` (cheap counter bump), **display layer** `refreshLiveTelemetry()`/`refreshAllLive()` throttled to `REFRESH_MS = 1000` `liveTickTimer` while `isRunning`, plus `message_start`/`end`/`turn_end`/`agent_settled` for TTFT/final. Now TPS is approximately accurate (1 s granularity) but not high-rate.
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.
