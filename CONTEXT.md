@@ -27,3 +27,11 @@ _Avoid_: editor position, editor hook
 **TrackingEditor**:
 This extension's custom editor — the actual input editor in the box. Replaces pi's `CustomEditor` (replicated inline) and adds popup-highlight observation plus the model-info border glow.
 _Avoid_: custom editor, wrapper
+
+**Agent run**:
+One `agent_start` → `agent_settled` lifecycle for a single user prompt. Contains one or more **Turn**s (each `turn_start` → `turn_end` = one LLM call). The dim timeline row (`· 8s wall · ↑·↓·$`) is rendered once per agent run, between `agent_end` and the next `agent_start`. _Also called agent loop. Distinct from **Pi session** (`session_start` → `session_shutdown`, the whole TUI lifetime)._
+_Avoid_: agent session, agent round (round ≡ turn confusion)
+
+**Turn**:
+One `turn_start` → `turn_end` = one LLM call inside an **Agent run**. `TTFT`/`TPS` are per-turn; wall time is per-agent-run.
+_Avoid_: round, iteration
