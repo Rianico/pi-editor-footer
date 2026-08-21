@@ -171,9 +171,14 @@ export class TurnTelemetryTracker {
       let decayedTps: number | null = null;
       if (this.decayBaseTps !== null && this.decayStartMs !== null) {
         const elapsedSinceDecay = Math.max(0, now - this.decayStartMs);
-        // exponential decay, half-life ~5s (exp(-elapsed/7200) => half at ~5s ln2*7200≈5000)
-        const decayed = this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
-        if (decayed >= 0.05) decayedTps = round(decayed, 1);
+        // Reset to default after 2s without incoming tokens per user request
+        if (elapsedSinceDecay >= 2000) {
+          decayedTps = null;
+        } else {
+          // exponential decay, half-life ~5s (exp(-elapsed/7200) => half at ~5s ln2*7200≈5000)
+          const decayed = this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
+          if (decayed >= 0.05) decayedTps = round(decayed, 1);
+        }
       }
       const liveInput = turn.liveInputTokens ?? 0;
       return {
