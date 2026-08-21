@@ -559,6 +559,7 @@ export default function (pi: ExtensionAPILike): void {
 				}
 			}
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
+			refreshContextBar();
 			tuiRef?.requestRender();
 		},
 		onOverlayClosed: () => {
