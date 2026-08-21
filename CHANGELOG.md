@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Context icon bar now switchable via config `contextIconBar` (default `false` disabled) — `0.0% · 0/1.0M | c 0.0%` by default, `# [████░░] 39.6% · 416k/1.0M | c 85.3%` when enabled (footer top, `nerd`/`ascii` glyphs)
 - Context bar format now `0.0% · 0/1.0M | c 0.0%` (was `# [#####-------] 39.6% · 416k/1.0M | c`; no icon/bar, compact `pct · tokens/W`)
 - Context bar and cache now follow icon mode (`nerd` ``/``/`█` vs `ascii` ` #`/`c`/`#`) — `refreshContextBar` called in `onConfigChanged` so top ` # [...] | c` updates immediately when `icons.mode` changes
 - Telemetry bottom border compacted (`>60.6 tok/s · ~2.5s · +8.3s · ↑395 · ↓505 · $0.16` not `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16`; TPS/TTFT labels preserved (`> TPS`/`~ TTFT`), no space after `↑`/`↓`/`>`/`~`/`+`, joiner `·` not ` | `, stall `!2·3.3s` not `! stall 2x / 3.3s`)

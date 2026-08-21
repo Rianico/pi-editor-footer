@@ -62,6 +62,9 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 ### Context bar `# [#####]` → `0.0% · 0/1.0M`
 - Was `formatContextBar` returning `icon bar pct · tokens/W | c` (`# [████░░] 39.6% · 416k/1.0M | c`). User wants `0.0% · 0/1.0M` style for default. Fix: `formatContextBar` now returns `pct · tokens/W | c` without `contextIcon`/`renderBar` — e.g. `0.0% · 0/1.0M | c 0.0%` (or `39.6% · 416k/1.0M | c 85.3%` with tokens).
 
+### Context icon bar switchable — default disabled
+- Top context bar `formatContextBar` now takes `showIconBar` and returns `pct · tokens/W | c` without `icon`/`bar` by default (`0.0% · 0/1.0M | c 0.0%`), and `icon bar pct · tokens/W | c` when `showIconBar` true (`# [████░░] 39.6% · 416k/1.0M | c`). Config `ThemeConfig.contextIconBar` default `false`, validated in `validate()`, persisted via `ConfigStore`, toggled in `theme-settings` footer tab as “Context icon bar” On/Off, passed from `src/index.ts:refreshContextBar` as `currentConfig.contextIconBar`.
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.
