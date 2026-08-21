@@ -13,6 +13,6 @@ export type { Theme, PrioritizedSegment } from "./layout.js";
 
 export { formatCwd, basenamePath, truncateBranch, truncatePath } from "./path-format.js";
 export { fmtTokens, formatDuration, formatModelLabel, formatProviderLabel, formatThinkingLabel, sanitizeStatus, stripAnsi } from "./format.js";
-export { stressColor, cacheHitColor, providerColor, effortColor } from "./color-policy.js";
+export { stressColor, cacheHitColor, contextUsageColor, providerColor, effortColor } from "./color-policy.js";
 export { alignRight, fitSegmentsByPriority, isEditorBorderLine, findBottomBorderIndex, padRight, center, headerColumnWidths, MIN_LEFT_WIDTH, MIN_TIPS_WIDTH, MAX_TIPS_WIDTH } from "./layout.js";
 export { PI_BUILTIN_SLASH_COMMAND_NAMES, collectPiCommandNames, pickSlashCommandTips } from "./tip-policy.js";

@@ -21,7 +21,7 @@ import type { FooterState, UsageTotals } from "./state.js";
 import { getUsageTotals } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
 import type { Theme } from "./layout.js";
-import { cacheHitColor, stressColor } from "./color-policy.js";
+import { cacheHitColor, contextUsageColor } from "./color-policy.js";
 import { fmtTokens } from "./format.js";
 
 export interface ContextUsage {
@@ -55,7 +55,7 @@ function renderBar(
     Math.min(barWidth, Math.round((pct / 100) * barWidth)),
   );
   const empty = barWidth - filled;
-  const color = stressColor(pct);
+  const color = contextUsageColor(pct);
   const filledCell = ascii ? "#" : "█";
   const emptyCell = ascii ? "-" : "░";
   return (
@@ -78,15 +78,13 @@ export function formatContextBar(
   const contextWindow = contextUsage?.contextWindow ?? 0;
   if (contextWindow <= 0) return "";
   const contextPct = contextUsage?.percent ?? 0;
-  const pctText = theme.fg(
-    stressColor(contextPct),
-    `${contextPct.toFixed(1)}%`,
-  );
+  const contextColor = contextUsageColor(contextPct);
+  const pctText = theme.fg(contextColor, `${contextPct.toFixed(1)}%`);
   const contextTokens = contextUsage?.tokens ?? 0;
-  const ctxText = `${theme.fg("text", fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg("text", fmtTokens(contextWindow))}`;
+  const ctxText = `${theme.fg(contextColor, fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg(contextColor, fmtTokens(contextWindow))}`;
   const baseCore = `${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
   const base = showIconBar
-    ? `${theme.fg(stressColor(contextPct), glyphs.context)} ${renderBar(theme, contextPct, barWidth, isAscii)} ${baseCore}`
+    ? `${theme.fg(contextColor, glyphs.context)} ${renderBar(theme, contextPct, barWidth, isAscii)} ${baseCore}`
     : baseCore;
   const rate =
     cacheHitRate !== undefined && Number.isFinite(cacheHitRate)
@@ -125,27 +123,48 @@ export function formatTopContextFromSnapshot(
  * and cwd/sessionName fallbacks behind one seam.
  */
 export function createChromeSnapshot(
-  ctx: {
-    sessionManager?: { getCwd?: () => string; getEntries?: () => unknown[]; getSessionName?: () => string };
-    getContextUsage?: () => ContextUsage | undefined;
-    cwd?: string;
-  } | null | undefined,
+  ctx:
+    | {
+        sessionManager?: {
+          getCwd?: () => string;
+          getEntries?: () => unknown[];
+          getSessionName?: () => string;
+        };
+        getContextUsage?: () => ContextUsage | undefined;
+        cwd?: string;
+      }
+    | null
+    | undefined,
   footerState?: FooterState | null | undefined,
 ): ChromeSnapshot {
   const cwd =
     ctx?.sessionManager?.getCwd?.() ??
     // SAFETY: pi seam
-    (ctx as unknown as { cwd?: string })?.cwd ??
+    (ctx as unknown as { cwd?: string })?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     process.cwd();
   const sessionName = ctx?.sessionManager?.getSessionName?.();
   const contextUsage = ctx?.getContextUsage?.() as ContextUsage | undefined;
   const totals = getUsageTotals(
     // SAFETY: pi seam
-    (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0],
+    (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults
   // SAFETY: pi seam
-  const git = (footerState as FooterState | undefined)?.git ?? ({ branch: undefined, ahead: 0, behind: 0, modified: 0, untracked: 0, staged: 0, stashed: 0, conflicted: 0, renamed: 0, deleted: 0, commit: null } as unknown as GitStatus);
+  const git =
+    (footerState as FooterState | undefined)?.git ??
+    ({
+      branch: undefined,
+      ahead: 0,
+      behind: 0,
+      modified: 0,
+      untracked: 0,
+      staged: 0,
+      stashed: 0,
+      conflicted: 0,
+      renamed: 0,
+      deleted: 0,
+      commit: null,
+    } as unknown as GitStatus); // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   const runtime = (footerState as FooterState | undefined)?.runtime ?? null;
   return {
     cwd,
