@@ -176,7 +176,8 @@ export class TurnTelemetryTracker {
           decayedTps = null;
         } else {
           // exponential decay, half-life ~5s (exp(-elapsed/7200) => half at ~5s ln2*7200≈5000)
-          const decayed = this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
+          const decayed =
+            this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
           if (decayed >= 0.05) decayedTps = round(decayed, 1);
         }
       }
@@ -532,12 +533,6 @@ export function formatTurnTelemetry(
     const sec = (telemetry.ttftMs / 1000).toFixed(1);
     const padded = sec.padStart(4, " ");
     parts.push(theme.fg("text", `${padded}s TTFT`));
-  }
-  if (config.duration) {
-    // duration fixed width 7 (e.g. " 15m 31s" / " 24h 21m" / "   5.0s")
-    const raw = formatTurnDuration(telemetry.totalMs);
-    const padded = raw.padStart(7, " ");
-    parts.push(theme.fg("success", `${padded}`));
   }
   if (config.stalls && telemetry.stallMs > 0) {
     parts.push(

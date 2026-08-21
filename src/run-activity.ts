@@ -186,9 +186,9 @@ export function formatRunActivityTopRight(
 
   // turn
   if (snap.turnNumber !== undefined) {
-    parts.push(theme.fg("accent", `T${snap.turnNumber}`));
+    parts.push(theme.fg("accent", `${snap.turnNumber} turns`));
   } else if (snap.phase === "running") {
-    parts.push(theme.fg("accent", `T1`));
+    parts.push(theme.fg("accent", `1 turns`));
   }
 
   // duration
