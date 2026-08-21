@@ -42,6 +42,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - Footer `src/footer.ts` checked `hasCacheTokens && latestCacheHitRate !== undefined` and `formatContextBar` returned `base` when `cacheHitRate` undefined, so default session had no `c` section at all (`↑ 395 | ↓ 505 | $0.00` and `# [...] 39.6% · 416k/1.0M`).
 - User wants cache always visible with zero value. Fix: `rate = latestCacheHitRate ?? 0` and always `stats.push(c rate)` in footer, and `rate = cacheHitRate ?? 0` always `base + " | " + c rate` in `formatContextBar`. Now default is `↑ 395 | ↓ 505 | $0.00 | c 0.0%` and `# [#####-------] 39.6% · 416k/1.0M | c 0.0%` (both with `cacheHitColor(0)` muted).
 
+### Nerd cost ` $0.00` → `$0.00`
+- `src/footer.ts` and `src/telemetry.ts` did `glyphs.cost === "$" ? `$${v}` : `${glyph} $${v}` → nerd ` $0.00`, ascii `$0.00`. User wants nerd also `$0.00` (single `$`), not the icon + `$`.
+- Fix: always `` `$${v}` `` (or `` `$${rate}` ``) — ignore `glyphs.cost`/`g.cost` for cost, keep it for other icons (`input`/`output`/`cacheHit` stay ``/``/`` in nerd).
+
 ### Cost `$ $` to the right of `↑`/`↓` — `toFixed(2)` and pipe order
 - Footer `src/footer.ts` previously did `cost.toFixed(3)` → `$0.160` and pushed `cache` before `cost`, so with cache it rendered `↑ 395 | ↓ 505 | c 85.3% | $0.160` (cost not directly after input/output, 3 decimals). Telemetry `src/telemetry.ts` already used `rate.toFixed(2)` → `$0.16` with `|` pipe, so they mismatched.
 - Fix: `cost.toFixed(2)` (now ` $0.00` / ` $0.16` with 2 decimals, single `$` when `glyphs.cost === "$"` else `glyph $value`, `nerd` keeps ` $0.16`) and `stats` order is `input` → `output` → `cost` → `cache` so cost is immediately to the right of `↑`/`↓` (`↑ 395 | ↓ 505 | $0.16 | c 85.3%` when cache present, `↑ 395 | ↓ 505 | $0.00` when not). The pipe is `theme.fg("dim","|")` with spaces on both sides, same as telemetry's `joiner`.

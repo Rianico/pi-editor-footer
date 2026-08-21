@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Nerd mode cost now `$0.00` not ` $0.00` (always single `$` in both footer `renderFooter` and telemetry `formatTurnTelemetry`, was `glyph === "$" ? `$ / ` : `glyph $` -> ` $`)
 - Cache session now always shown with zero value (`c 0.0%` in footer `↑ | ↓ | $ | c` and ` | c 0.0%` in top context bar) instead of hidden when no cache tokens
 - Footer cost now `toFixed(2)` (`$0.16` not `$0.160`) and moved directly after input/output (`↑ 395 | ↓ 505 | $0.16 | c 85.3%` not `c | $`; `theme.fg("dim","|")` pipe)
 - Top border model label no longer shows context window (`provider/model · thinking` not `· 1.0M`; `buildLabel` ignores `contextWindow`)
