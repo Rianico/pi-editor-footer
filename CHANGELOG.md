@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Refresh rate set to one second (`REFRESH_MS = 1000` for `liveTickTimer` telemetry/top/context and `watchTimer` editor ownership watchdog, was hardcoded `1000`)
 - Context icon bar now switchable via config `contextIconBar` (default `false` disabled) — `0.0% · 0/1.0M | c 0.0%` by default, `# [████░░] 39.6% · 416k/1.0M | c 85.3%` when enabled (footer top, `nerd`/`ascii` glyphs)
 - Context bar format now `0.0% · 0/1.0M | c 0.0%` (was `# [#####-------] 39.6% · 416k/1.0M | c`; no icon/bar, compact `pct · tokens/W`)
 - Context bar and cache now follow icon mode (`nerd` ``/``/`█` vs `ascii` ` #`/`c`/`#`) — `refreshContextBar` called in `onConfigChanged` so top ` # [...] | c` updates immediately when `icons.mode` changes

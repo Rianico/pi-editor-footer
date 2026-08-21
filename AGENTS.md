@@ -65,6 +65,9 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 ### Context icon bar switchable — default disabled
 - Top context bar `formatContextBar` now takes `showIconBar` and returns `pct · tokens/W | c` without `icon`/`bar` by default (`0.0% · 0/1.0M | c 0.0%`), and `icon bar pct · tokens/W | c` when `showIconBar` true (`# [████░░] 39.6% · 416k/1.0M | c`). Config `ThemeConfig.contextIconBar` default `false`, validated in `validate()`, persisted via `ConfigStore`, toggled in `theme-settings` footer tab as “Context icon bar” On/Off, passed from `src/index.ts:refreshContextBar` as `currentConfig.contextIconBar`.
 
+### Refresh `1000` → `REFRESH_MS`
+- `liveTickTimer` (telemetry/top/context `refreshAllLive` every `1000`) and `watchTimer` (editor ownership `ensureEditorOwnership` every `1000`) were hardcoded `1000`. User asked to set refresh rate to one second explicitly, so added `const REFRESH_MS = 1000` in `src/index.ts` and used it for both `setInterval(..., REFRESH_MS)`.
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.
