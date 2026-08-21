@@ -11,7 +11,7 @@
  * getUsageTotals. One coalesced render per tick/event — not per-delta.
  */
 
-import { formatContextBar } from "./footer.js";
+import { formatContextBar } from "./chrome-state.js";
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
 import { getUsageTotals } from "./state.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
