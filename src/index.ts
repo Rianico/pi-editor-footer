@@ -274,7 +274,7 @@ function refreshTopBorder(): void {
 function refreshLiveTelemetry(): void {
 	if (!installedEditor || !currentConfig.telemetry.enabled) return;
 	try {
-		const live = telemetryTracker.peekLive();
+		const live = telemetryTracker.peekLive() ?? telemetryTracker.getLastTelemetry();
 		if (!live) return;
 		const theme = (lastSessionCtx as unknown as { ui?: { theme?: unknown } })?.ui
 			?.theme;
@@ -561,6 +561,7 @@ export default function (pi: ExtensionAPILike): void {
 			}
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 			refreshContextBar();
+			refreshLiveTelemetry();
 			tuiRef?.requestRender();
 		},
 		onOverlayClosed: () => {
