@@ -44,7 +44,7 @@ import type {
   WorkspaceDisplay,
 } from "./config.ts";
 
-const TABS = ["general", "appearance", "footer", "telemetry"] as const;
+const TABS = ["general", "appearance", "footer", "telemetry", "timeline"] as const;
 type Tab = (typeof TABS)[number];
 
 interface SettingItem {
@@ -60,6 +60,7 @@ const COPY = {
     appearance: "Appearance",
     footer: "Footer",
     telemetry: "Telemetry",
+    timeline: "Timeline",
   },
   hint: "Tab/Shift+Tab/←/→: tabs · ↑/↓: move · Enter/Space: change · Esc/q: close",
   labels: {
@@ -83,6 +84,8 @@ const COPY = {
     duration: "Total duration",
     stallDetails: "Stall details",
     costRate: "Cost rate",
+    timelineEnabled: "Timeline enabled",
+    wallTime: "Wall time",
   },
   values: {
     on: "On",
@@ -132,6 +135,17 @@ function toggleFlag<K extends keyof ThemeConfig["footerSegments"]>(
     },
   };
 }
+function toggleTimeline<K extends keyof ThemeConfig["timeline"]>(
+  config: ThemeConfig,
+  key: K,
+): ThemeConfig {
+  const tl = (config as unknown as Record<string, unknown>).timeline as unknown as Record<string, boolean>;
+  return {
+    ...config,
+    timeline: { ...(tl as unknown as ThemeConfig["timeline"]), [key]: !tl[key as string] },
+  } as ThemeConfig;
+}
+
 function toggleTelemetry<K extends keyof ThemeConfig["telemetry"]>(
   config: ThemeConfig,
   key: K,
@@ -230,6 +244,17 @@ function buildFooterItems(config: ThemeConfig): SettingItem[] {
     },
   ];
 }
+function buildTimelineItems(config: ThemeConfig): SettingItem[] {
+  const tl = (config as unknown as Record<string, unknown>).timeline as unknown as { enabled: boolean; wallTime: boolean; tokens: boolean; cost: boolean } | undefined ?? { enabled: true, wallTime: true, tokens: true, cost: true };
+  const flag = (v: boolean) => (v ? COPY.values.on : COPY.values.off);
+  return [
+    { id: "enabled", label: COPY.labels.timelineEnabled, currentValue: flag(tl.enabled) },
+    { id: "wallTime", label: COPY.labels.wallTime, currentValue: flag(tl.wallTime) },
+    { id: "tokens", label: COPY.labels.tokens, currentValue: flag(tl.tokens) },
+    { id: "cost", label: COPY.labels.cost, currentValue: flag(tl.cost) },
+  ];
+}
+
 function buildTelemetryItems(config: ThemeConfig): SettingItem[] {
   const t = config.telemetry;
   const flag = (v: boolean) => (v ? COPY.values.on : COPY.values.off);
@@ -265,6 +290,8 @@ function buildItems(tab: Tab, config: ThemeConfig): SettingItem[] {
       return buildFooterItems(config);
     case "telemetry":
       return buildTelemetryItems(config);
+    case "timeline":
+      return buildTimelineItems(config);
   }
 }
 
@@ -289,6 +316,9 @@ function handleSettingChange(
   }
   if (tab === "telemetry") {
     return toggleTelemetry(config, itemId as keyof ThemeConfig["telemetry"]);
+  }
+  if (tab === "timeline") {
+    return toggleTimeline(config, itemId as keyof ThemeConfig["timeline"]);
   }
   return config;
 }

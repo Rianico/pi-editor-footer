@@ -594,6 +594,26 @@ export default function (pi: ExtensionAPILike): void {
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 			refreshContextBar();
 			refreshLiveTelemetry();
+			// refresh wall time dim line if visible — respects timeline.* toggles
+			if (wallTimeText !== null && lastSessionCtx && footerState.lastDoneIn !== undefined) {
+				try {
+					if (!currentConfig.timeline.enabled) {
+						hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+					} else {
+						const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
+						const glyphs = resolveGlyphs(currentConfig.icons.mode);
+						const parts: string[] = [];
+						if (currentConfig.timeline.wallTime) parts.push(`· ${formatDuration(footerState.lastDoneIn)} wall`);
+						if (currentConfig.timeline.tokens) {
+							parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
+							parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
+						}
+						if (currentConfig.timeline.cost && totals.cost > 0) parts.push(`$${totals.cost.toFixed(2)}`);
+						if (parts.length === 0) hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+						else showWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike, parts.join(" · "));
+					}
+				} catch {}
+			}
 			tuiRef?.requestRender();
 		},
 		onOverlayClosed: () => {
@@ -850,21 +870,27 @@ export default function (pi: ExtensionAPILike): void {
 		}
 		// wall time dim row after last message — TUI-only, never exposed to model (aboveEditor widget)
 		try {
-			if (lastSessionCtx && footerState.lastDoneIn !== undefined) {
+			if (lastSessionCtx && footerState.lastDoneIn !== undefined && currentConfig.timeline.enabled) {
 				const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
 				const glyphs = resolveGlyphs(currentConfig.icons.mode);
 				const parts: string[] = [];
-				const wallDur = formatDuration(footerState.lastDoneIn!);
-				parts.push(`· ${wallDur} wall`);
-				if (currentConfig.telemetry.tokens) {
+				if (currentConfig.timeline.wallTime) {
+					const wallDur = formatDuration(footerState.lastDoneIn!);
+					parts.push(`· ${wallDur} wall`);
+				}
+				if (currentConfig.timeline.tokens) {
 					parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
 					parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
 				}
-				if (currentConfig.telemetry.cost && totals.cost > 0) {
+				if (currentConfig.timeline.cost && totals.cost > 0) {
 					parts.push(`$${totals.cost.toFixed(2)}`);
 				}
-				const wallText = parts.join(" · ");
-				showWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
+				if (parts.length === 0) {
+					hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+				} else {
+					const wallText = parts.join(" · ");
+					showWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
+				}
 			}
 		} catch {}
 		// final settled telemetry overwrites live peek with authoritative totals

@@ -18,6 +18,13 @@ export interface TelemetryConfig {
   cost: boolean;
 }
 
+export interface TimelineConfig {
+  enabled: boolean;
+  wallTime: boolean;
+  tokens: boolean;
+  cost: boolean;
+}
+
 export interface FooterSegments {
   cwd: boolean;
   sessionName: boolean;
@@ -40,6 +47,7 @@ export interface ThemeConfig {
   };
   contextIconBar: boolean;
   telemetry: TelemetryConfig;
+  timeline: TimelineConfig;
   footerSegments: FooterSegments;
 }
 
@@ -70,6 +78,12 @@ export const DEFAULT_CONFIG: ThemeConfig = {
     duration: true,
     tokens: true,
     stalls: true,
+    cost: true,
+  },
+  timeline: {
+    enabled: true,
+    wallTime: true,
+    tokens: true,
     cost: true,
   },
 };
@@ -154,6 +168,15 @@ function validate(config: ThemeConfig): ThemeConfig {
   const dt = DEFAULT_CONFIG.telemetry as unknown as Record<string, boolean>;
   for (const k of Object.keys(dt)) {
     if (!isBoolean(t[k])) t[k] = dt[k];
+  }
+  const tl = (config as unknown as Record<string, unknown>).timeline as unknown as Record<string, unknown> | undefined;
+  const dtl = DEFAULT_CONFIG.timeline as unknown as Record<string, boolean>;
+  if (!tl || typeof tl !== "object") {
+    (config as unknown as Record<string, unknown>).timeline = structuredClone(DEFAULT_CONFIG.timeline);
+  } else {
+    for (const k of Object.keys(dtl)) {
+      if (!isBoolean(tl[k])) tl[k] = dtl[k];
+    }
   }
   return config;
 }
