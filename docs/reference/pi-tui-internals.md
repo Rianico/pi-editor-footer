@@ -114,6 +114,8 @@ The factory is called `factory(this.ui, getEditorTheme(), this.keybindings)`. Af
 
 **Blast radius (ADR-0001)**: two internal names — `autocompleteList` (field) and `applyAutocompleteSuggestions` (method). Verify both exist at extension load and warn loudly if not.
 
+**Timeline injection internals (TranscriptTimeline, Candidate C2)**: additionally reaches `InteractiveMode.prototype.addMessageToChat` / `rebuildChatFromMessages` and the `chatContainer: Component` tree via a `globalThis` breadth-first scan (see `src/transcript-timeline.ts`). This is a third private seam beyond ADR-0001 — owned by `TranscriptTimeline` behind one interface, but still subject to the sync contract. On pi updates, verify `chatContainer` still exists on the interactive mode and `addMessageToChat`/`rebuildChatFromMessages` still patchable; if pi exposes a public timeline seam, delete the global scan.
+
 ## Keybindings
 
 - `pi.registerShortcut(shortcut: KeyId, {description?, handler(ctx)})`; `KeyId` strings like `"shift+up"`, `"shift+down"`.
@@ -131,7 +133,7 @@ The factory is called `factory(this.ui, getEditorTheme(), this.keybindings)`. Af
 This extension **replaces pi's default input editor** via `setEditorComponent`. `TrackingEditor` (`src/tracking-editor.ts`) is the actual editor in the input box: it replicates pi's `CustomEditor` inline and reads two private pi-tui internals — so **pi editor changes are NOT inherited automatically.** On every pi update, and whenever pi adds or changes editor behaviour, sync manually:
 
 1. **Diff the replicated base.** Compare pi's `CustomEditor` (`dist/modes/interactive/components/custom-editor.js` in `@earendil-works/pi-coding-agent` — source in the "How pi's CustomEditor works" section above) and pi-tui's `Editor` (`components/editor.js` in `@earendil-works/pi-tui`) against `src/tracking-editor.ts`: port any new/changed app-keybinding branches, fields, or methods in `handleInput`; keep the highlight-sync additions after each `super.handleInput(data)`.
-2. **Check the private internals.** Confirm `autocompleteList` and `applyAutocompleteSuggestions` still exist with the same names on pi-tui's `Editor`. The load-time `assertInternals()` in `src/index.ts` warns if they vanish — if it warns, fix the tracking in `src/tracking-editor.ts`, don't silence the warning.
+2. **Check the private internals.** Confirm `autocompleteList` and `applyAutocompleteSuggestions` still exist with the same names on pi-tui's `Editor`, and `InteractiveMode` still exposes `chatContainer` / `addMessageToChat` / `rebuildChatFromMessages` for the timeline. The load-time `assertInternals()` in `src/index.ts` warns if the editor pair vanishes, and `TranscriptTimeline` warns if the timeline trio vanishes — if either warns, fix the tracking in `src/tracking-editor.ts` / `src/transcript-timeline.ts`, don't silence the warning.
 3. **Verify live** with the scripted pty loop (the only seam for the editor wiring): from the repo root,
    `(sleep 18; printf '/'; sleep 1.5; printf '\033[B'; sleep 2; printf '\033'; sleep 2) | timeout 45 script -q /tmp/psd.log pi -e ./src/index.ts --no-session`,
    then grep `/tmp/psd.log` for the bordered detail window (`┌…┐`, `· command`/`· skill` rows) following the highlight. Add `sh -c 'stty cols 40; …'` around the command for a narrow terminal that triggers the scroll/ellipsis paths.
