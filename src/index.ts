@@ -236,10 +236,8 @@ function makeWallTimeWidget(text: string, ctx: ExtensionUIContextLike): import("
 		invalidate() {},
 		render(width: number): string[] {
 			const theme = ctx.theme as unknown as { fg(s: string, t: string): string };
-			const dim = theme.fg("dim", text);
-			const plainLen = dim.replace(/\u001b\[[0-9;]*m/g, "").length;
-			const pad = Math.max(0, Math.floor((width - plainLen) / 2));
-			return [" ".repeat(pad) + dim];
+			// Left aligned dim line permanently between transcript (after agent_end, before next agent_start)
+			return [theme.fg("dim", text)];
 		},
 	};
 }
