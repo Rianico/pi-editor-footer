@@ -84,6 +84,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `renderGitSegment` did `truncateBranch(git.branch, 20)` (`branch.slice(0,17) + "..."`) and `renderFooter` gave git `priority: 4` (same as stats/runtime, below cwd `5`), so long names were always `feature/add-obsidia...` even at 200 cols and omitted before cwd.
 - Fix: never fold branch — `renderGitSegment` now `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped.
 
+### Wall time dim line invisible — now separate footer row
+- `renderTimerSegment` wall time was pushed into `leftParts` inline `cwd · 8s wall · ↑`, so at 80 cols it was truncated or easy to miss in `line1`. User reported can't see dimmed timeline row after `agent_end`.
+- Fix: `isWallTime = lastDoneIn && !workingSince` → not in `leftParts`; instead `mainLines.push(truncateToWidth(dim(timerSeg),width))` as second line. Now after `agent_settled` you see `line1: @ /tmp • node | ↑·↓·$` and `line2: · 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim. `working 3s` stays inline during run.
+
 ### Tokens/cost from bottom telemetry → wall time dim line (never exposed)
 - `formatTurnTelemetry` bottom had `↑`/`↓`/`$` (`TPS … · ↑50 · ↓20 · $4.00`) bright (`accent`/`success`/`warning`). User wanted them on the dim wall time line after `agent_end`.
 - Fix: bottom now `TPS`/`TTFT`/`duration`/`stalls` only (`TPS 4.0 tok/s · TTFT 4.0s · 5.0s`); `renderTimerSegment` after `agent_end` (`lastDoneIn`) now `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` all `dim`, using `totals` from `getUsageTotals` gated by `telemetry.tokens`/`cost`. During run still `working 8.3s`. Never `sessionManager.addEntry` — TUI-only via `FooterState`, so model never sees it.

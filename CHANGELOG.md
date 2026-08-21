@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Wall time dim line after `agent_end` now a separate footer row (was inline `cwd · wall`) — now `line1: cwd · runtime | ↑·↓·$` and `line2: · 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim, so timeline is visible
 - Tokens separator now `·` not `|` (`↑ 1.2k · ↓ 800 · $0.12` in footer stats and `· 8s wall · ↑ · ↓ · $` dim line)
 - Settings window title aligned to repo name `pi-editor-footer Settings` (was `pi-lsz-theme Settings`) and slash command renamed `pi-footer` → `pi-editor-footer`
 - Tokens/cost relocated from telemetry bottom to wall time dim line — bottom now `TPS 4.0 tok/s · TTFT 4.0s · 5.0s` (no `↑`/`↓`/`$`), dim line after `agent_end` is `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` (all `dim`, TUI-only, never exposed to model, via `FooterState.lastDoneIn` + `getUsageTotals` gated by `telemetry.tokens`/`cost`)
