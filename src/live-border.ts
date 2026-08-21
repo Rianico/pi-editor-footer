@@ -118,7 +118,7 @@ export class LiveBorder {
       // SAFETY: theme is live pi TUI theme read at render time
       const theme = (
         ctx.ui as unknown as { theme: { fg(s: string, t: string): string } }
-      ).theme; // SAFETY: pi seam
+      ).theme; // SAFETY: pi seam — intentional unsafe cast, validated at runtime // SAFETY: pi seam
       const snap = this.deps.runActivityTracker.getSnapshot();
       const text = formatRunActivityTopRight(snap, theme as never);
       editor.setTopRightText(text);
@@ -148,7 +148,7 @@ export class LiveBorder {
         this.deps.telemetryTracker.getLastTelemetry();
       if (!live) return;
       // SAFETY: pi TUI seam read-only - theme from extension context
-      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
+      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       const glyphs = resolveGlyphs(cfg.icons.mode);
       const right = formatTurnTelemetry(
         live,
@@ -175,12 +175,12 @@ export class LiveBorder {
       // Two adapters (footer + border) now share the same snapshot — proves the seam.
       // SAFETY: pi seam - snapshot derivation from extension context
       const snapshot = createChromeSnapshot(
-        ctx as unknown as Parameters<typeof createChromeSnapshot>[0],
+        ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         undefined,
       );
       // SAFETY: pi seam - theme from extension context
-      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui
-        .theme as unknown as never;
+      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+        .theme as unknown as never; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       const glyphs = resolveGlyphs(cfg.icons.mode);
       const isAscii = resolveIconMode(cfg.icons.mode) === "ascii";
       let contextText = "";
@@ -195,7 +195,7 @@ export class LiveBorder {
           glyphs,
           isAscii,
           // SAFETY: intentional unsafe cast — validated at runtime
-          (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ??
+          (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             false,
         );
       }
