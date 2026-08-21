@@ -256,6 +256,15 @@ export function renderFooter(
     stats.push(
       theme.fg("success", `${glyphs.output} ${fmtTokens(totals.output)}`),
     );
+  }
+  if (segments.cost) {
+    const costValue = totals.cost.toFixed(2);
+    // Avoid "$ $0.00" when the cost glyph itself is "$" (ascii mode) — glyph already is the currency symbol
+    const costText =
+      glyphs.cost === "$" ? `$${costValue}` : `${glyphs.cost} $${costValue}`;
+    stats.push(theme.fg("warning", costText));
+  }
+  if (segments.tokens) {
     const hasCacheTokens = totals.cacheRead > 0 || totals.cacheWrite > 0;
     if (hasCacheTokens && totals.latestCacheHitRate !== undefined) {
       stats.push(
@@ -265,13 +274,6 @@ export function renderFooter(
         ),
       );
     }
-  }
-  if (segments.cost) {
-    const costValue = totals.cost.toFixed(3);
-    // Avoid "$ $0.000" when the cost glyph itself is "$" (ascii mode) — glyph already is the currency symbol
-    const costText =
-      glyphs.cost === "$" ? `$${costValue}` : `${glyphs.cost} $${costValue}`;
-    stats.push(theme.fg("warning", costText));
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
 
