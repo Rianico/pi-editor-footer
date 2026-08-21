@@ -84,6 +84,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `renderGitSegment` did `truncateBranch(git.branch, 20)` (`branch.slice(0,17) + "..."`) and `renderFooter` gave git `priority: 4` (same as stats/runtime, below cwd `5`), so long names were always `feature/add-obsidia...` even at 200 cols and omitted before cwd.
 - Fix: never fold branch — `renderGitSegment` now `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped.
 
+### Wall time dim line invisible — now after last agent message (aboveEditor)
+- Wall time was second footer line below input (`line2: · 8s wall …` dim) — user reported can't see dimmed timeline row after `agent_end` because footer is below input, not after last message in transcript.
+- Fix: wall time now an `aboveEditor` widget between transcript and input, shown on `agent_settled` via `showWallTimeWidget(lastSessionCtx.ui, · 8s wall · ↑·↓·$ dim)` and hidden on `agent_start`/`session_shutdown`. `footerState` now tracks `agentStartMs`/`workingSince`/`lastDoneIn` correctly (was only git/runtime before). `renderTimerSegment` wall time removed from footer inline, so footer stays single line `@ /tmp • node | ↑·↓·$`; timeline row is now visibly after last agent message in transcript, never `sessionManager.addEntry` → model never sees it.
+
 ### Wall time dim line invisible — now separate footer row
 - `renderTimerSegment` wall time was pushed into `leftParts` inline `cwd · 8s wall · ↑`, so at 80 cols it was truncated or easy to miss in `line1`. User reported can't see dimmed timeline row after `agent_end`.
 - Fix: `isWallTime = lastDoneIn && !workingSince` → not in `leftParts`; instead `mainLines.push(truncateToWidth(dim(timerSeg),width))` as second line. Now after `agent_settled` you see `line1: @ /tmp • node | ↑·↓·$` and `line2: · 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim. `working 3s` stays inline during run.
