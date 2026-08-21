@@ -1005,7 +1005,7 @@ export default function (pi: ExtensionAPILike): void {
 				// Line 2: <turn number> · <tools calling num> · <tools calling failure num>
 				const turnNum = snap.turnNumber ?? 1;
 				const totalTools = snap.completedCount + snap.failedCount + snap.activeTools;
-				const line2 = `T${turnNum} · ${totalTools} tools · ${snap.failedCount} failed`;
+				const line2 = `${turnNum} turns · ${totalTools} tools · ${snap.failedCount} failed`;
 				const wallText = `${line1}\n${line2}`;
 				injectTimelineDimLine(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
 			}
