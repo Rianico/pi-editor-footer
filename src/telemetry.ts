@@ -516,14 +516,6 @@ export function formatTurnTelemetry(
       theme.fg("success", `${formatTurnDuration(telemetry.totalMs)}`),
     );
   }
-  if (config.tokens) {
-    parts.push(
-      theme.fg("accent", `${g.input}${fmtTokens(telemetry.inputTokens)}`),
-    );
-    parts.push(
-      theme.fg("success", `${g.output}${fmtTokens(telemetry.outputTokens)}`),
-    );
-  }
   if (config.stalls && telemetry.stallMs > 0) {
     parts.push(
       theme.fg(
@@ -531,11 +523,6 @@ export function formatTurnTelemetry(
         `${g.stall}${telemetry.stallCount}·${formatTurnDuration(telemetry.stallMs)}`,
       ),
     );
-  }
-  if (config.cost && telemetry.rateUsdPerMTokens !== null) {
-    const rate = telemetry.rateUsdPerMTokens.toFixed(2);
-    const costText = `$${rate}`;
-    parts.push(theme.fg("warning", costText));
   }
   if (parts.length === 0) return "";
   // Use theme dim for separator if not custom

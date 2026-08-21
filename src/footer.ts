@@ -151,12 +151,28 @@ function renderTimerSegment(
   theme: Theme,
   state: FooterState,
   glyphs: IconGlyphs,
+  totals?: UsageTotals,
+  config?: ThemeConfig,
 ): string {
+  // Wall time dim line — never exposed to model, TUI-only
+  // After agent_end: · 8.3s wall · ↑ 1.2k · ↓ 800 · $0.12 (all dim)
+  // During run: working 8.3s (accent)
   if (state.workingSince !== undefined) {
     return `${theme.fg("accent", glyphs.working)} ${theme.fg("dim", "working")} ${theme.fg("accent", formatDuration(Date.now() - state.workingSince))}`;
   }
   if (state.lastDoneIn !== undefined) {
-    return `${theme.fg("success", glyphs.done)} ${theme.fg("success", "done")} ${theme.fg("text", formatDuration(state.lastDoneIn))}`;
+    const dim = (s: string) => theme.fg("dim", s);
+    const wall = `${dim("·")} ${dim(formatDuration(state.lastDoneIn))} ${dim("wall")}`;
+    const parts: string[] = [wall];
+    // Relocated from telemetry bottom border — now on wall time dim line
+    if (config?.telemetry.tokens && totals) {
+      parts.push(`${dim(`${glyphs.input} ${fmtTokens(totals.input)}`)}`);
+      parts.push(`${dim(`${glyphs.output} ${fmtTokens(totals.output)}`)}`);
+    }
+    if (config?.telemetry.cost && totals && totals.cost > 0) {
+      parts.push(dim(`$${totals.cost.toFixed(2)}`));
+    }
+    return parts.join(` ${dim("·")} `);
   }
   return "";
 }
@@ -244,7 +260,7 @@ export function renderFooter(
       leftParts.push({ text: `${sep}${runtimeSeg}`, priority: 4 });
     }
   }
-  const timerSeg = renderTimerSegment(theme, state, glyphs);
+  const timerSeg = renderTimerSegment(theme, state, glyphs, totals, config);
   if (timerSeg) {
     const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
     leftParts.push({ text: `${sep}${timerSeg}`, priority: 1 });
