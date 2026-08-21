@@ -226,7 +226,8 @@ export class TurnTelemetryTracker {
       outputTokens = turn.liveEstimatedTokens;
       totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
     }
-    const measurementMs = genMs > 0 && outputTokens > 0 ? genMs : null;
+    // Require minimum window to avoid spike on tiny genMs (multi-turn fast second turn)
+    const measurementMs = genMs >= 500 && outputTokens > 0 ? genMs : null;
     const tps =
       measurementMs === null
         ? null

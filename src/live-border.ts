@@ -37,11 +37,33 @@ export interface LiveBorderDeps {
 
 export class LiveBorder {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private lastRenderMs = 0;
+  private pendingRender: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: LiveBorderDeps) {}
 
   /** Coalesced render: top (run-activity) + bottom (telemetry) + context bar → editor. */
   render(): void {
+    const now = Date.now();
+    if (now - this.lastRenderMs < REFRESH_MS) {
+      if (this.pendingRender === null) {
+        const delay = REFRESH_MS - (now - this.lastRenderMs);
+        this.pendingRender = setTimeout(() => {
+          this.pendingRender = null;
+          this.lastRenderMs = Date.now();
+          this.doRender();
+        }, delay);
+        // SAFETY: pi TUI seam - timer unref is optional NodeJS API
+        const t = this.pendingRender as unknown as { unref?: () => void }; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+        if (typeof t.unref === "function") t.unref();
+      }
+      return;
+    }
+    this.lastRenderMs = now;
+    this.doRender();
+  }
+
+  private doRender(): void {
     this.refreshTopBorder();
     this.refreshLiveTelemetry();
     this.refreshContextBar();
@@ -57,9 +79,7 @@ export class LiveBorder {
     this.timer = setInterval(() => {
       try {
         if (this.deps.runActivityTracker.isRunning()) {
-          this.refreshTopBorder();
-          this.refreshLiveTelemetry();
-          this.refreshContextBar();
+          this.render();
         } else {
           this.refreshContextBar();
         }
@@ -69,11 +89,15 @@ export class LiveBorder {
     }, REFRESH_MS);
     // don't block process exit
     // SAFETY: pi TUI seam - timer unref is optional NodeJS API
-    const t = this.timer as unknown as { unref?: () => void };
+    const t = this.timer as unknown as { unref?: () => void }; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     if (typeof t.unref === "function") t.unref();
   }
 
   stopTick(): void {
+    if (this.pendingRender !== null) {
+      clearTimeout(this.pendingRender);
+      this.pendingRender = null;
+    }
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
