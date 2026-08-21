@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-22
+
+### Added
+- Tiered context usage colors — `contextUsageColor(pct)` with 25%/50%/75% thresholds (`dim` <25 → `accent` 25–50 → `warning` 50–75 → `error` ≥75) applied to both `percent` and `tokens/window` sections and to bar/icon, so low usage stays dimmed and high usage highlights for quota visibility (`color-policy`, `chrome-state:formatContextBar`, `utils` barrel)
+- Deepened architecture — candidates 1–5 (`TrackingEditor`, `TranscriptTimeline`, `LiveBorder`, `ChromeState`, `SessionKernel`) behind single seams, plus sync contract extension for transcript timeline seam (candidate 2)
+- Telemetry formatting — `TPS`/`TTFT` with units and fixed width (` 60.6 tok/s TPS`, ` 2.5s TTFT`), default tokens at start, and `↑`/`↓` relocated to right of cache with `|` separator
+
+### Changed
+- Hide `↑`/`↓` tokens at startup (only after `turn_start` via `liveInputTokens`)
+- Dim line padding and fixed-width `TPS`/`TTFT`/`duration` with gradual TPS decay (half-life ~5s, reset after 2s idle)
+
+### Fixed
+- Reset TPS to default after 2s without incoming tokens before first token
+- Interleave timeline in transcript (`chatContainer` injection, left-aligned dim `·`/`↑`/`↓`/`c`/`$` with `|`, close right) and correct `pi` extension path (`src/index.ts`)
+- Satisfy `pi-lens` blocking — `SAFETY` comments for `as unknown as` casts (including `chrome-state`, `live-border`) and best-effort catches
+
 ## [0.3.0] - 2026-08-21
 ### Changed
 - Timeline format now two-line dim per user spec: `2026-08-21 13:48:46 GMT+8 · 11s · ↑ 495 · ↓ 708 · c 85.3% · $0.00` + `3 turns · 5 tools · 1 failed` (datetime with timezone via `Intl` `en-CA` `short` TZ, wall `formatDuration`, `↑`/`↓` `fmtTokens`, cache `glyphs.cacheHit` `latestCacheHitRate`, cost `$`, turn/tools/failed from `runActivity` snapshot)
