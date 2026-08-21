@@ -264,15 +264,7 @@ export function renderFooter(
       `$${costValue}`;
     stats.push(theme.fg("warning", costText));
   }
-  if (segments.tokens) {
-    const rate = totals.latestCacheHitRate ?? 0;
-    stats.push(
-      theme.fg(
-        cacheHitColor(rate),
-        `${glyphs.cacheHit} ${rate.toFixed(1)}%`,
-      ),
-    );
-  }
+  // cache to the right of input/output omitted per user request — cache stays in top context bar only
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
 
   const rightBlock = statsBlock;
