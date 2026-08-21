@@ -26,6 +26,7 @@ import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
 import { formatContextBar } from "./footer.js";
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
+import { fmtTokens, formatDuration } from "./format.js";
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
  * uses. The authoritative types live in @earendil-works/pi-coding-agent — a
@@ -119,12 +120,14 @@ let glowEnabled = true;
 let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let lastSessionCtx: ExtensionContextLike | null = null;
+let wallTimeText: string | null = null;
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
 const REFRESH_MS = 1000;
 let liveTickTimer: ReturnType<typeof setInterval> | null = null;
 let footerState: FooterState = createInitialState();
+let agentStartMs: number | null = null;
 let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
@@ -225,6 +228,35 @@ function updateWidget(ctx: ExtensionUIContextLike): void {
 	} else {
 		removeWidget(ctx);
 	}
+	tuiRef?.requestRender();
+}
+
+function makeWallTimeWidget(text: string, ctx: ExtensionUIContextLike): import("@earendil-works/pi-tui").Component {
+	return {
+		invalidate() {},
+		render(width: number): string[] {
+			const theme = ctx.theme as unknown as { fg(s: string, t: string): string };
+			const dim = theme.fg("dim", text);
+			const plainLen = dim.replace(/\u001b\[[0-9;]*m/g, "").length;
+			const pad = Math.max(0, Math.floor((width - plainLen) / 2));
+			return [" ".repeat(pad) + dim];
+		},
+	};
+}
+
+function showWallTimeWidget(ctx: ExtensionUIContextLike, text: string): void {
+	wallTimeText = text;
+	ctx.setWidget("wall-time", (tui) => {
+		tuiRef = tui as unknown as typeof tuiRef;
+		return makeWallTimeWidget(text, ctx);
+	}, { placement: "aboveEditor" });
+	tuiRef?.requestRender();
+}
+
+function hideWallTimeWidget(ctx: ExtensionUIContextLike): void {
+	if (wallTimeText === null) return;
+	wallTimeText = null;
+	ctx.setWidget("wall-time", undefined);
 	tuiRef?.requestRender();
 }
 
@@ -702,6 +734,11 @@ export default function (pi: ExtensionAPILike): void {
 	// session's ctx must be dead before then — otherwise its next tick hits the
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
 	pi.on("session_shutdown", () => {
+		if (lastSessionCtx) {
+			try { hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike); } catch {}
+		}
+		agentStartMs = null;
+		footerState = { ...footerState, workingSince: undefined, lastDoneIn: undefined };
 		stopLiveTick();
 		runActivityTracker.reset();
 		installedEditor?.setTopRightText("");
@@ -750,6 +787,9 @@ export default function (pi: ExtensionAPILike): void {
 	pi.on("agent_start", (e) => {
 		telemetryTracker.handle(e as never);
 		runActivityTracker.startRun();
+		if (lastSessionCtx) hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+		agentStartMs = Date.now();
+		footerState = { ...footerState, workingSince: agentStartMs, lastDoneIn: undefined };
 		startLiveTick();
 		refreshAllLive();
 	});
@@ -801,6 +841,32 @@ export default function (pi: ExtensionAPILike): void {
 		const tel = telemetryTracker.handle(e as never);
 		runActivityTracker.settle();
 		stopLiveTick();
+		if (agentStartMs !== null) {
+			const doneIn = Date.now() - agentStartMs;
+			footerState = { ...footerState, workingSince: undefined, lastDoneIn: doneIn };
+			agentStartMs = null;
+		} else {
+			footerState = { ...footerState, workingSince: undefined };
+		}
+		// wall time dim row after last message — TUI-only, never exposed to model (aboveEditor widget)
+		try {
+			if (lastSessionCtx && footerState.lastDoneIn !== undefined) {
+				const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
+				const glyphs = resolveGlyphs(currentConfig.icons.mode);
+				const parts: string[] = [];
+				const wallDur = formatDuration(footerState.lastDoneIn!);
+				parts.push(`· ${wallDur} wall`);
+				if (currentConfig.telemetry.tokens) {
+					parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
+					parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
+				}
+				if (currentConfig.telemetry.cost && totals.cost > 0) {
+					parts.push(`$${totals.cost.toFixed(2)}`);
+				}
+				const wallText = parts.join(" · ");
+				showWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
+			}
+		} catch {}
 		// final settled telemetry overwrites live peek with authoritative totals
 		if (tel && installedEditor && currentConfig.telemetry.enabled) {
 			try {

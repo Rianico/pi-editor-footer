@@ -161,18 +161,9 @@ function renderTimerSegment(
     return `${theme.fg("accent", glyphs.working)} ${theme.fg("dim", "working")} ${theme.fg("accent", formatDuration(Date.now() - state.workingSince))}`;
   }
   if (state.lastDoneIn !== undefined) {
-    const dim = (s: string) => theme.fg("dim", s);
-    const wall = `${dim("·")} ${dim(formatDuration(state.lastDoneIn))} ${dim("wall")}`;
-    const parts: string[] = [wall];
-    // Relocated from telemetry bottom border — now on wall time dim line
-    if (config?.telemetry.tokens && totals) {
-      parts.push(`${dim(`${glyphs.input} ${fmtTokens(totals.input)}`)}`);
-      parts.push(`${dim(`${glyphs.output} ${fmtTokens(totals.output)}`)}`);
-    }
-    if (config?.telemetry.cost && totals && totals.cost > 0) {
-      parts.push(dim(`$${totals.cost.toFixed(2)}`));
-    }
-    return parts.join(` ${dim("·")} `);
+    // Wall time after agent_end is now a dim row after last message (aboveEditor widget), not inline footer
+    // Keep footer clean — wall time lives in transcript, not here
+    return "";
   }
   return "";
 }
@@ -260,10 +251,8 @@ export function renderFooter(
       leftParts.push({ text: `${sep}${runtimeSeg}`, priority: 4 });
     }
   }
-  // working stays inline; wall time after agent_end is a separate dim row (never model-exposed)
-  const isWallTime = state.lastDoneIn !== undefined && state.workingSince === undefined;
   const timerSeg = renderTimerSegment(theme, state, glyphs, totals, config);
-  if (timerSeg && !isWallTime) {
+  if (timerSeg) {
     const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
     leftParts.push({ text: `${sep}${timerSeg}`, priority: 1 });
   }
@@ -302,16 +291,9 @@ export function renderFooter(
   const fittedContext = rightBlock ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
 
-  const wallTimeLine =
-    isWallTime && timerSeg
-      ? truncateToWidth(theme.fg("dim", timerSeg), width, theme.fg("dim", "..."))
-      : null;
   const mainLines = [line1].map((line) =>
     truncateToWidth(line, width, theme.fg("dim", "...")),
   );
-  if (wallTimeLine) {
-    mainLines.push(wallTimeLine);
-  }
   if (segments.extensionStatuses && ctx.extensionStatuses) {
     const statuses = Array.from(ctx.extensionStatuses.entries())
       .sort(([a], [b]) => a.localeCompare(b))
