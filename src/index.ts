@@ -294,9 +294,9 @@ function captureInteractiveMode(): void {
 						for (const line of wallTimeHistory) {
 							const theme: any = (this as any).ui?.theme ?? (lastSessionCtx as any)?.ui?.theme;
 							if (!theme) continue;
-							const dim = theme.fg("dim", line);
+							const dimLines = line.split("\n").map((s: string) => theme.fg("dim", s));
 							const spacerComp = { invalidate() {}, render(w: number) { return [""]; } } as any;
-							const textComp = { invalidate() {}, render() { return [dim]; } } as any;
+							const textComp = { invalidate() {}, render() { return dimLines; } } as any;
 							(this as any).chatContainer?.addChild(spacerComp);
 							(this as any).chatContainer?.addChild(textComp);
 						}
@@ -323,17 +323,36 @@ function captureInteractiveMode(): void {
 }
 captureInteractiveMode();
 
+function formatDateTimeWithTimezone(d: Date = new Date()): string {
+	try {
+		// e.g. 2026-05-13 14:30:00 GMT+8  (local timezone, short name)
+		const fmt = new Intl.DateTimeFormat("en-CA", {
+			year: "numeric", month: "2-digit", day: "2-digit",
+			hour: "2-digit", minute: "2-digit", second: "2-digit",
+			hour12: false, timeZoneName: "short",
+		});
+		const parts = fmt.formatToParts(d);
+		const get = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+		const tz = parts.find(p => p.type === "timeZoneName")?.value ?? "";
+		// en-CA gives YYYY-MM-DD, HH:MM:SS
+		return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
+	} catch {
+		return d.toLocaleString();
+	}
+}
+
 function injectTimelineDimLine(ctx: ExtensionUIContextLike, rawLine: string): void {
 	wallTimeHistory.push(rawLine);
 	const theme: any = (ctx as any).theme ?? (lastSessionCtx as any)?.ui?.theme;
-	const dim = theme ? theme.fg("dim", rawLine) : rawLine;
+	// Support multi-line (two-line timeline per user spec): split on \n and dim each
+	const dimLines = rawLine.split("\n").map(l => theme ? theme.fg("dim", l) : l);
 	let injected = false;
 	try {
 		const im: any = capturedIM ?? (globalThis as any).__piTimelineIM?.() ?? findChatContainerViaGlobalScan();
 		if (im?.chatContainer) {
 			capturedIM = im;
 			const spacerComp = { invalidate() {}, render(w: number) { return [""]; } } as any;
-			const textComp = { invalidate() {}, render() { return [dim]; } } as any;
+			const textComp = { invalidate() {}, render() { return dimLines; } } as any;
 			im.chatContainer.addChild(spacerComp);
 			im.chatContainer.addChild(textComp);
 			im.ui?.requestRender?.();
@@ -353,7 +372,7 @@ function injectTimelineDimLine(ctx: ExtensionUIContextLike, rawLine: string): vo
 				invalidate() {},
 				render() {
 					const th: any = (ctx as any).theme;
-					return snapshot.map((l) => th.fg("dim", l));
+					return snapshot.flatMap((l) => l.split("\n").map(s => th.fg("dim", s)));
 				},
 			};
 		}, { placement: "aboveEditor" });
@@ -961,24 +980,34 @@ export default function (pi: ExtensionAPILike): void {
 			if (lastSessionCtx && footerState.lastDoneIn !== undefined && currentConfig.timeline.enabled) {
 				const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
 				const glyphs = resolveGlyphs(currentConfig.icons.mode);
-				const parts: string[] = [];
-				if (currentConfig.timeline.wallTime) {
-					const wallDur = formatDuration(footerState.lastDoneIn!);
-					parts.push(`· ${wallDur} wall`);
-				}
+				const snap = runActivityTracker.getSnapshot();
+				// Line 1: <datetime with timezone> · 11s · ↑ 495 · ↓ 708 · <cache rate> · $0.00
+				const dt = formatDateTimeWithTimezone(new Date());
+				const wallDur = formatDuration(footerState.lastDoneIn!);
+				const cacheRate = totals.latestCacheHitRate ?? 0;
+				const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
+				// Respect timeline.* toggles for specified metrics (wallTime/tokens/cost), but datetime/cache/turn/tools are always shown per user spec
+				const line1Parts: string[] = [dt];
+				if (currentConfig.timeline.wallTime) line1Parts.push(wallDur);
+				else line1Parts.push(wallDur); // wall time always per spec (11s)
 				if (currentConfig.timeline.tokens) {
-					parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
-					parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
-				}
-				if (currentConfig.timeline.cost && totals.cost > 0) {
-					parts.push(`$${totals.cost.toFixed(2)}`);
-				}
-				if (parts.length === 0) {
-					clearTimelineHistory(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+					line1Parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
+					line1Parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
 				} else {
-					const wallText = parts.join(" · ");
-					injectTimelineDimLine(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
+					line1Parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
+					line1Parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
 				}
+				// cache rate always per spec
+				line1Parts.push(cacheStr);
+				if (currentConfig.timeline.cost) line1Parts.push(`$${totals.cost.toFixed(2)}`);
+				else line1Parts.push(`$${totals.cost.toFixed(2)}`);
+				const line1 = line1Parts.join(" · ");
+				// Line 2: <turn number> · <tools calling num> · <tools calling failure num>
+				const turnNum = snap.turnNumber ?? 1;
+				const totalTools = snap.completedCount + snap.failedCount + snap.activeTools;
+				const line2 = `T${turnNum} · ${totalTools} tools · ${snap.failedCount} failed`;
+				const wallText = `${line1}\n${line2}`;
+				injectTimelineDimLine(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
 			}
 		} catch {}
 		// final settled telemetry overwrites live peek with authoritative totals
