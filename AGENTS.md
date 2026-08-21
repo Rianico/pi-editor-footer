@@ -84,6 +84,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `renderGitSegment` did `truncateBranch(git.branch, 20)` (`branch.slice(0,17) + "..."`) and `renderFooter` gave git `priority: 4` (same as stats/runtime, below cwd `5`), so long names were always `feature/add-obsidia...` even at 200 cols and omitted before cwd.
 - Fix: never fold branch — `renderGitSegment` now `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped.
 
+### Wall time left aligned, permanent between agent_end and next input
+- Widget was centered `pad + dim` and hidden on `agent_start` made it feel transient. User wants left aligned and permanently visible in the gap between `agent_end`'s last message and the next `agent_start` input.
+- Fix: `makeWallTimeWidget` now `return [theme.fg("dim", text)]` left aligned, no centering pad; still `aboveEditor` between transcript and input, shown on `agent_settled` and hidden on next `agent_start`/`shutdown`, so it is permanently in the gap. Never `sessionManager.addEntry`.
+
 ### Dim line after agent_end with specified metric
 - User wants one dimmed line with specified metric after last message of `agent_end` (not footer). Previously wall time was footer second line or generic `telemetry.tokens`/`cost`.
 - Fix: new `ThemeConfig.timeline: {enabled, wallTime, tokens, cost}` (default all true, validated, persisted), `src/theme-settings.ts` new `Timeline` tab with 4 toggles, `src/index.ts` wall time widget now `timeline.enabled` gated and `wallTime`/`tokens`/`cost` specified — `· 8s wall` only if `wallTime`, `↑`/`↓` only if `tokens`, `$` only if `cost>0`. Shown on `agent_settled` as `aboveEditor` widget centered dim after last message, hidden on `agent_start`/`shutdown`, refreshed live on `timeline` toggle via `onConfigChanged`. Never `sessionManager.addEntry` → model never sees it.
