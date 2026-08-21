@@ -53,7 +53,7 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 ### Telemetry `> TPS` `| TTFT` verbose → compact `·`
 - Bottom border `formatTurnTelemetry` was `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16 | ! stall 1x / 0.5s` with ` | ` joiner and spaces after every glyph plus `TPS`/`TTFT`/`stall` labels. User wants more compact.
-- Fix: `TPS`/`TTFT` labels removed (`>60.6 tok/s` not `> TPS …`, `~2.5s` not `~ TTFT …`), spaces after `>`/`~`/`+`/`↑`/`↓` removed (`↑395` not `↑ 395`), joiner `·` not ` | ` (` | ` → ` · `), stall `!2·3.3s` not `! stall 2x / 3.3s`. Now `>60.6 tok/s · ~2.5s · +8.3s · ↑395 · ↓505 · $0.16`.
+- Fix: `TPS`/`TTFT` labels removed (`>60.6 tok/s` not `> TPS …`, `~2.5s` not `~ TTFT …`), spaces after `>`/`~`/`+`/`↑`/`↓` removed (`↑395` not `↑ 395`), joiner `·` not ` | ` (` | ` → ` · `), stall `!2·3.3s` not `! stall 2x / 3.3s`. Now `> TPS 60.6 tok/s · ~ TTFT 2.5s · +8.3s · ↑395 · ↓505 · $0.16`.
 
 ## Verification — how to check the style
 
