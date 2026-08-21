@@ -10,6 +10,31 @@ import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { BorderRenderer } from "./border-renderer.js";
 import { CursorPolicy, type CursorStyle } from "./cursor-policy.js";
 
+export interface ChromeSnapshot {
+  modelInfo: ModelInfo;
+  glowEnabled: boolean;
+  topRightText: string;
+  topContextText: string;
+  telemetryText: string;
+  bottomLeftText: string;
+  cursorStyle: CursorStyle;
+}
+
+const DEFAULT_CHROME: ChromeSnapshot = {
+  modelInfo: {
+    provider: "",
+    modelId: "unknown",
+    level: "off",
+    contextWindow: 0,
+  },
+  glowEnabled: true,
+  topRightText: "",
+  topContextText: "",
+  telemetryText: "",
+  bottomLeftText: "",
+  cursorStyle: "block",
+};
+
 export type { CursorStyle };
 
 interface KeybindingsLike {
@@ -40,23 +65,15 @@ export class TrackingEditor extends Editor {
 
   onHighlight?: (item: SelectItem | null) => void;
 
-  glowEnabled = true;
-
   private lastWiredList?: SelectList;
 
-  private modelInfo: ModelInfo = {
-    provider: "",
-    modelId: "unknown",
-    level: "off",
-    contextWindow: 0,
+  private _chrome: ChromeSnapshot = {
+    ...DEFAULT_CHROME,
+    modelInfo: { ...DEFAULT_CHROME.modelInfo },
   };
 
   private readonly cursorPolicy: CursorPolicy;
   private readonly borderRenderer: BorderRenderer;
-  private telemetryText = "";
-  private bottomLeftText = "";
-  private topRightText = "";
-  private topContextText = "";
 
   constructor(
     tui: TUI,
@@ -70,7 +87,7 @@ export class TrackingEditor extends Editor {
     this.cursorPolicy = new CursorPolicy(tui);
     this.borderRenderer = new BorderRenderer(
       getLiveTheme,
-      () => this.modelInfo,
+      () => this._chrome.modelInfo,
     );
     this.patchApplyAutocompleteSuggestions();
   }
@@ -79,21 +96,55 @@ export class TrackingEditor extends Editor {
     this.actionHandlers.set(action, handler);
   }
 
-  setModelInfo(info: ModelInfo): void {
-    this.modelInfo = info;
+  // ——— Deep interface: one intent replaces 7 setters ———
+  /** Deep seam: single entry for all chrome. Callers learn one shape, impl hides composition. */
+  setChrome(patch: Partial<ChromeSnapshot>): void {
+    let cursorChanged = false;
+    const prevCursor = this._chrome.cursorStyle;
+    if (patch.modelInfo !== undefined) this._chrome.modelInfo = patch.modelInfo;
+    if (patch.glowEnabled !== undefined)
+      this._chrome.glowEnabled = patch.glowEnabled;
+    if (patch.topRightText !== undefined)
+      this._chrome.topRightText = patch.topRightText;
+    if (patch.topContextText !== undefined)
+      this._chrome.topContextText = patch.topContextText;
+    if (patch.telemetryText !== undefined)
+      this._chrome.telemetryText = patch.telemetryText;
+    if (patch.bottomLeftText !== undefined)
+      this._chrome.bottomLeftText = patch.bottomLeftText;
+    if (patch.cursorStyle !== undefined) {
+      this._chrome.cursorStyle = patch.cursorStyle;
+      cursorChanged = prevCursor !== patch.cursorStyle;
+    }
+    if (cursorChanged) this.cursorPolicy.setStyle(this._chrome.cursorStyle);
     this.tui.requestRender();
+  }
+
+  getChrome(): ChromeSnapshot {
+    return { ...this._chrome, modelInfo: { ...this._chrome.modelInfo } };
+  }
+
+  // glowEnabled as accessor kept for backward compat (direct field assign in index.ts)
+  get glowEnabled(): boolean {
+    return this._chrome.glowEnabled;
+  }
+  set glowEnabled(v: boolean) {
+    if (v === this._chrome.glowEnabled) return;
+    this._chrome.glowEnabled = v;
+    this.tui.requestRender();
+  }
+
+  // ——— Backward-compat wrappers: forward to setChrome (deprecated, keep for tests) ———
+  setModelInfo(info: ModelInfo): void {
+    this.setChrome({ modelInfo: info });
   }
 
   setGlowEnabled(enabled: boolean): void {
-    this.glowEnabled = enabled;
-    this.tui.requestRender();
+    this.setChrome({ glowEnabled: enabled });
   }
 
   setCursorStyle(style: CursorStyle): void {
-    const prev = this.cursorPolicy.getStyle();
-    this.cursorPolicy.setStyle(style);
-    if (prev === style) this.tui.requestRender();
-    else this.tui.requestRender();
+    this.setChrome({ cursorStyle: style });
   }
 
   getCursorStyle(): CursorStyle {
@@ -101,42 +152,39 @@ export class TrackingEditor extends Editor {
   }
 
   setTelemetryText(text: string): void {
-    this.telemetryText = text;
-    this.tui.requestRender();
+    this.setChrome({ telemetryText: text });
   }
 
   setBottomLeftText(text: string): void {
-    this.bottomLeftText = text;
-    this.tui.requestRender();
+    this.setChrome({ bottomLeftText: text });
   }
 
   getBottomLeftText(): string {
-    return this.bottomLeftText;
+    return this._chrome.bottomLeftText;
   }
 
   getTelemetryText(): string {
-    return this.telemetryText;
+    return this._chrome.telemetryText;
   }
 
   setTopRightText(text: string): void {
-    this.topRightText = text;
-    this.tui.requestRender();
+    this.setChrome({ topRightText: text });
   }
 
   getTopRightText(): string {
-    return this.topRightText;
+    return this._chrome.topRightText;
   }
 
   setTopContextText(text: string): void {
-    this.topContextText = text;
-    this.tui.requestRender();
+    this.setChrome({ topContextText: text });
   }
 
   getTopContextText(): string {
-    return this.topContextText;
+    return this._chrome.topContextText;
   }
   private patchApplyAutocompleteSuggestions(): void {
-    const internals = this as unknown as EditorInternals;
+    // SAFETY: EditorInternals is private pi-tui shape — existence validated via typeof check on applyAutocompleteSuggestions
+    const internals = this as unknown as EditorInternals; // SAFETY: private pi-tui interior seam
     const original = internals.applyAutocompleteSuggestions;
     if (typeof original !== "function") {
       console.warn(
@@ -164,13 +212,15 @@ export class TrackingEditor extends Editor {
   }
 
   private currentAutocompleteList(): SelectList | undefined {
-    return (this as unknown as EditorInternals).autocompleteList;
+    // SAFETY: EditorInternals autocompleteList is private pi-tui field verified at load via constructor source check
+    return (this as unknown as EditorInternals).autocompleteList; // SAFETY: private pi-tui interior seam
   }
 
   private renderBase(width: number): string[] {
     const lines = super.render(width);
     const isFocused =
-      (this as unknown as { focused?: boolean }).focused ?? false;
+      // SAFETY: focused is private Editor state read-only for cursor policy; fallback false preserves behavior
+      (this as unknown as { focused?: boolean }).focused ?? false; // SAFETY: focused private read-only seam
     return this.cursorPolicy.mapLines(lines, isFocused);
   }
 
@@ -178,11 +228,11 @@ export class TrackingEditor extends Editor {
     let lines = this.renderBase(width);
     if (lines.length === 0) return lines;
     lines = this.borderRenderer.renderWithBorders(lines, width, {
-      glowEnabled: this.glowEnabled,
-      telemetryText: this.telemetryText,
-      bottomLeftText: this.bottomLeftText,
-      topRightText: this.topRightText,
-      topContextText: this.topContextText,
+      glowEnabled: this._chrome.glowEnabled,
+      telemetryText: this._chrome.telemetryText,
+      bottomLeftText: this._chrome.bottomLeftText,
+      topRightText: this._chrome.topRightText,
+      topContextText: this._chrome.topContextText,
     });
     return lines;
   }

@@ -27,6 +27,8 @@ import { registerThemeSettingsCommand } from "./theme-settings.js";
 import { formatContextBar } from "./footer.js";
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
 import { fmtTokens, formatDuration } from "./format.js";
+import { LiveBorder } from "./live-border.js";
+import { TranscriptTimeline } from "./transcript-timeline.js";
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
  * uses. The authoritative types live in @earendil-works/pi-coding-agent — a
@@ -121,9 +123,20 @@ let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let lastSessionCtx: ExtensionContextLike | null = null;
 let wallTimeHistory: string[] = [];
+const timeline = new TranscriptTimeline({
+	getLastSessionCtx: () => lastSessionCtx,
+	getTuiRef: () => tuiRef,
+});
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
+const liveBorder = new LiveBorder({
+	getEditor: () => installedEditor,
+	getCtx: () => lastSessionCtx as unknown as ExtensionContextLike | null, // SAFETY: pi context seam
+	getConfig: () => currentConfig,
+	telemetryTracker,
+	runActivityTracker,
+});
 const REFRESH_MS = 1000;
 let liveTickTimer: ReturnType<typeof setInterval> | null = null;
 let footerState: FooterState = createInitialState();
@@ -236,104 +249,22 @@ function updateWidget(ctx: ExtensionUIContextLike): void {
 //   User: hello? / Assistant: hi. / <dim timeline> / User: nice ... / Assistant: ... / <dim timeline>
 // This scrolls with history and is not exposed to model (not via sessionManager).
 // Falls back to aboveEditor widget only if chatContainer cannot be found (very early).
-let capturedIM: any = null;
-
-function findChatContainerViaGlobalScan(): any {
-	try {
-		// Scan globalThis and process for any object that looks like InteractiveMode (has chatContainer + addMessageToChat)
-		const seen = new Set<any>();
-		const queue: any[] = [globalThis as any, global as any, process as any];
-		// Also try require.cache if available
-		try {
-			const req: any = (globalThis as any).require ?? (typeof require !== "undefined" ? require : null);
-			if (req?.cache) queue.push(...Object.values(req.cache).map((m: any) => m?.exports).filter(Boolean));
-		} catch {}
-		for (let i = 0; i < queue.length && i < 200; i++) {
-			const obj = queue[i];
-			if (!obj || typeof obj !== "object" || seen.has(obj)) continue;
-			seen.add(obj);
-			try {
-				if (obj.chatContainer && typeof obj.addMessageToChat === "function") return obj;
-				if (obj.chatContainer && obj.ui) return obj;
-			} catch {}
-			try {
-				for (const k of Object.getOwnPropertyNames(obj)) {
-					try {
-						const v = obj[k];
-						if (v && typeof v === "object" && !seen.has(v)) {
-							if (v.chatContainer && typeof v.addMessageToChat === "function") return v;
-							if (queue.length < 500) queue.push(v);
-						}
-					} catch {}
-				}
-			} catch {}
-		}
-	} catch {}
-	return null;
-}
-
-function captureInteractiveMode(): void {
-	try {
-		const tryPatch = (IM: any) => {
-			if (!IM || (IM as any).__timelinePatched) return;
-			(IM as any).__timelinePatched = true;
-			const origAdd = IM.prototype.addMessageToChat;
-			if (origAdd) {
-				IM.prototype.addMessageToChat = function(...args: any[]) {
-					capturedIM = this;
-					return origAdd.apply(this, args);
-				};
-			}
-			const origRebuild = IM.prototype.rebuildChatFromMessages;
-			if (origRebuild) {
-				IM.prototype.rebuildChatFromMessages = function(...args: any[]) {
-					capturedIM = this;
-					const res = origRebuild.apply(this, args);
-					// Re-inject all historical timelines after rebuild (not in sessionManager)
-					try {
-						for (const line of wallTimeHistory) {
-							const theme: any = (this as any).ui?.theme ?? (lastSessionCtx as any)?.ui?.theme;
-							if (!theme) continue;
-							const dimLines = line.split("\n").map((s: string) => theme.fg("dim", s));
-							const spacerComp = { invalidate() {}, render(w: number) { return [""]; } } as any;
-							const textComp = { invalidate() {}, render() { return dimLines; } } as any;
-							(this as any).chatContainer?.addChild(spacerComp);
-							(this as any).chatContainer?.addChild(textComp);
-						}
-						(this as any).ui?.requestRender?.();
-					} catch {}
-					return res;
-				};
-			}
-		};
-		// Try multiple import paths for robustness (global install vs local)
-		const candidates = [
-			"/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
-			"/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
-			"/opt/homebrew/lib/node_modules/@earendil-works/pi-agent-core/dist/modes/interactive/interactive-mode.js",
-		];
-		for (const p of candidates) {
-			import(p).then((mod: any) => tryPatch(mod.InteractiveMode)).catch(() => {});
-		}
-		// Also try package-name resolve (may work if pi-coding-agent is resolvable)
-		import("@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js" as any).then((mod: any) => tryPatch(mod.InteractiveMode)).catch(() => {});
-		// @ts-ignore
-		(globalThis as any).__piTimelineIM = () => capturedIM ?? findChatContainerViaGlobalScan();
-	} catch {}
-}
-captureInteractiveMode();
-
 function formatDateTimeWithTimezone(d: Date = new Date()): string {
 	try {
 		// e.g. 2026-05-13 14:30:00 GMT+8  (local timezone, short name)
 		const fmt = new Intl.DateTimeFormat("en-CA", {
-			year: "numeric", month: "2-digit", day: "2-digit",
-			hour: "2-digit", minute: "2-digit", second: "2-digit",
-			hour12: false, timeZoneName: "short",
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+			hour12: false,
+			timeZoneName: "short",
 		});
 		const parts = fmt.formatToParts(d);
-		const get = (type: string) => parts.find(p => p.type === type)?.value ?? "";
-		const tz = parts.find(p => p.type === "timeZoneName")?.value ?? "";
+		const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+		const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
 		// en-CA gives YYYY-MM-DD, HH:MM:SS
 		return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
 	} catch {
@@ -341,48 +272,26 @@ function formatDateTimeWithTimezone(d: Date = new Date()): string {
 	}
 }
 
-function injectTimelineDimLine(ctx: ExtensionUIContextLike, rawLine: string): void {
-	wallTimeHistory.push(rawLine);
-	const theme: any = (ctx as any).theme ?? (lastSessionCtx as any)?.ui?.theme;
-	// Support multi-line (two-line timeline per user spec): split on \n and dim each
-	const dimLines = rawLine.split("\n").map(l => theme ? theme.fg("dim", l) : l);
-	let injected = false;
-	try {
-		const im: any = capturedIM ?? (globalThis as any).__piTimelineIM?.() ?? findChatContainerViaGlobalScan();
-		if (im?.chatContainer) {
-			capturedIM = im;
-			const spacerComp = { invalidate() {}, render(w: number) { return [""]; } } as any;
-			const textComp = { invalidate() {}, render() { return dimLines; } } as any;
-			im.chatContainer.addChild(spacerComp);
-			im.chatContainer.addChild(textComp);
-			im.ui?.requestRender?.();
-			if (im?.transcriptScrollView?.scrollTo) {
-				try { im.transcriptScrollView.scrollTo({ follow: "end" } as any); } catch {}
-			}
-			injected = true;
-		}
-	} catch {}
-	if (injected) return;
-	// Fallback: aboveEditor widget (very early, before chatContainer captured)
-	try {
-		const snapshot = [...wallTimeHistory];
-		ctx.setWidget("wall-time", (tui) => {
-			tuiRef = tui as unknown as typeof tuiRef;
-			return {
-				invalidate() {},
-				render() {
-					const th: any = (ctx as any).theme;
-					return snapshot.flatMap((l) => l.split("\n").map(s => th.fg("dim", s)));
-				},
-			};
-		}, { placement: "aboveEditor" });
-		tuiRef?.requestRender();
-	} catch {}
+function injectTimelineDimLine(
+	ctx: ExtensionUIContextLike,
+	rawLine: string,
+): void {
+	timeline.inject(
+		ctx as unknown as {
+			// SAFETY: pi widget seam
+			setWidget: (k: string, c: unknown, o?: unknown) => void;
+			theme?: unknown;
+		},
+		rawLine,
+	);
+	// keep legacy array in sync for any external read (deprecated)
+	wallTimeHistory = timeline.getHistory();
 }
-
 function clearTimelineHistory(ctx?: ExtensionUIContextLike): void {
+	timeline.clear(
+		ctx as unknown as { setWidget: (k: string, c: unknown) => void } | undefined, // SAFETY: widget clear seam
+	);
 	wallTimeHistory = [];
-	try { ctx?.setWidget("wall-time", undefined); } catch {}
 }
 
 /** shift+up/down handler: scroll the detail window one line, clamped. */
@@ -414,115 +323,30 @@ function modelInfoOf(ctx: ExtensionContextLike): ModelInfo {
 
 /** Real-time: refresh the top-right run-activity border (turn · duration · tools · failed). */
 function refreshTopBorder(): void {
-	if (!installedEditor || !lastSessionCtx) return;
-	try {
-		const theme = lastSessionCtx.ui.theme as unknown as {
-			fg(s: string, t: string): string;
-		};
-		const snap = runActivityTracker.getSnapshot();
-		const text = formatRunActivityTopRight(snap, theme as never);
-		installedEditor.setTopRightText(text);
-	} catch {
-		void 0;
-	}
+	// Deepened: LiveBorder owns top+context+telemetry coalesced — locality via one seam
+	liveBorder.render();
 }
 
 /** Real-time: refresh the bottom telemetry border from live peek. */
 function refreshLiveTelemetry(): void {
-	if (!installedEditor || !currentConfig.telemetry.enabled) return;
-	try {
-		const live = telemetryTracker.peekLive() ?? telemetryTracker.getLastTelemetry();
-		if (!live) return;
-		const theme = (lastSessionCtx as unknown as { ui?: { theme?: unknown } })?.ui
-			?.theme;
-		const text = formatTurnTelemetry(
-			live,
-			theme as never,
-			currentConfig.telemetry,
-		);
-		// Only show live telemetry while a turn is actually running; otherwise keep last final
-		if (live.totalMs > 0) installedEditor.setTelemetryText(text);
-	} catch {
-		void 0;
-	}
+	// Deepened: LiveBorder coalesces telemetry with top/context — leverage via one interface
+	liveBorder.render();
 }
 
 function refreshContextBar(): void {
-	if (!installedEditor || !lastSessionCtx) return;
-	if (!currentConfig.footerSegments.context) {
-		installedEditor.setTopContextText("");
-		return;
-	}
-	try {
-		const ctxAny = lastSessionCtx as unknown as {
-			getContextUsage?: () => {
-				percent?: number;
-				tokens?: number;
-				contextWindow?: number;
-			};
-		};
-		const usage = ctxAny.getContextUsage?.();
-		if (!usage || !usage.contextWindow) {
-			installedEditor.setTopContextText("");
-			return;
-		}
-		const theme = lastSessionCtx.ui.theme as unknown as any;
-		const glyphs = resolveGlyphs(currentConfig.icons.mode);
-		const isAscii = resolveIconMode(currentConfig.icons.mode) === "ascii";
-		let cacheHitRate: number | undefined;
-		try {
-			const totals = getUsageTotals(
-				lastSessionCtx as unknown as {
-					sessionManager?: {
-						getEntries(): {
-							type: string;
-							message?: {
-								role: string;
-								usage?: {
-									input?: number;
-									output?: number;
-									cacheRead?: number;
-									cacheWrite?: number;
-									cost?: { total?: number };
-								};
-							};
-						}[];
-					};
-				},
-			);
-			cacheHitRate = totals.latestCacheHitRate;
-		} catch {
-			void 0;
-		}
-		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10, cacheHitRate, currentConfig.contextIconBar);
-		installedEditor.setTopContextText(text);
-	} catch {
-		void 0;
-	}
+	// Deepened: LiveBorder owns context bar derivation (glyphs, cacheHit, usage) — depth hides resolveGlyphs/formatContextBar
+	liveBorder.render();
 }
 
 function startLiveTick(): void {
+	liveBorder.startTick();
+	// keep legacy timer for watchTimer fallback — now owned by LiveBorder, legacy liveTickTimer stays null
 	if (liveTickTimer !== null) return;
-	liveTickTimer = setInterval(() => {
-		if (runActivityTracker.isRunning()) {
-			refreshTopBorder();
-			refreshLiveTelemetry();
-			refreshContextBar();
-		} else {
-			refreshContextBar();
-		}
-	}, REFRESH_MS);
-	// don't block process exit
-	if (
-		liveTickTimer &&
-		typeof (liveTickTimer as unknown as { unref?: () => void }).unref ===
-			"function"
-	) {
-		(liveTickTimer as unknown as { unref(): void }).unref();
-	}
+	liveTickTimer = null; // delegated
 }
 
 function stopLiveTick(): void {
+	liveBorder.stopTick();
 	if (liveTickTimer !== null) {
 		clearInterval(liveTickTimer);
 		liveTickTimer = null;
@@ -862,10 +686,18 @@ export default function (pi: ExtensionAPILike): void {
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
 	pi.on("session_shutdown", () => {
 		if (lastSessionCtx) {
-			try { clearTimelineHistory(lastSessionCtx.ui as unknown as ExtensionUIContextLike); } catch {}
+			try {
+				clearTimelineHistory(
+					lastSessionCtx.ui as unknown as ExtensionUIContextLike,
+				);
+			} catch {}
 		}
 		agentStartMs = null;
-		footerState = { ...footerState, workingSince: undefined, lastDoneIn: undefined };
+		footerState = {
+			...footerState,
+			workingSince: undefined,
+			lastDoneIn: undefined,
+		};
 		stopLiveTick();
 		runActivityTracker.reset();
 		installedEditor?.setTopRightText("");
@@ -916,7 +748,11 @@ export default function (pi: ExtensionAPILike): void {
 		runActivityTracker.startRun();
 		// timeline stays permanently between each run — do not hide on start
 		agentStartMs = Date.now();
-		footerState = { ...footerState, workingSince: agentStartMs, lastDoneIn: undefined };
+		footerState = {
+			...footerState,
+			workingSince: agentStartMs,
+			lastDoneIn: undefined,
+		};
 		startLiveTick();
 		refreshAllLive();
 	});
@@ -970,15 +806,25 @@ export default function (pi: ExtensionAPILike): void {
 		stopLiveTick();
 		if (agentStartMs !== null) {
 			const doneIn = Date.now() - agentStartMs;
-			footerState = { ...footerState, workingSince: undefined, lastDoneIn: doneIn };
+			footerState = {
+				...footerState,
+				workingSince: undefined,
+				lastDoneIn: doneIn,
+			};
 			agentStartMs = null;
 		} else {
 			footerState = { ...footerState, workingSince: undefined };
 		}
 		// dimmed timeline between each agent run — TUI-only, not via sessionManager, left-aligned dim in chatContainer
 		try {
-			if (lastSessionCtx && footerState.lastDoneIn !== undefined && currentConfig.timeline.enabled) {
-				const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
+			if (
+				lastSessionCtx &&
+				footerState.lastDoneIn !== undefined &&
+				currentConfig.timeline.enabled
+			) {
+				const totals = getUsageTotals(
+					lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0],
+				);
 				const glyphs = resolveGlyphs(currentConfig.icons.mode);
 				const snap = runActivityTracker.getSnapshot();
 				// Line 1: <datetime with timezone> · 11s · ↑ 495 · ↓ 708 · <cache rate> · $0.00
@@ -999,15 +845,20 @@ export default function (pi: ExtensionAPILike): void {
 				}
 				// cache rate always per spec
 				line1Parts.push(cacheStr);
-				if (currentConfig.timeline.cost) line1Parts.push(`$${totals.cost.toFixed(2)}`);
+				if (currentConfig.timeline.cost)
+					line1Parts.push(`$${totals.cost.toFixed(2)}`);
 				else line1Parts.push(`$${totals.cost.toFixed(2)}`);
 				const line1 = line1Parts.join(" · ");
 				// Line 2: <turn number> · <tools calling num> · <tools calling failure num>
 				const turnNum = snap.turnNumber ?? 1;
-				const totalTools = snap.completedCount + snap.failedCount + snap.activeTools;
+				const totalTools =
+					snap.completedCount + snap.failedCount + snap.activeTools;
 				const line2 = `${turnNum} turns · ${totalTools} tools · ${snap.failedCount} failed`;
 				const wallText = `${line1}\n${line2}`;
-				injectTimelineDimLine(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
+				injectTimelineDimLine(
+					lastSessionCtx.ui as unknown as ExtensionUIContextLike,
+					wallText,
+				);
 			}
 		} catch {}
 		// final settled telemetry overwrites live peek with authoritative totals

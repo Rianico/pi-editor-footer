@@ -4,6 +4,10 @@ import { ConfigStore } from "./config.js";
 import { FooterController } from "./footer-controller.js";
 import type { ModelInfo } from "./model-info.js";
 import { TurnTelemetryTracker } from "./telemetry.js";
+import {
+  createRunActivityTracker,
+  type RunActivityTracker,
+} from "./run-activity.js";
 import { renderDetail, scroll } from "./detail-render.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 import type { TrackingEditor } from "./tracking-editor.js";
@@ -48,6 +52,9 @@ export class SessionKernel {
   private footerController: FooterController;
   private readonly telemetryTracker: TurnTelemetryTracker;
   private readonly configStore: ConfigStore;
+  private readonly runActivityTracker: RunActivityTracker;
+  private agentStartMs: number | null = null;
+  private lastSessionCtx: unknown | null = null;
   private currentModelInfo: ModelInfo = {
     provider: "",
     modelId: "unknown",
@@ -61,6 +68,7 @@ export class SessionKernel {
       footerController?: FooterController;
       getCwd?: () => string;
       telemetryTracker?: TurnTelemetryTracker;
+      runActivityTracker?: RunActivityTracker;
     } = {},
   ) {
     this.configStore = opts.configStore ?? new ConfigStore();
@@ -68,6 +76,8 @@ export class SessionKernel {
       opts.footerController ??
       new FooterController({ getCwd: opts.getCwd ?? (() => process.cwd()) });
     this.telemetryTracker = opts.telemetryTracker ?? new TurnTelemetryTracker();
+    this.runActivityTracker =
+      opts.runActivityTracker ?? createRunActivityTracker();
   }
 
   // Detail window — previously kindOf/detailItemOf/contentLinesFrom/makeWidget/installWidget/updateWidget/scrollWindow scattered in index.ts
@@ -166,6 +176,26 @@ export class SessionKernel {
     return this.telemetryTracker;
   }
 
+  getRunActivityTracker(): RunActivityTracker {
+    return this.runActivityTracker;
+  }
+
+  getAgentStartMs(): number | null {
+    return this.agentStartMs;
+  }
+
+  setAgentStartMs(v: number | null): void {
+    this.agentStartMs = v;
+  }
+
+  getLastSessionCtx(): unknown | null {
+    return this.lastSessionCtx;
+  }
+
+  setLastSessionCtx(ctx: unknown | null): void {
+    this.lastSessionCtx = ctx;
+  }
+
   // Widget render seam — delegates to pure deep modules (renderDetail + decorateWindow)
   renderDetailWindow(
     width: number,
@@ -182,7 +212,7 @@ export class SessionKernel {
     );
     // Window presentation is pure — kernel owns width/scroll, presentation owns border styling
     // Called with live theme from widget's render(width, theme) — kernel doesn't cache theme
-    return { lines, innerWidth } as unknown as string[]; // placeholder — actual decorate happens in widget factory using lines
+    return { lines, innerWidth } as unknown as string[]; // SAFETY: placeholder shape validated in makeDetailWidget // SAFETY: internal seam — actual decorate happens in widget factory using lines
   }
 
   // Convenience for widget factory — returns decorated window lines
@@ -218,5 +248,7 @@ export class SessionKernel {
     this.installedEditor = null;
     this.currentItem = null;
     this.scrollOffset = 0;
+    this.agentStartMs = null;
+    this.lastSessionCtx = null;
   }
 }

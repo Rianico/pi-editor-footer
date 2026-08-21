@@ -21,64 +21,10 @@ import {
   formatCwd,
   truncatePath,
 } from "./path-format.js";
-import {
-  cacheHitColor,
-  effortColor,
-  providerColor,
-  stressColor,
-} from "./color-policy.js";
 import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
+// ChromeState owns context bar formatting — re-export for backward compat.
+export { formatContextBar } from "./chrome-state.js";
 
-function renderBar(
-  theme: Theme,
-  pct: number,
-  barWidth: number,
-  ascii: boolean,
-): string {
-  const filled = Math.max(
-    0,
-    Math.min(barWidth, Math.round((pct / 100) * barWidth)),
-  );
-  const empty = barWidth - filled;
-  const color = stressColor(pct);
-  const filledCell = ascii ? "#" : "█";
-  const emptyCell = ascii ? "-" : "░";
-  return (
-    theme.fg("dim", "[") +
-    theme.fg(color, filledCell.repeat(filled)) +
-    theme.fg("dim", emptyCell.repeat(empty)) +
-    theme.fg("dim", "]")
-  );
-}
-
-export function formatContextBar(
-  contextUsage:
-    | { percent?: number; tokens?: number; contextWindow?: number }
-    | undefined,
-  theme: Theme,
-  glyphs: IconGlyphs,
-  isAscii: boolean,
-  barWidth = 10,
-  cacheHitRate?: number,
-  showIconBar = false,
-): string {
-  const contextWindow = contextUsage?.contextWindow ?? 0;
-  if (contextWindow <= 0) return "";
-  const contextPct = contextUsage?.percent ?? 0;
-  const pctText = theme.fg(
-    stressColor(contextPct),
-    `${contextPct.toFixed(1)}%`,
-  );
-  const contextTokens = contextUsage?.tokens ?? 0;
-  const ctxText = `${theme.fg("text", fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg("text", fmtTokens(contextWindow))}`;
-  const baseCore = `${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
-  const base = showIconBar
-    ? `${theme.fg(stressColor(contextPct), glyphs.context)} ${renderBar(theme, contextPct, barWidth, isAscii)} ${baseCore}`
-    : baseCore;
-  const rate = cacheHitRate !== undefined && Number.isFinite(cacheHitRate) ? cacheHitRate : 0;
-  const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;
-  return `${base} ${theme.fg("dim", "|")} ${theme.fg(cacheHitColor(rate), cacheText)}`;
-}
 
 function renderGitSegment(
   theme: Theme,
