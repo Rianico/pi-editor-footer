@@ -56,6 +56,7 @@ export class TrackingEditor extends Editor {
   private telemetryText = "";
   private bottomLeftText = "";
   private topRightText = "";
+  private topContextText = "";
 
   constructor(
     tui: TUI,
@@ -125,6 +126,15 @@ export class TrackingEditor extends Editor {
   getTopRightText(): string {
     return this.topRightText;
   }
+
+  setTopContextText(text: string): void {
+    this.topContextText = text;
+    this.tui.requestRender();
+  }
+
+  getTopContextText(): string {
+    return this.topContextText;
+  }
   private patchApplyAutocompleteSuggestions(): void {
     const internals = this as unknown as EditorInternals;
     const original = internals.applyAutocompleteSuggestions;
@@ -172,6 +182,7 @@ export class TrackingEditor extends Editor {
       telemetryText: this.telemetryText,
       bottomLeftText: this.bottomLeftText,
       topRightText: this.topRightText,
+      topContextText: this.topContextText,
     });
     return lines;
   }

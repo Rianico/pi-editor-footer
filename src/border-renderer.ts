@@ -1,6 +1,7 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
   applyModelInfo,
+  buildLabel,
   type ModelInfo,
   type ThemeLike,
 } from "./model-info.js";
@@ -33,38 +34,56 @@ export class BorderRenderer {
       telemetryText?: string;
       bottomLeftText?: string;
       topRightText?: string;
+      topContextText?: string;
     },
   ): string[] {
     let out = [...lines];
     if (out.length === 0) return out;
 
-    // Top glow + label (+ optional right side for run activity)
-    if (opts.glowEnabled || opts.topRightText) {
+    // Top: model info left, context bar right of it, run-activity far right
+    const hasTop = opts.glowEnabled || opts.topRightText || opts.topContextText;
+    if (hasTop) {
+      const theme = this.getLiveTheme();
+      const info = this.getModelInfo();
+      const glow = (s: string): string => {
+        try {
+          const maybeGlow = (
+            theme as unknown as {
+              getThinkingBorderColor?: (l: string) => (s: string) => string;
+            }
+          ).getThinkingBorderColor;
+          if (typeof maybeGlow === "function")
+            return maybeGlow.call(theme, info.level)(s);
+        } catch {
+          // ignore
+        }
+        return s;
+      };
       if (opts.glowEnabled) {
-        out = applyModelInfo(
-          out,
-          width,
-          this.getLiveTheme(),
-          this.getModelInfo(),
-        );
-      }
-      if (opts.topRightText) {
-        const theme = this.getLiveTheme();
-        const glow = (s: string): string => {
-          try {
-            const maybeGlow = (
-              theme as unknown as {
-                getThinkingBorderColor?: (l: string) => (s: string) => string;
-              }
-            ).getThinkingBorderColor;
-            if (typeof maybeGlow === "function")
-              return maybeGlow.call(theme, this.getModelInfo().level)(s);
-          } catch {
-            // ignore
-          }
-          return s;
-        };
-        out = embedTopRightBorder(out, width, opts.topRightText, glow);
+        // Build left label; if context bar present, append it to the right of model info
+        let leftLabel = buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow);
+        if (opts.topContextText) {
+          leftLabel = `${leftLabel}  ${opts.topContextText}`;
+        }
+        // Embed left (model+context) and optional right (run activity) in one pass to avoid double-truncate
+        if (opts.topRightText) {
+          out = embedTopWithLeftAndRight(out, width, leftLabel, opts.topRightText, glow);
+        } else {
+          // Only left (model+context), no right — use applyModelInfo replacement but with combined left
+          // Reuse embedTopWithLeftAndRight with empty right
+          out = embedTopWithLeftAndRight(out, width, leftLabel, "", glow);
+        }
+      } else if (opts.topContextText || opts.topRightText) {
+        // No glow, but still need top borders for context/run activity
+        const left = opts.topContextText ?? "";
+        const right = opts.topRightText ?? "";
+        if (left && right) {
+          out = embedTopWithLeftAndRight(out, width, left, right, glow);
+        } else if (left) {
+          out = embedTopRightBorder(out, width, left, glow);
+        } else if (right) {
+          out = embedTopRightBorder(out, width, right, glow);
+        }
       }
     }
     // Bottom embedding (telemetry left/right)
@@ -94,6 +113,37 @@ export class BorderRenderer {
     }
     return out;
   }
+}
+
+function embedTopWithLeftAndRight(
+  lines: string[],
+  width: number,
+  leftText: string,
+  rightText: string,
+  getGlow: (s: string) => string,
+): string[] {
+  if (lines.length === 0) return lines;
+  const top = lines[0] ?? "";
+  const plainTop = stripAnsi(top);
+  if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
+  const leftW = leftText ? visibleWidth(leftText) : 0;
+  const rightW = rightText ? visibleWidth(rightText) : 0;
+  const maxLeft = rightText ? Math.max(0, width - rightW - 6) : width - 3;
+  const maxRight = leftText ? Math.max(0, width - leftW - 6) : width - 3;
+  let displayLeft = leftText;
+  let displayRight = rightText;
+  if (leftW > maxLeft) displayLeft = truncateToWidth(leftText, maxLeft, "");
+  if (rightW > maxRight) displayRight = truncateToWidth(rightText, maxRight, "");
+  const leftSegment = displayLeft ? `${getGlow("─")} ${displayLeft} ` : getGlow("─");
+  const rightSegment = displayRight ? ` ${displayRight} ${getGlow("─")}` : getGlow("─");
+  const used = visibleWidth(leftSegment) + visibleWidth(rightSegment);
+  const middleWidth = Math.max(0, width - used);
+  const middle = getGlow("─".repeat(middleWidth));
+  const embedded = `${leftSegment}${middle}${rightSegment}`;
+  const result = [...lines];
+  result[0] = truncateToWidth(embedded, width, "");
+  if (visibleWidth(embedded) !== width) result[0] = embedded;
+  return result;
 }
 
 function embedBottomBorder(

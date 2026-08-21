@@ -7,16 +7,19 @@ All notable changes to this project will be documented in this file.
 ## [0.2.0] - 2026-08-21
 
 ### Added
+
 - Real-time telemetry via `TurnTelemetryTracker.peekLive()` and 1 s live tick — bottom border `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` refreshes on every `agent/turn/message/tool` event during streaming
 - Top-border run activity `T1 · 8s · 2 tools · 1 failed` via `RunActivityTracker` (turn · duration · tool calls · failed) adapted from `pi-atelier/src/run-activity.ts`
 - Context bar moved to left bottom border `── # [#####-------] 39.6% · 416k/1.0M ──` (`formatContextBar` helper, `barWidth 10`, theme-aware, respects `footerSegments.context`, live-updates)
 - Architecture deepening: split `utils.ts` into 5 focused modules (`path-format`, `color-policy`, `format`, `layout`, `tip-policy`), deepened `ConfigStore`, `Footer`, `TrackingEditor` (`BorderRenderer`/`CursorPolicy`), `SessionKernel` (candidates 1–5)
 
 ### Changed
+
 - Footer no longer renders context (moved to border); right block is now just stats (`↑`/`↓`/`$`)
 - Context window `formatContextWindow` now `1.0M` (was `1m` lowercase no decimal) to match `fmtTokens` (`362k/1.0M`)
 
 ### Fixed
+
 - Streaming `TPS — | ↓ 0` until `turn_end` — now estimates live tokens (`~4 chars/token`) and shows live `TPS`/`↓` during `message_update`
 - Cost duplicate `$ $0.16/M` → `$0.16` (single `$` when glyph is `$`, nerd keeps ` $0.16`) and hid `per M` suffix as common sense
 - Cost duplicate in footer `$ $0.000` → `$0.000`
@@ -25,16 +28,16 @@ All notable changes to this project will be documented in this file.
 ## [0.1.2] - 2026-08-20
 
 ### Fixed
+
 - `npm:pi-editor-footer` not being discovered when installed via `pi install npm:pi-editor-footer` — added `pi.extensions` (`dist/index.js`) and `keywords` so pi loads the theme from `~/.pi/agent/npm/node_modules`
 
 ## [0.1.1] - 2026-08-20
 
-
 ### Fixed
+
 - `npm:pi-editor-footer` now works when installed via `pi install npm:pi-editor-footer` — added `main` (`dist/index.js`), `files`, and `build` (`tsc --project tsconfig.build.json`) so pi can discover the extension from `~/.pi/agent/npm/node_modules`
 
 ## [0.1.0] - 2026-08-20
-
 
 ### Added
 

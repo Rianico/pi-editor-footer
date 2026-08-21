@@ -236,7 +236,7 @@ function formatContextWindow(tokens: number): string {
 	return `${Number.isInteger(k) ? k : k.toFixed(1)}k`;
 }
 
-function buildLabel(
+export function buildLabel(
 	theme: ThemeLike,
 	provider: string,
 	modelId: string,

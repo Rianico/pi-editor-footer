@@ -292,7 +292,7 @@ function refreshLiveTelemetry(): void {
 function refreshContextBar(): void {
 	if (!installedEditor || !lastSessionCtx) return;
 	if (!currentConfig.footerSegments.context) {
-		installedEditor.setBottomLeftText("");
+		installedEditor.setTopContextText("");
 		return;
 	}
 	try {
@@ -305,14 +305,14 @@ function refreshContextBar(): void {
 		};
 		const usage = ctxAny.getContextUsage?.();
 		if (!usage || !usage.contextWindow) {
-			installedEditor.setBottomLeftText("");
+			installedEditor.setTopContextText("");
 			return;
 		}
 		const theme = lastSessionCtx.ui.theme as unknown as any;
 		const glyphs = resolveGlyphs(currentConfig.icons.mode);
 		const isAscii = resolveIconMode(currentConfig.icons.mode) === "ascii";
 		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10);
-		installedEditor.setBottomLeftText(text);
+		installedEditor.setTopContextText(text);
 	} catch {
 		void 0;
 	}
