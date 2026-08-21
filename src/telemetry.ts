@@ -491,13 +491,16 @@ export function formatTurnTelemetry(
     const num = telemetry.tps === null ? "—" : telemetry.tps.toFixed(1);
     const padded = num.padStart(6, " ");
     parts.push(
-      theme.fg(telemetry.tps === null ? "muted" : "accent", `${padded} TPS`),
+      theme.fg(
+        telemetry.tps === null ? "muted" : "accent",
+        `${padded} tok/s TPS`,
+      ),
     );
   }
   if (config.ttft) {
     const sec = (telemetry.ttftMs / 1000).toFixed(1);
     const padded = sec.padStart(4, " ");
-    parts.push(theme.fg("text", `${padded} TTFT`));
+    parts.push(theme.fg("text", `${padded}s TTFT`));
   }
   if (config.duration) {
     // duration fixed width 7 (e.g. " 15m 31s" / " 24h 21m" / "   5.0s")

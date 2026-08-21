@@ -19,6 +19,7 @@ import { resolveGlyphs, resolveIconMode } from "./icons.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
 import { formatTelemetryTokens, formatTurnTelemetry } from "./telemetry.js";
+import type { TurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
 import type { TrackingEditor } from "./tracking-editor.js";
@@ -161,39 +162,58 @@ export class LiveBorder {
         ctx as unknown as Parameters<typeof createChromeSnapshot>[0],
         undefined,
       );
-      if (!snapshot.contextUsage || !snapshot.contextUsage.contextWindow) {
-        editor.setTopContextText("");
-        return;
-      }
       // SAFETY: pi seam - theme from extension context
       const theme = (ctx as unknown as { ui: { theme: unknown } }).ui
         .theme as unknown as never;
       const glyphs = resolveGlyphs(cfg.icons.mode);
       const isAscii = resolveIconMode(cfg.icons.mode) === "ascii";
-      let text = formatTopContextFromSnapshot(
-        snapshot,
-        theme as never,
-        glyphs,
-        isAscii,
-        (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ??
-          false,
-      );
+      let text = "";
+      if (snapshot.contextUsage && snapshot.contextUsage.contextWindow) {
+        text = formatTopContextFromSnapshot(
+          snapshot,
+          theme as never,
+          glyphs,
+          isAscii,
+          (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ??
+            false,
+        );
+      }
       // Append input/output tokens to the right of cache using | separator
+      // At start time show default ↑ 0 · ↓ 0 even when no live telemetry yet
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
         // SAFETY: pi TUI seam - telemetry tokens for top context
         const live =
           this.deps.telemetryTracker.peekLive() ??
           this.deps.telemetryTracker.getLastTelemetry();
-        if (live && live.totalMs > 0) {
-          const tokensText = formatTelemetryTokens(
+        let tokensText: string;
+        if (live) {
+          tokensText = formatTelemetryTokens(
             live,
             theme as never,
             cfg.telemetry,
             glyphs as never,
           );
-          if (tokensText) {
+        } else {
+          // default at start time
+          // SAFETY: dummy telemetry default tokens at start (↑0·↓0)
+          const dummy = {
+            inputTokens: 0,
+            outputTokens: 0,
+            // SAFETY: dummy telemetry default tokens at start (↑0·↓0)
+          } as unknown as TurnTelemetry;
+          tokensText = formatTelemetryTokens(
+            dummy,
+            theme as never,
+            cfg.telemetry,
+            glyphs as never,
+          );
+        }
+        if (tokensText) {
+          if (text) {
             // SAFETY: pi seam - theme fg for pipe separator
-            text = `${text} ${(theme as unknown as { fg: (c: string, t: string) => string }).fg("dim", "|")} ${tokensText}`;
+            text = `${text} ${(theme as unknown as { fg: (c: string, t: string) => string }).fg("dim", "|")} ${tokensText}`; // SAFETY: pi seam - theme fg for pipe separator
+          } else {
+            text = tokensText;
           }
         }
       }
