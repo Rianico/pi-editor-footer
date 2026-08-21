@@ -11,9 +11,8 @@
  * getUsageTotals. One coalesced render per tick/event — not per-delta.
  */
 
-import { formatContextBar } from "./chrome-state.js";
+import { createChromeSnapshot, formatTopContextFromSnapshot } from "./chrome-state.js";
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
-import { getUsageTotals } from "./state.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
 import { formatTurnTelemetry } from "./telemetry.js";
@@ -129,35 +128,22 @@ export class LiveBorder {
       return;
     }
     try {
-      // SAFETY: getContextUsage is pi runtime extension — may be absent in tests
-      const ctxAny = ctx as unknown as { // SAFETY: pi seam
-        getContextUsage?: () => { percent?: number; tokens?: number; contextWindow?: number };
-      };
-      const usage = ctxAny.getContextUsage?.();
-      if (!usage || !usage.contextWindow) {
+      // Deepened via ChromeState: snapshot owns contextUsage + totals derivation behind one seam.
+      // Two adapters (footer + border) now share the same snapshot — proves the seam.
+      const snapshot = createChromeSnapshot(ctx as unknown as Parameters<typeof createChromeSnapshot>[0], undefined); // SAFETY: pi seam
+      if (!snapshot.contextUsage || !snapshot.contextUsage.contextWindow) {
         editor.setTopContextText("");
         return;
       }
-      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui.theme as unknown as never; // SAFETY: pi TUI seam read-only
+      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui.theme as unknown as never; // SAFETY: pi seam
       const glyphs = resolveGlyphs(cfg.icons.mode);
       const isAscii = resolveIconMode(cfg.icons.mode) === "ascii";
-      let cacheHitRate: number | undefined;
-      try {
-        const totals = getUsageTotals(
-          ctx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi TUI seam read-only
-        );
-        cacheHitRate = totals.latestCacheHitRate;
-      } catch {
-        // ignore
-      }
-      const text = formatContextBar(
-        usage,
+      const text = formatTopContextFromSnapshot(
+        snapshot,
         theme as never,
         glyphs,
         isAscii,
-        10,
-        cacheHitRate,
-        (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ?? false, // SAFETY: pi TUI seam read-only
+        (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ?? false, // SAFETY: pi seam
       );
       editor.setTopContextText(text);
     } catch {
