@@ -5,7 +5,7 @@ import {
 	type EditorTheme,
 	type KeybindingsManager,
 	type SelectItem,
-	type TUI
+	type TUI,
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
 import { installFooter } from "./footer.js";
@@ -121,7 +121,7 @@ let lastSessionCtx: ExtensionContextLike | null = null;
 let wallTimeHistory: string[] = [];
 const timeline = new TranscriptTimeline({
 	getLastSessionCtx: () => lastSessionCtx,
-	getTuiRef: () => tuiRef
+	getTuiRef: () => tuiRef,
 });
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
@@ -131,7 +131,7 @@ const liveBorder = new LiveBorder({
 	getCtx: () => lastSessionCtx as unknown as ExtensionContextLike | null, // SAFETY: pi context seam
 	getConfig: () => currentConfig,
 	telemetryTracker,
-	runActivityTracker
+	runActivityTracker,
 });
 const REFRESH_MS = 1000;
 let liveTickTimer: ReturnType<typeof setInterval> | null = null;
@@ -141,7 +141,7 @@ let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
 	level: "off",
-	contextWindow: 0
+	contextWindow: 0,
 };
 
 /** Kind tag for the header — derived from the candidate's command prefix. */
@@ -153,8 +153,8 @@ function detailItemOf(item: SelectItem): DetailItem {
 	return {
 		label: item.label,
 		kind: kindOf(item.value),
-		description: item.description ?? ""
-};
+		description: item.description ?? "",
+	};
 }
 
 /**
@@ -188,8 +188,8 @@ function makeWidget(ctx: ExtensionUIContextLike): Component {
 		return {
 			border: (s) => t.fg("border", s),
 			highlight: (s) => t.fg("accent", t.bold(s)),
-			dim: (s) => t.fg("dim", s)
-};
+			dim: (s) => t.fg("dim", s),
+		};
 	};
 	return {
 		invalidate(): void {
@@ -209,8 +209,8 @@ function makeWidget(ctx: ExtensionUIContextLike): Component {
 				scrollOffset,
 			);
 			return decorateWindow(lines, width, themeOf(ctx.theme));
-		}
-};
+		},
+	};
 }
 
 function installWidget(ctx: ExtensionUIContextLike): void {
@@ -256,8 +256,8 @@ function formatDateTimeWithTimezone(d: Date = new Date()): string {
 			minute: "2-digit",
 			second: "2-digit",
 			hour12: false,
-			timeZoneName: "short"
-});
+			timeZoneName: "short",
+		});
 		const parts = fmt.formatToParts(d);
 		const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
 		const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
@@ -273,7 +273,8 @@ function injectTimelineDimLine(
 	rawLine: string,
 ): void {
 	timeline.inject(
-		ctx as unknown as { // SAFETY: pi seam
+		ctx as unknown as {
+			// SAFETY: pi seam
 			// SAFETY: pi widget seam
 			setWidget: (k: string, c: unknown, o?: unknown) => void;
 			theme?: unknown;
@@ -313,8 +314,8 @@ function modelInfoOf(ctx: ExtensionContextLike): ModelInfo {
 		provider: ctx.model?.provider ?? "",
 		modelId: ctx.model?.id ?? "unknown",
 		level: ctx.thinkingLevel ?? "off",
-		contextWindow: ctx.model?.contextWindow ?? 0
-};
+		contextWindow: ctx.model?.contextWindow ?? 0,
+	};
 }
 
 /** Real-time: refresh the top-right run-activity border (turn · duration · tools · failed). */
@@ -383,7 +384,8 @@ function installEditor(ctx: ExtensionUIContextLike): void {
  * dialogs and overlays are left alone.
  */
 function ensureEditorOwnership(ctx: ExtensionUIContextLike): void {
-	const tui = tuiRef as unknown as { // SAFETY: pi seam
+	const tui = tuiRef as unknown as {
+		// SAFETY: pi seam
 		getFocusedComponent?: () => unknown;
 	} | null;
 	const focused = tui?.getFocusedComponent?.();
@@ -446,8 +448,8 @@ export default function (pi: ExtensionAPILike): void {
 				`Model info border ${glowEnabled ? "shown" : "hidden"}`,
 				"info",
 			);
-		}
-});
+		},
+	});
 	// Lightweight theme command (identity stub, spec 02) — reads config; full dialog lands later.
 	// pi-lsz-theme settings window (like tui-theme)
 	registerThemeSettingsCommand(pi, {
@@ -473,60 +475,58 @@ export default function (pi: ExtensionAPILike): void {
 							() => ({
 								provider: currentModelInfo.provider,
 								model: currentModelInfo.modelId,
-								effort: currentModelInfo.level
-}),
+								effort: currentModelInfo.level,
+							}),
 							{
 								setRequestRender: (fn) => {
 									(
-										globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-									).__footerRender = fn ?? undefined;
+										globalThis as unknown as { __footerRender?: () => void }
+									).__footerRender = fn ?? undefined; // SAFETY: pi seam
 								},
 								scheduleGitRefresh: () => {
 									void (async () => {
 										try {
 											const cwd =
 												(
-													ctx2 as unknown as { sessionManager?: { getCwd: () => string } } // SAFETY: pi seam
-												).sessionManager?.getCwd?.() ??
+													ctx2 as unknown as { sessionManager?: { getCwd: () => string } }
+												).sessionManager // SAFETY: pi seam
+													?.getCwd?.() ??
 												(ctx2 as unknown as { cwd?: string }).cwd ?? // SAFETY: pi seam
 												process.cwd();
 											const git = await readGitStatus(cwd);
 											footerState = { ...footerState, git } as FooterState;
 											refreshContextBar();
-											(
-												globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-											).__footerRender?.();
+											(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+												.__footerRender?.();
 											const runtime = await readRuntimeInfo(cwd);
 											footerState = { ...footerState, runtime } as FooterState;
-											(
-												globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-											).__footerRender?.();
+											(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+												.__footerRender?.();
 										} catch (_e) {
 											void _e;
 										}
 									})();
-								}
-},
+								},
+							},
 						);
 						// immediate population
 						void (async () => {
 							try {
 								const cwd =
 									(
-										ctx2 as unknown as { sessionManager?: { getCwd: () => string } } // SAFETY: pi seam
-									).sessionManager?.getCwd?.() ??
+										ctx2 as unknown as { sessionManager?: { getCwd: () => string } }
+									).sessionManager // SAFETY: pi seam
+										?.getCwd?.() ??
 									(ctx2 as unknown as { cwd?: string }).cwd ?? // SAFETY: pi seam
 									process.cwd();
 								const git = await readGitStatus(cwd);
 								footerState = { ...footerState, git } as FooterState;
-								(
-									globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-								).__footerRender?.();
+								(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+									.__footerRender?.();
 								const runtime = await readRuntimeInfo(cwd);
 								footerState = { ...footerState, runtime } as FooterState;
-								(
-									globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-								).__footerRender?.();
+								(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+									.__footerRender?.();
 							} catch (_e) {
 								void _e;
 							}
@@ -545,8 +545,8 @@ export default function (pi: ExtensionAPILike): void {
 		},
 		onOverlayClosed: () => {
 			tuiRef?.requestRender();
-		}
-});
+		},
+	});
 	pi.on("session_start", (_event, ctx) => {
 		// Only the interactive TUI has an editor component to replace.
 		if (ctx.mode !== "tui") {
@@ -557,22 +557,22 @@ export default function (pi: ExtensionAPILike): void {
 			shortcutsRegistered = true;
 			pi.registerShortcut("shift+up", {
 				description: "Scroll the pi-skill-desc detail window up",
-				handler: () => scrollWindow(-1)
-});
+				handler: () => scrollWindow(-1),
+			});
 			pi.registerShortcut("shift+down", {
 				description: "Scroll the pi-skill-desc detail window down",
-				handler: () => scrollWindow(1)
-});
+				handler: () => scrollWindow(1),
+			});
 			// Fallbacks that work on every terminal (no Kitty/modified-arrow
 			// protocol needed): ESC+j / ESC+k are universally distinguishable.
 			pi.registerShortcut("alt+j", {
 				description: "Scroll the pi-skill-desc detail window up (fallback)",
-				handler: () => scrollWindow(-1)
-});
+				handler: () => scrollWindow(-1),
+			});
 			pi.registerShortcut("alt+k", {
 				description: "Scroll the pi-skill-desc detail window down (fallback)",
-				handler: () => scrollWindow(1)
-});
+				handler: () => scrollWindow(1),
+			});
 		}
 
 		currentModelInfo = modelInfoOf(ctx);
@@ -599,41 +599,40 @@ export default function (pi: ExtensionAPILike): void {
 						() => ({
 							provider: currentModelInfo.provider,
 							model: currentModelInfo.modelId,
-							effort: currentModelInfo.level
-}),
+							effort: currentModelInfo.level,
+						}),
 						{
 							setRequestRender: (fn) => {
 								(
-									globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-								).__footerRender = fn ?? undefined;
+									globalThis as unknown as { __footerRender?: () => void }
+								).__footerRender = fn ?? undefined; // SAFETY: pi seam
 							},
 							scheduleGitRefresh: () => {
 								void (async () => {
 									try {
 										const cwd =
 											(
-												ctx as unknown as { sessionManager?: { getCwd: () => string } } // SAFETY: pi seam
-											).sessionManager?.getCwd?.() ??
+												ctx as unknown as { sessionManager?: { getCwd: () => string } }
+											).sessionManager // SAFETY: pi seam
+												?.getCwd?.() ??
 											(ctx as unknown as { cwd?: string }).cwd ?? // SAFETY: pi seam
 											process.cwd();
 										const git = await readGitStatus(cwd);
 										footerState = { ...footerState, git } as FooterState;
 										// bottom border left: location + git (right of cwd)
 										refreshContextBar();
-										(
-											globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-										).__footerRender?.();
+										(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+											.__footerRender?.();
 										const runtime = await readRuntimeInfo(cwd);
 										footerState = { ...footerState, runtime } as FooterState;
-										(
-											globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-										).__footerRender?.();
+										(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+											.__footerRender?.();
 									} catch (_e) {
 										void _e;
 									}
 								})();
-							}
-},
+							},
+						},
 					);
 				} catch (_e) {
 					void _e;
@@ -643,21 +642,20 @@ export default function (pi: ExtensionAPILike): void {
 					try {
 						const cwd =
 							(
-								ctx as unknown as { sessionManager?: { getCwd: () => string } } // SAFETY: pi seam
-							).sessionManager?.getCwd?.() ??
+								ctx as unknown as { sessionManager?: { getCwd: () => string } }
+							).sessionManager // SAFETY: pi seam
+								?.getCwd?.() ??
 							(ctx as unknown as { cwd?: string }).cwd ?? // SAFETY: pi seam
 							process.cwd();
 						const git = await readGitStatus(cwd);
 						footerState = { ...footerState, git } as FooterState;
 						refreshContextBar();
-						(
-							globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-						).__footerRender?.();
+						(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+							.__footerRender?.();
 						const runtime = await readRuntimeInfo(cwd);
 						footerState = { ...footerState, runtime } as FooterState;
-						(
-							globalThis as unknown as { __footerRender?: () => void } // SAFETY: pi seam
-						).__footerRender?.();
+						(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
+							.__footerRender?.();
 					} catch (_e) {
 						void _e;
 					}
@@ -692,8 +690,8 @@ export default function (pi: ExtensionAPILike): void {
 		footerState = {
 			...footerState,
 			workingSince: undefined,
-			lastDoneIn: undefined
-};
+			lastDoneIn: undefined,
+		};
 		stopLiveTick();
 		runActivityTracker.reset();
 		installedEditor?.setTopRightText("");
@@ -733,9 +731,9 @@ export default function (pi: ExtensionAPILike): void {
 		if (result && typeof result.isError === "boolean") return result.isError;
 		return false;
 	};
-const refreshAllLive = (): void => {
-	liveBorder.render();
-};
+	const refreshAllLive = (): void => {
+		liveBorder.render();
+	};
 
 	pi.on("agent_start", (e) => {
 		telemetryTracker.handle(e as never);
@@ -745,8 +743,8 @@ const refreshAllLive = (): void => {
 		footerState = {
 			...footerState,
 			workingSince: agentStartMs,
-			lastDoneIn: undefined
-};
+			lastDoneIn: undefined,
+		};
 		startLiveTick();
 		refreshAllLive();
 	});
@@ -803,8 +801,8 @@ const refreshAllLive = (): void => {
 			footerState = {
 				...footerState,
 				workingSince: undefined,
-				lastDoneIn: doneIn
-};
+				lastDoneIn: doneIn,
+			};
 			agentStartMs = null;
 		} else {
 			footerState = { ...footerState, workingSince: undefined };
@@ -859,12 +857,22 @@ const refreshAllLive = (): void => {
 		if (tel && installedEditor && currentConfig.telemetry.enabled) {
 			try {
 				const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam
-				const text = formatTurnTelemetry(
+				const glyphs = resolveGlyphs(currentConfig.icons.mode);
+				const right = formatTurnTelemetry(
 					tel,
 					themeArg as never,
 					currentConfig.telemetry,
+					glyphs as never,
 				);
-				installedEditor.setTelemetryText(text);
+				installedEditor.setTelemetryText(right);
+				installedEditor.setBottomLeftText("");
+			} catch (_e) {
+				void _e;
+			}
+		} else if (installedEditor && !currentConfig.telemetry.enabled) {
+			try {
+				installedEditor.setTelemetryText("");
+				installedEditor.setBottomLeftText("");
 			} catch (_e) {
 				void _e;
 			}

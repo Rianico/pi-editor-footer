@@ -109,40 +109,6 @@ function round(value: number, decimals: number): number {
   return Math.round(value * factor) / factor;
 }
 
-/** Fallback token estimate when pi-coding-agent's estimateTokens is unavailable. ~4 chars per token. */
-function estimateTokensFallback(content: unknown): number {
-  try {
-    if (typeof content === "string")
-      return Math.max(0, Math.ceil(content.length / 4));
-    if (Array.isArray(content)) {
-      let total = 0;
-      for (const block of content) {
-        if (typeof block === "string")
-          total += Math.ceil((block as string).length / 4);
-        else if (block && typeof block === "object") {
-          const b = block as Record<string, unknown>;
-          if (typeof b.text === "string")
-            total += Math.ceil((b.text as string).length / 4);
-          else if (typeof b.content === "string")
-            total += Math.ceil((b.content as string).length / 4);
-          else total += Math.ceil(JSON.stringify(block).length / 4);
-        }
-      }
-      return total;
-    }
-    if (content && typeof content === "object")
-      return Math.ceil(JSON.stringify(content).length / 4);
-  } catch {
-    void 0;
-  }
-  return 0;
-}
-
-function estimateMessageTokens(msg: AgentMessage): number {
-  // Prefer pi-coding-agent's estimate if message already has token-ish length; fallback to content heuristic
-  const c = (msg as unknown as { content?: unknown })?.content;
-  return estimateTokensFallback(c);
-}
 export function fmtTokens(n: number): string {
   if (n < 1000) return n.toString();
   if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
@@ -522,35 +488,22 @@ export function formatTurnTelemetry(
   };
   const parts: string[] = [];
   if (config.tps) {
-    // fixed width: 4-digit int + one decimal -> 6 chars for number, then " tok/s" (6) =12 for value, plus "TPS " (4) =16 total
     const num = telemetry.tps === null ? "—" : telemetry.tps.toFixed(1);
-    const paddedNum = num.padStart(6, " ");
-    const value = `${paddedNum} tok/s`;
+    const padded = num.padStart(6, " ");
     parts.push(
-      theme.fg(
-        telemetry.tps === null ? "muted" : "accent",
-        `TPS ${value}`,
-      ),
+      theme.fg(telemetry.tps === null ? "muted" : "accent", `${padded} TPS`),
     );
   }
   if (config.ttft) {
-    // TTFT fixed width: 2-digit + one decimal -> 4 + "s" =5, then "TTFT " (5) =10 total
-    const raw = formatTurnDuration(telemetry.ttftMs);
-    const padded = raw.padStart(5, " ");
-    parts.push(
-      theme.fg(
-        "text",
-        `TTFT ${padded}`,
-      ),
-    );
+    const sec = (telemetry.ttftMs / 1000).toFixed(1);
+    const padded = sec.padStart(4, " ");
+    parts.push(theme.fg("text", `${padded} TTFT`));
   }
   if (config.duration) {
     // duration fixed width 7 (e.g. " 15m 31s" / " 24h 21m" / "   5.0s")
     const raw = formatTurnDuration(telemetry.totalMs);
     const padded = raw.padStart(7, " ");
-    parts.push(
-      theme.fg("success", `${padded}`),
-    );
+    parts.push(theme.fg("success", `${padded}`));
   }
   if (config.stalls && telemetry.stallMs > 0) {
     parts.push(
@@ -563,5 +516,29 @@ export function formatTurnTelemetry(
   if (parts.length === 0) return "";
   // Use theme dim for separator if not custom
   const joiner = g.dimSep ?? ` ${theme.fg("dim", "·")} `;
+  return parts.join(joiner);
+}
+
+export function formatTelemetryTokens(
+  telemetry: TurnTelemetry,
+  theme: MinimalTheme,
+  config: TelemetryConfig,
+  glyphs?: {
+    input: string;
+    output: string;
+    dimSep?: string;
+  },
+): string {
+  if (!config.tokens) return "";
+  const g = glyphs ?? {
+    input: "↑",
+    output: "↓",
+  };
+  const joiner =
+    (g as { dimSep?: string }).dimSep ?? ` ${theme.fg("dim", "·")} `;
+  const parts: string[] = [
+    theme.fg("accent", `${g.input} ${fmtTokens(telemetry.inputTokens)}`),
+    theme.fg("success", `${g.output} ${fmtTokens(telemetry.outputTokens)}`),
+  ];
   return parts.join(joiner);
 }

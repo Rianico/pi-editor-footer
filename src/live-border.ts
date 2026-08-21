@@ -11,11 +11,14 @@
  * getUsageTotals. One coalesced render per tick/event — not per-delta.
  */
 
-import { createChromeSnapshot, formatTopContextFromSnapshot } from "./chrome-state.js";
+import {
+  createChromeSnapshot,
+  formatTopContextFromSnapshot,
+} from "./chrome-state.js";
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
-import { formatTurnTelemetry } from "./telemetry.js";
+import { formatTelemetryTokens, formatTurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
 import type { TrackingEditor } from "./tracking-editor.js";
@@ -64,7 +67,8 @@ export class LiveBorder {
       }
     }, REFRESH_MS);
     // don't block process exit
-    const t = this.timer as unknown as { unref?: () => void }; // SAFETY: pi TUI seam read-only
+    // SAFETY: pi TUI seam - timer unref is optional NodeJS API
+    const t = this.timer as unknown as { unref?: () => void };
     if (typeof t.unref === "function") t.unref();
   }
 
@@ -87,7 +91,9 @@ export class LiveBorder {
     if (!editor || !ctx) return;
     try {
       // SAFETY: theme is live pi TUI theme read at render time
-      const theme = (ctx.ui as unknown as { theme: { fg(s: string, t: string): string } }).theme; // SAFETY: pi seam
+      const theme = (
+        ctx.ui as unknown as { theme: { fg(s: string, t: string): string } }
+      ).theme; // SAFETY: pi seam
       const snap = this.deps.runActivityTracker.getSnapshot();
       const text = formatRunActivityTopRight(snap, theme as never);
       editor.setTopRightText(text);
@@ -100,15 +106,35 @@ export class LiveBorder {
     const editor = this.deps.getEditor();
     const ctx = this.deps.getCtx();
     const cfg = this.deps.getConfig();
-    if (!editor || !cfg.telemetry.enabled) return;
+    if (!editor) return;
+    if (!cfg.telemetry.enabled) {
+      try {
+        editor.setTelemetryText("");
+        editor.setBottomLeftText("");
+      } catch {
+        // ignore
+      }
+      return;
+    }
     try {
       // SAFETY: peekLive ?? getLastTelemetry preserves cost after toggle (AGENTS.md gotcha)
       const live =
-        this.deps.telemetryTracker.peekLive() ?? this.deps.telemetryTracker.getLastTelemetry();
+        this.deps.telemetryTracker.peekLive() ??
+        this.deps.telemetryTracker.getLastTelemetry();
       if (!live) return;
-      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi TUI seam read-only
-      const text = formatTurnTelemetry(live, theme as never, cfg.telemetry);
-      if (live.totalMs > 0) editor.setTelemetryText(text);
+      // SAFETY: pi TUI seam read-only - theme from extension context
+      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
+      const glyphs = resolveGlyphs(cfg.icons.mode);
+      const right = formatTurnTelemetry(
+        live,
+        theme as never,
+        cfg.telemetry,
+        glyphs as never,
+      );
+      if (live.totalMs > 0) {
+        editor.setTelemetryText(right);
+        editor.setBottomLeftText("");
+      }
     } catch {
       // ignore
     }
@@ -130,21 +156,47 @@ export class LiveBorder {
     try {
       // Deepened via ChromeState: snapshot owns contextUsage + totals derivation behind one seam.
       // Two adapters (footer + border) now share the same snapshot — proves the seam.
-      const snapshot = createChromeSnapshot(ctx as unknown as Parameters<typeof createChromeSnapshot>[0], undefined); // SAFETY: pi seam
+      // SAFETY: pi seam - snapshot derivation from extension context
+      const snapshot = createChromeSnapshot(
+        ctx as unknown as Parameters<typeof createChromeSnapshot>[0],
+        undefined,
+      );
       if (!snapshot.contextUsage || !snapshot.contextUsage.contextWindow) {
         editor.setTopContextText("");
         return;
       }
-      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui.theme as unknown as never; // SAFETY: pi seam
+      // SAFETY: pi seam - theme from extension context
+      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui
+        .theme as unknown as never;
       const glyphs = resolveGlyphs(cfg.icons.mode);
       const isAscii = resolveIconMode(cfg.icons.mode) === "ascii";
-      const text = formatTopContextFromSnapshot(
+      let text = formatTopContextFromSnapshot(
         snapshot,
         theme as never,
         glyphs,
         isAscii,
-        (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ?? false, // SAFETY: pi seam
+        (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ??
+          false,
       );
+      // Append input/output tokens to the right of cache using | separator
+      if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
+        // SAFETY: pi TUI seam - telemetry tokens for top context
+        const live =
+          this.deps.telemetryTracker.peekLive() ??
+          this.deps.telemetryTracker.getLastTelemetry();
+        if (live && live.totalMs > 0) {
+          const tokensText = formatTelemetryTokens(
+            live,
+            theme as never,
+            cfg.telemetry,
+            glyphs as never,
+          );
+          if (tokensText) {
+            // SAFETY: pi seam - theme fg for pipe separator
+            text = `${text} ${(theme as unknown as { fg: (c: string, t: string) => string }).fg("dim", "|")} ${tokensText}`;
+          }
+        }
+      }
       editor.setTopContextText(text);
     } catch {
       // ignore
