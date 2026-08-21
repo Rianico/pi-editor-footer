@@ -38,13 +38,17 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `formatContextBar(usage, theme, glyphs, isAscii, barWidth=10, cacheHitRate?)` now appends `${dim("|")} ${cacheHitColor(rate)}${glyphs.cacheHit} ${rate.toFixed(1)}%` when `cacheHitRate` is finite. When no cache (`latestCacheHitRate` undefined) it returns the base `icon bar pct · tokens/contextWindow` without the trailing ` | cache`.
 - `refreshContextBar()` in `src/index.ts` now imports `getUsageTotals` and reads `latestCacheHitRate` from `getUsageTotals(lastSessionCtx)` (same `sessionManager.getEntries()` path as footer) and passes it to `formatContextBar`. `border-renderer` leftLabel is now `${buildLabel} ${dim("|")} ${topContextText}` instead of double space, so top is `model | # [#####-------] 39.6% · 416k/1.0M | c 85.3%` (pipe between model/context and again between context/cache). Internal `·` between `39.6%` and `416k/1.0M` stays; sections are `|`.
 
+### Cache `c` hidden by default — now `c 0.0%` always
+- Footer `src/footer.ts` checked `hasCacheTokens && latestCacheHitRate !== undefined` and `formatContextBar` returned `base` when `cacheHitRate` undefined, so default session had no `c` section at all (`↑ 395 | ↓ 505 | $0.00` and `# [...] 39.6% · 416k/1.0M`).
+- User wants cache always visible with zero value. Fix: `rate = latestCacheHitRate ?? 0` and always `stats.push(c rate)` in footer, and `rate = cacheHitRate ?? 0` always `base + " | " + c rate` in `formatContextBar`. Now default is `↑ 395 | ↓ 505 | $0.00 | c 0.0%` and `# [#####-------] 39.6% · 416k/1.0M | c 0.0%` (both with `cacheHitColor(0)` muted).
+
 ### Cost `$ $` to the right of `↑`/`↓` — `toFixed(2)` and pipe order
 - Footer `src/footer.ts` previously did `cost.toFixed(3)` → `$0.160` and pushed `cache` before `cost`, so with cache it rendered `↑ 395 | ↓ 505 | c 85.3% | $0.160` (cost not directly after input/output, 3 decimals). Telemetry `src/telemetry.ts` already used `rate.toFixed(2)` → `$0.16` with `|` pipe, so they mismatched.
 - Fix: `cost.toFixed(2)` (now ` $0.00` / ` $0.16` with 2 decimals, single `$` when `glyphs.cost === "$"` else `glyph $value`, `nerd` keeps ` $0.16`) and `stats` order is `input` → `output` → `cost` → `cache` so cost is immediately to the right of `↑`/`↓` (`↑ 395 | ↓ 505 | $0.16 | c 85.3%` when cache present, `↑ 395 | ↓ 505 | $0.00` when not). The pipe is `theme.fg("dim","|")` with spaces on both sides, same as telemetry's `joiner`.
 
 ## Verification — how to check the style
 
-- **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 85.3%` left and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right (context no longer on bottom). Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.000 | c 85%` right when cache present, no `#` in center.
+- **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00 | c 0.0%` right by default (`| c 85.3%` with cache), no `#` in center.
 - **Unit test the bar without TUI**:
   ```ts
   import { renderFooter } from "./dist/footer.js";
