@@ -59,6 +59,9 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - Top context `formatContextBar` already took `glyphs`/`isAscii` from `resolveGlyphs`/`resolveIconMode`, but `src/index.ts:onConfigChanged` only did `setCursorStyle` + `requestRender` and never called `refreshContextBar`, so `nerd` (`` `` `█`/`░`) vs `ascii` (` #` `c` `#`/`-`) stayed stale until next 1 s tick. Footer `renderFooter` uses live `getConfig` so it followed, top didn't.
 - Fix: `refreshContextBar()` added right after `currentConfig = saveConfig(cfg)` in `onConfigChanged` (before `requestRender`), so both top context bar and its `| c` cache update immediately.
 
+### Context bar `# [#####]` → `0.0% · 0/1.0M`
+- Was `formatContextBar` returning `icon bar pct · tokens/W | c` (`# [████░░] 39.6% · 416k/1.0M | c`). User wants `0.0% · 0/1.0M` style for default. Fix: `formatContextBar` now returns `pct · tokens/W | c` without `contextIcon`/`renderBar` — e.g. `0.0% · 0/1.0M | c 0.0%` (or `39.6% · 416k/1.0M | c 85.3%` with tokens).
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.
