@@ -120,8 +120,8 @@ export class TranscriptTimeline {
       .split("\n")
       .map((l) =>
         theme
-          ? (theme as { fg(s: string, t: string): string }).fg("dim", l)
-          : l,
+          ? (theme as { fg(s: string, t: string): string }).fg("dim", " " + l)
+          : " " + l,
       );
     let injected = false;
     try {
@@ -191,7 +191,7 @@ export class TranscriptTimeline {
                 }
               ).theme;
               return snapshot.flatMap((l) =>
-                l.split("\n").map((s) => (th ? th.fg("dim", s) : s)),
+                l.split("\n").map((s) => (th ? th.fg("dim", " " + s) : " " + s)),
               );
             },
           // SAFETY: Component shape matches pi-tui validate at runtime via chatContainer.addChild
@@ -265,7 +265,7 @@ export class TranscriptTimeline {
                   .map((s: string) =>
                     (theme as { fg(s: string, t: string): string }).fg(
                       "dim",
-                      s,
+                      " " + s,
                     ),
                   );
                 const spacerComp = {

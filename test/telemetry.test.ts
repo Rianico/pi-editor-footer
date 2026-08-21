@@ -119,7 +119,7 @@ describe("TurnTelemetryTracker", () => {
     });
     assert.equal(
       formatTurnTelemetry(telemetry!, theme, fullConfig),
-      "TPS 4.0 tok/s · TTFT 4.0s · 5.0s",
+      "TPS    4.0 tok/s · TTFT  4.0s ·    5.0s",
     );
   });
 
@@ -197,7 +197,7 @@ describe("TurnTelemetryTracker", () => {
     assert.equal(stalled.stallCount, 2);
     assert.match(
       formatTurnTelemetry(stalled, theme, fullConfig),
-      /!2·3\.3s/,
+      /!2·\s*3\.3s/,
     );
   });
 

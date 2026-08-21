@@ -153,13 +153,24 @@ export function fmtTokens(n: number): string {
 
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  if (totalSeconds < 60) {
+    // fixed width 7, e.g. "     8s" / "    59s"
+    return `${String(totalSeconds).padStart(2, " ")}s`.padStart(7, " ");
+  }
   const s = totalSeconds % 60;
   const totalMinutes = Math.floor(totalSeconds / 60);
-  if (totalMinutes < 60) return `${totalMinutes}m ${s}s`;
+  if (totalMinutes < 60) {
+    // 59m 59s -> 7 chars, e.g. " 5m 03s" / "59m 59s"
+    const mStr = String(totalMinutes).padStart(2, " ");
+    const sStr = String(s).padStart(2, "0");
+    return `${mStr}m ${sStr}s`;
+  }
   const m = totalMinutes % 60;
   const h = Math.floor(totalMinutes / 60);
-  return `${h}h ${m}m ${s}s`;
+  // 24h 21m -> 7 chars, no seconds, no days
+  const hStr = String(Math.min(h, 99)).padStart(2, " ");
+  const mStr = String(m).padStart(2, "0");
+  return `${hStr}h ${mStr}m`;
 }
 
 export class TurnTelemetryTracker {
@@ -168,6 +179,8 @@ export class TurnTelemetryTracker {
   private agentStartMs: number | null = null;
   private agentTurns: TurnTelemetry[] = [];
   private lastTelemetry: TurnTelemetry | null = null;
+  private decayBaseTps: number | null = null;
+  private decayStartMs: number | null = null;
 
   constructor(now: () => number = () => performance.now()) {
     this.now = now;
@@ -182,10 +195,17 @@ export class TurnTelemetryTracker {
     if (!turn) return null;
     const now = this.now();
     const elapsed = Math.max(0, now - turn.startMs);
-    // before first token — show running duration only
+    // before first token — decay previous TPS gradually instead of jumping to —
     if (turn.firstTokenMs === null) {
+      let decayedTps: number | null = null;
+      if (this.decayBaseTps !== null && this.decayStartMs !== null) {
+        const elapsedSinceDecay = Math.max(0, now - this.decayStartMs);
+        // exponential decay, half-life ~5s (exp(-elapsed/7200) => half at ~5s ln2*7200≈5000)
+        const decayed = this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
+        if (decayed >= 0.05) decayedTps = round(decayed, 1);
+      }
       return {
-        tps: null,
+        tps: decayedTps,
         ttftMs: 0,
         totalMs: elapsed,
         inputTokens: 0,
@@ -281,6 +301,9 @@ export class TurnTelemetryTracker {
   }
 
   private startTurn(): void {
+    // seed decay from last turn's TPS
+    this.decayBaseTps = this.lastTelemetry?.tps ?? null;
+    this.decayStartMs = this.now();
     this.turn = {
       startMs: this.now(),
       firstTokenMs: null,
@@ -461,7 +484,12 @@ export class TurnTelemetryTracker {
 }
 
 function formatTurnDuration(ms: number): string {
-  return ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : formatDuration(ms);
+  if (ms < 60_000) {
+    // TTFT fixed width: 2-digit integer + one decimal -> padded 4 + "s" =5, then overall duration field padded to 7 for telemetry totalMs
+    // For TTFT we want 5, for duration we want 7 — caller will pad accordingly, so here return 5 for <60s case
+    return `${(ms / 1000).toFixed(1).padStart(4, " ")}s`;
+  }
+  return formatDuration(ms);
 }
 
 export interface MinimalTheme {
@@ -494,8 +522,10 @@ export function formatTurnTelemetry(
   };
   const parts: string[] = [];
   if (config.tps) {
-    const value =
-      telemetry.tps === null ? "—" : `${telemetry.tps.toFixed(1)} tok/s`;
+    // fixed width: 4-digit int + one decimal -> 6 chars for number, then " tok/s" (6) =12 for value, plus "TPS " (4) =16 total
+    const num = telemetry.tps === null ? "—" : telemetry.tps.toFixed(1);
+    const paddedNum = num.padStart(6, " ");
+    const value = `${paddedNum} tok/s`;
     parts.push(
       theme.fg(
         telemetry.tps === null ? "muted" : "accent",
@@ -504,16 +534,22 @@ export function formatTurnTelemetry(
     );
   }
   if (config.ttft) {
+    // TTFT fixed width: 2-digit + one decimal -> 4 + "s" =5, then "TTFT " (5) =10 total
+    const raw = formatTurnDuration(telemetry.ttftMs);
+    const padded = raw.padStart(5, " ");
     parts.push(
       theme.fg(
         "text",
-        `TTFT ${formatTurnDuration(telemetry.ttftMs)}`,
+        `TTFT ${padded}`,
       ),
     );
   }
   if (config.duration) {
+    // duration fixed width 7 (e.g. " 15m 31s" / " 24h 21m" / "   5.0s")
+    const raw = formatTurnDuration(telemetry.totalMs);
+    const padded = raw.padStart(7, " ");
     parts.push(
-      theme.fg("success", `${formatTurnDuration(telemetry.totalMs)}`),
+      theme.fg("success", `${padded}`),
     );
   }
   if (config.stalls && telemetry.stallMs > 0) {
