@@ -122,6 +122,7 @@ let lastSessionCtx: ExtensionContextLike | null = null;
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
+const REFRESH_MS = 1000;
 let liveTickTimer: ReturnType<typeof setInterval> | null = null;
 let footerState: FooterState = createInitialState();
 let currentModelInfo: ModelInfo = {
@@ -353,7 +354,7 @@ function startLiveTick(): void {
 		} else {
 			refreshContextBar();
 		}
-	}, 1000);
+	}, REFRESH_MS);
 	// don't block process exit
 	if (
 		liveTickTimer &&
@@ -692,7 +693,7 @@ export default function (pi: ExtensionAPILike): void {
 		if (watchTimer !== null) {
 			clearInterval(watchTimer);
 		}
-		watchTimer = setInterval(() => ensureEditorOwnership(ctx.ui), 1000);
+		watchTimer = setInterval(() => ensureEditorOwnership(ctx.ui), REFRESH_MS);
 	});
 
 	// Teardown: pi emits session_shutdown BEFORE invalidating this runner (and
