@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-21
 ### Changed
 - Timeline format now two-line dim per user spec: `2026-08-21 13:48:46 GMT+8 · 11s · ↑ 495 · ↓ 708 · c 85.3% · $0.00` + `3 turns · 5 tools · 1 failed` (datetime with timezone via `Intl` `en-CA` `short` TZ, wall `formatDuration`, `↑`/`↓` `fmtTokens`, cache `glyphs.cacheHit` `latestCacheHitRate`, cost `$`, turn/tools/failed from `runActivity` snapshot)
 - Dimmed timeline now in transcript between runs — `User: hello? / Assistant: hi. / <dim timeline>` left-aligned dim, injected into `chatContainer` (scrollable) via `InteractiveMode` patch, not `aboveEditor` widget, so it sits between each `User/Assistant` pair and scrolls with history
