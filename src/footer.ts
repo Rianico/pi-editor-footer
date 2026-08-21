@@ -283,7 +283,7 @@ export function renderFooter(
     stats.push(theme.fg("warning", costText));
   }
   // cache to the right of input/output omitted per user request — cache stays in top context bar only
-  const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
+  const statsBlock = stats.join(` ${theme.fg("dim", "·")} `);
 
   const rightBlock = statsBlock;
   const rightCompact = statsBlock;

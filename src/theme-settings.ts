@@ -54,7 +54,7 @@ interface SettingItem {
 }
 
 const COPY = {
-  title: "pi-lsz-theme Settings",
+  title: "pi-editor-footer Settings",
   tabs: {
     general: "General",
     appearance: "Appearance",
@@ -440,9 +440,9 @@ export function registerThemeSettingsCommand(
     onOverlayClosed?: () => void;
   },
 ): void {
-  pi.registerCommand("pi-footer", {
+  pi.registerCommand("pi-editor-footer", {
     description:
-      "Open pi-footer settings (workspace, cursor, footer, telemetry)",
+      "Open pi-editor-footer settings (workspace, cursor, footer, telemetry)",
     handler: async (_args: string, ctx: ExtensionContext) => {
       if (!ctx.hasUI) return;
       await ctx.ui.custom<void>(
