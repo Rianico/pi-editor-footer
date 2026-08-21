@@ -51,6 +51,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - Footer `src/footer.ts` previously did `cost.toFixed(3)` → `$0.160` and pushed `cache` before `cost`, so with cache it rendered `↑ 395 | ↓ 505 | c 85.3% | $0.160` (cost not directly after input/output, 3 decimals). Telemetry `src/telemetry.ts` already used `rate.toFixed(2)` → `$0.16` with `|` pipe, so they mismatched.
 - Fix: `cost.toFixed(2)` (now ` $0.00` / ` $0.16` with 2 decimals, single `$` when `glyphs.cost === "$"` else `glyph $value`, `nerd` keeps ` $0.16`) and `stats` order is `input` → `output` → `cost` → `cache` so cost is immediately to the right of `↑`/`↓` (`↑ 395 | ↓ 505 | $0.16 | c 85.3%` when cache present, `↑ 395 | ↓ 505 | $0.00` when not). The pipe is `theme.fg("dim","|")` with spaces on both sides, same as telemetry's `joiner`.
 
+### Telemetry `> TPS` `| TTFT` verbose → compact `·`
+- Bottom border `formatTurnTelemetry` was `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16 | ! stall 1x / 0.5s` with ` | ` joiner and spaces after every glyph plus `TPS`/`TTFT`/`stall` labels. User wants more compact.
+- Fix: `TPS`/`TTFT` labels removed (`>60.6 tok/s` not `> TPS …`, `~2.5s` not `~ TTFT …`), spaces after `>`/`~`/`+`/`↑`/`↓` removed (`↑395` not `↑ 395`), joiner `·` not ` | ` (` | ` → ` · `), stall `!2·3.3s` not `! stall 2x / 3.3s`. Now `>60.6 tok/s · ~2.5s · +8.3s · ↑395 · ↓505 · $0.16`.
+
 ## Verification — how to check the style
 
 - **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 395 | ↓ 505 | $0.00` right (no `c` — cache omitted to the right of input/output, stays only in top) (`| c 85.3%` with cache), no `#` in center.
