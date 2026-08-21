@@ -19,7 +19,6 @@ import {
 import {
   basenamePath,
   formatCwd,
-  truncateBranch,
   truncatePath,
 } from "./path-format.js";
 import {
@@ -86,12 +85,12 @@ function renderGitSegment(
   git: GitStatus,
   glyphs: IconGlyphs,
   segments: ThemeConfig["footerSegments"],
-  maxBranchLen = 20,
 ): string {
   const parts: string[] = [];
   if (segments.gitBranch) {
     if (git.branch) {
-      parts.push(theme.fg("mdLink", truncateBranch(git.branch, maxBranchLen)));
+      // Never truncate branch name — full name always shown per user request
+      parts.push(theme.fg("mdLink", git.branch));
     } else if (git.commit?.detached) {
       parts.push(theme.fg("warning", "HEAD"));
       if (git.commit.oid) {
@@ -231,7 +230,8 @@ export function renderFooter(
   const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
   if (gitSeg) {
     const sep = leftParts.length > 0 ? `${theme.fg("dim", " · ")}` : "";
-    leftParts.push({ text: `${sep}${gitSeg}`, priority: 4 });
+    // Branch name must never be folded/omitted — keep priority higher than cwd (5)
+    leftParts.push({ text: `${sep}${gitSeg}`, priority: 6 });
   }
   if (segments.runtime) {
     const runtimeSeg = renderRuntimeSegment(
