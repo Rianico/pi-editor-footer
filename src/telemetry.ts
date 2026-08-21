@@ -504,7 +504,7 @@ export function formatTurnTelemetry(
     parts.push(
       theme.fg(
         telemetry.tps === null ? "muted" : "accent",
-        `${g.speed} TPS ${value}`,
+        `${g.speed}${value}`,
       ),
     );
   }
@@ -512,28 +512,28 @@ export function formatTurnTelemetry(
     parts.push(
       theme.fg(
         "text",
-        `${g.latency} TTFT ${formatTurnDuration(telemetry.ttftMs)}`,
+        `${g.latency}${formatTurnDuration(telemetry.ttftMs)}`,
       ),
     );
   }
   if (config.duration) {
     parts.push(
-      theme.fg("success", `${g.done} ${formatTurnDuration(telemetry.totalMs)}`),
+      theme.fg("success", `${g.done}${formatTurnDuration(telemetry.totalMs)}`),
     );
   }
   if (config.tokens) {
     parts.push(
-      theme.fg("accent", `${g.input} ${fmtTokens(telemetry.inputTokens)}`),
+      theme.fg("accent", `${g.input}${fmtTokens(telemetry.inputTokens)}`),
     );
     parts.push(
-      theme.fg("success", `${g.output} ${fmtTokens(telemetry.outputTokens)}`),
+      theme.fg("success", `${g.output}${fmtTokens(telemetry.outputTokens)}`),
     );
   }
   if (config.stalls && telemetry.stallMs > 0) {
     parts.push(
       theme.fg(
         "warning",
-        `${g.stall} stall ${telemetry.stallCount}x / ${formatTurnDuration(telemetry.stallMs)}`,
+        `${g.stall}${telemetry.stallCount}·${formatTurnDuration(telemetry.stallMs)}`,
       ),
     );
   }
@@ -544,6 +544,6 @@ export function formatTurnTelemetry(
   }
   if (parts.length === 0) return "";
   // Use theme dim for separator if not custom
-  const joiner = g.dimSep ?? ` ${theme.fg("dim", "|")} `;
+  const joiner = g.dimSep ?? ` ${theme.fg("dim", "·")} `;
   return parts.join(joiner);
 }
