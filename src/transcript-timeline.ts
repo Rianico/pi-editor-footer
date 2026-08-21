@@ -125,8 +125,48 @@ export class TranscriptTimeline {
       );
     let injected = false;
     try {
+      // Try captured, then ctx/tui scan, then global scan
+      const extraRoots: unknown[] = [];
+      try {
+        extraRoots.push(ctx as unknown);
+      } catch {}
+      try {
+        const tui = this.getTuiRef?.();
+        if (tui) extraRoots.push(tui as unknown);
+      } catch {}
+      const fromExtras = (() => {
+        // Quick BFS from extra roots (ctx/tui) before global
+        const seen = new Set<unknown>();
+        const queue: unknown[] = [...extraRoots];
+        for (let i = 0; i < queue.length && i < 300; i++) {
+          const obj = queue[i] as Record<string, unknown>;
+          if (!obj || typeof obj !== "object" || seen.has(obj)) continue;
+          seen.add(obj);
+          try {
+            if ((obj as Record<string, unknown>).chatContainer && typeof (obj as { addMessageToChat?: unknown }).addMessageToChat === "function") return obj;
+            if ((obj as Record<string, unknown>).chatContainer && (obj as Record<string, unknown>).ui) return obj;
+          } catch {}
+          try {
+            for (const k of Object.getOwnPropertyNames(obj)) {
+              try {
+                const v = (obj as Record<string, unknown>)[k];
+                if (v && typeof v === "object" && !seen.has(v) && queue.length < 800) queue.push(v);
+              } catch {}
+            }
+            // also symbol keys (pi may use symbols)
+            for (const s of Object.getOwnPropertySymbols(obj)) {
+              try {
+                const v = (obj as unknown as Record<symbol, unknown>)[s];
+                if (v && typeof v === "object" && !seen.has(v) && queue.length < 800) queue.push(v);
+              } catch {}
+            }
+          } catch {}
+        }
+        return null;
+      })();
       const im =
         this.capturedIM ??
+        fromExtras ??
         (
           // SAFETY: __piTimelineIM is our own global fallback seam set in captureInteractiveMode
           globalThis as unknown as { __piTimelineIM?: () => unknown } // SAFETY: private seam
@@ -162,6 +202,10 @@ export class TranscriptTimeline {
           }
         }
         injected = true;
+        // Clear fallback aboveEditor widget if it was used for early injects — now interleaved, don't duplicate
+        try {
+          ctx.setWidget("wall-time", undefined);
+        } catch {}
       }
     } catch {
       // ignore
@@ -303,6 +347,19 @@ export class TranscriptTimeline {
         "/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
         "/opt/homebrew/lib/node_modules/@earendil-works/pi-agent-core/dist/modes/interactive/interactive-mode.js",
       ];
+      // Try sync require first for immediate capture (avoids async race where first agent_settled falls back)
+      try {
+        // SAFETY: require is sync Node seam — best-effort immediate patch
+        const req = (globalThis as unknown as { require?: (id:string)=>unknown }).require ?? (eval("require") as unknown as (id:string)=>unknown);
+        if (typeof req === "function") {
+          for (const p of candidates) {
+            try {
+              const mod = req(p) as { InteractiveMode?: unknown };
+              tryPatch(mod?.InteractiveMode);
+            } catch {}
+          }
+        }
+      } catch {}
       for (const p of candidates) {
         import(p)
           .then((mod: unknown) =>

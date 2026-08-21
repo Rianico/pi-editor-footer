@@ -15,6 +15,7 @@ export interface ChromeSnapshot {
   glowEnabled: boolean;
   topRightText: string;
   topContextText: string;
+  topTokensText: string;
   telemetryText: string;
   bottomLeftText: string;
   cursorStyle: CursorStyle;
@@ -30,6 +31,7 @@ const DEFAULT_CHROME: ChromeSnapshot = {
   glowEnabled: true,
   topRightText: "",
   topContextText: "",
+  topTokensText: "",
   telemetryText: "",
   bottomLeftText: "",
   cursorStyle: "block",
@@ -108,6 +110,8 @@ export class TrackingEditor extends Editor {
       this._chrome.topRightText = patch.topRightText;
     if (patch.topContextText !== undefined)
       this._chrome.topContextText = patch.topContextText;
+    if (patch.topTokensText !== undefined)
+      this._chrome.topTokensText = patch.topTokensText;
     if (patch.telemetryText !== undefined)
       this._chrome.telemetryText = patch.telemetryText;
     if (patch.bottomLeftText !== undefined)
@@ -182,6 +186,14 @@ export class TrackingEditor extends Editor {
   getTopContextText(): string {
     return this._chrome.topContextText;
   }
+
+  setTopTokensText(text: string): void {
+    this.setChrome({ topTokensText: text });
+  }
+
+  getTopTokensText(): string {
+    return this._chrome.topTokensText;
+  }
   private patchApplyAutocompleteSuggestions(): void {
     // SAFETY: EditorInternals is private pi-tui shape — existence validated via typeof check on applyAutocompleteSuggestions
     const internals = this as unknown as EditorInternals; // SAFETY: private pi-tui interior seam
@@ -233,6 +245,7 @@ export class TrackingEditor extends Editor {
       bottomLeftText: this._chrome.bottomLeftText,
       topRightText: this._chrome.topRightText,
       topContextText: this._chrome.topContextText,
+      topTokensText: this._chrome.topTokensText,
     });
     return lines;
   }

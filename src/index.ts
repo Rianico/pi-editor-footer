@@ -6,6 +6,7 @@ import {
 	type KeybindingsManager,
 	type SelectItem,
 	type TUI,
+	Text,
 } from "@earendil-works/pi-tui";
 import { TrackingEditor } from "./tracking-editor.js";
 import { installFooter } from "./footer.js";
@@ -118,11 +119,13 @@ let glowEnabled = true;
 let footerCleanup: (() => void) | null = null;
 let installedEditor: TrackingEditor | null = null;
 let lastSessionCtx: ExtensionContextLike | null = null;
-let wallTimeHistory: string[] = [];
+let extensionPi: unknown = null;
+let wallTimeHistory: string[] = []; // kept for compat, not used for widget
 const timeline = new TranscriptTimeline({
-	getLastSessionCtx: () => lastSessionCtx,
-	getTuiRef: () => tuiRef,
+  getLastSessionCtx: () => lastSessionCtx,
+  getTuiRef: () => tuiRef,
 });
+void timeline; // keep import used while now using pi.appendEntry interleaved path
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
@@ -269,26 +272,20 @@ function formatDateTimeWithTimezone(d: Date = new Date()): string {
 }
 
 function injectTimelineDimLine(
-	ctx: ExtensionUIContextLike,
-	rawLine: string,
+  _ctx: ExtensionUIContextLike,
+  rawLine: string,
 ): void {
-	timeline.inject(
-		ctx as unknown as {
-			// SAFETY: pi seam
-			// SAFETY: pi widget seam
-			setWidget: (k: string, c: unknown, o?: unknown) => void;
-			theme?: unknown;
-		},
-		rawLine,
-	);
-	// keep legacy array in sync for any external read (deprecated)
-	wallTimeHistory = timeline.getHistory();
+  // Use pi.appendEntry so it is interleaved in chat container (not aboveEditor stacked widget)
+  try {
+    // SAFETY: pi custom entry is TUI-only, not sent to LLM
+    (extensionPi as unknown as { appendEntry?: (t:string,d:unknown)=>void })?.appendEntry?.("timeline", { text: rawLine });
+  } catch {}
+  // keep legacy array in sync
+  wallTimeHistory = [...wallTimeHistory, rawLine];
 }
-function clearTimelineHistory(ctx?: ExtensionUIContextLike): void {
-	timeline.clear(
-		ctx as unknown as { setWidget: (k: string, c: unknown) => void } | undefined, // SAFETY: widget clear seam
-	);
-	wallTimeHistory = [];
+function clearTimelineHistory(_ctx?: ExtensionUIContextLike): void {
+  // No widget to clear — entries are interleaved and persist with session
+  wallTimeHistory = [];
 }
 
 /** shift+up/down handler: scroll the detail window one line, clamped. */
@@ -432,8 +429,29 @@ function assertInternals(): void {
 assertInternals();
 
 export default function (pi: ExtensionAPILike): void {
+	extensionPi = pi;
 	let watchTimer: ReturnType<typeof setInterval> | null = null;
 	let deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
+  // Timeline now uses pi.appendEntry("timeline") interleaved in chat container — not aboveEditor widget
+  // Register renderer for timeline custom entries (dim, left-aligned, interleaved)
+  try {
+    // SAFETY: pi entry renderer is public API — timeline entries are TUI-only, not sent to LLM
+    (pi as unknown as { registerEntryRenderer?: (t:string, r:unknown)=>void }).registerEntryRenderer?.(
+      "timeline",
+      (entry: unknown, _opts: unknown, theme: unknown) => {
+        const data = (entry as { data?: { text?: string } }).data;
+        const text = data?.text ?? "";
+        const lines = text.split("\n").map((l: string) => {
+          try {
+            return (theme as { fg: (c:string,s:string)=>string }).fg("dim", " " + l);
+          } catch {
+            return " " + l;
+          }
+        });
+        return new Text(lines.join("\n")) as unknown as Component;
+      },
+    );
+  } catch {}
 	let headerCleanupInner: (() => void) | null = null;
 
 	// Toggle the border glow + model label (off restores pi's stock border).
@@ -678,14 +696,9 @@ export default function (pi: ExtensionAPILike): void {
 	// before re-evaluating the module on /reload). Any timer that captured this
 	// session's ctx must be dead before then — otherwise its next tick hits the
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
-	pi.on("session_shutdown", () => {
-		if (lastSessionCtx) {
-			try {
-				clearTimelineHistory(
-					lastSessionCtx.ui as unknown as ExtensionUIContextLike, // SAFETY: pi seam
-				);
-			} catch {}
-		}
+	  pi.on("session_shutdown", () => {
+    // timeline entries are custom entries interleaved — no aboveEditor widget to clear
+    wallTimeHistory = [];
 		agentStartMs = null;
 		footerState = {
 			...footerState,
@@ -748,8 +761,27 @@ export default function (pi: ExtensionAPILike): void {
 		startLiveTick();
 		refreshAllLive();
 	});
-	pi.on("turn_start", (e) => {
+	pi.on("turn_start", (e, ctx) => {
+		// Input is known at turn_start via context usage — seed live input so peekLive shows it during streaming (output already streams via liveDeltaChars)
+		const usageTokens = (
+			ctx as unknown as { getContextUsage?: () => { tokens?: number } }
+		) // SAFETY: pi context seam — getContextUsage is ExtensionContext API
+			?.getContextUsage?.()?.tokens;
+		if (
+			typeof usageTokens === "number" &&
+			Number.isFinite(usageTokens) &&
+			usageTokens > 0
+		) {
+			(e as { inputTokens?: number }).inputTokens = Math.round(usageTokens); // SAFETY: turn_start input estimate seam
+		}
 		telemetryTracker.handle(e as never);
+		if (
+			typeof usageTokens === "number" &&
+			Number.isFinite(usageTokens) &&
+			usageTokens > 0
+		) {
+			telemetryTracker.setTurnInputEstimate(usageTokens);
+		}
 		const turnIdx = (e as { turnIndex?: number })?.turnIndex ?? 0;
 		runActivityTracker.startTurn(turnIdx);
 		startLiveTick();
@@ -825,21 +857,24 @@ export default function (pi: ExtensionAPILike): void {
 				const cacheRate = totals.latestCacheHitRate ?? 0;
 				const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
 				// Respect timeline.* toggles for specified metrics (wallTime/tokens/cost), but datetime/cache/turn/tools are always shown per user spec
+				// Timeline tokens now mirror telemetry (per-agent) not session totals — input known at turn_start via liveInputTokens
+				const telInput = tel ? tel.inputTokens : totals.input;
+				const telOutput = tel ? tel.outputTokens : totals.output;
+				const telCost = tel ? tel.costUsd : totals.cost;
 				const line1Parts: string[] = [dt];
 				if (currentConfig.timeline.wallTime) line1Parts.push(wallDur);
 				else line1Parts.push(wallDur); // wall time always per spec (11s)
 				if (currentConfig.timeline.tokens) {
-					line1Parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
-					line1Parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
+					line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
+					line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
 				} else {
-					line1Parts.push(`${glyphs.input} ${fmtTokens(totals.input)}`);
-					line1Parts.push(`${glyphs.output} ${fmtTokens(totals.output)}`);
+					line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
+					line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
 				}
 				// cache rate always per spec
 				line1Parts.push(cacheStr);
-				if (currentConfig.timeline.cost)
-					line1Parts.push(`$${totals.cost.toFixed(2)}`);
-				else line1Parts.push(`$${totals.cost.toFixed(2)}`);
+				if (currentConfig.timeline.cost) line1Parts.push(`$${telCost.toFixed(2)}`);
+				else line1Parts.push(`$${telCost.toFixed(2)}`);
 				const line1 = line1Parts.join(" · ");
 				// Line 2: <turn number> · <tools calling num> · <tools calling failure num>
 				const turnNum = snap.turnNumber ?? 1;

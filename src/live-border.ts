@@ -146,14 +146,6 @@ export class LiveBorder {
     const ctx = this.deps.getCtx();
     const cfg = this.deps.getConfig();
     if (!editor || !ctx) return;
-    if (!cfg.footerSegments.context) {
-      try {
-        editor.setTopContextText("");
-      } catch {
-        // ignore
-      }
-      return;
-    }
     try {
       // Deepened via ChromeState: snapshot owns contextUsage + totals derivation behind one seam.
       // Two adapters (footer + border) now share the same snapshot — proves the seam.
@@ -167,9 +159,13 @@ export class LiveBorder {
         .theme as unknown as never;
       const glyphs = resolveGlyphs(cfg.icons.mode);
       const isAscii = resolveIconMode(cfg.icons.mode) === "ascii";
-      let text = "";
-      if (snapshot.contextUsage && snapshot.contextUsage.contextWindow) {
-        text = formatTopContextFromSnapshot(
+      let contextText = "";
+      if (
+        cfg.footerSegments.context &&
+        snapshot.contextUsage &&
+        snapshot.contextUsage.contextWindow
+      ) {
+        contextText = formatTopContextFromSnapshot(
           snapshot,
           theme as never,
           glyphs,
@@ -178,14 +174,13 @@ export class LiveBorder {
             false,
         );
       }
-      // Append input/output tokens to the right of cache using | separator
-      // At start time show default ↑ 0 · ↓ 0 even when no live telemetry yet
+      // Tokens line above model info — separate from context bar (moved per user request)
+      let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
-        // SAFETY: pi TUI seam - telemetry tokens for top context
+        // SAFETY: pi TUI seam - telemetry tokens for top tokens line
         const live =
           this.deps.telemetryTracker.peekLive() ??
           this.deps.telemetryTracker.getLastTelemetry();
-        let tokensText: string;
         if (live) {
           tokensText = formatTelemetryTokens(
             live,
@@ -199,7 +194,6 @@ export class LiveBorder {
           const dummy = {
             inputTokens: 0,
             outputTokens: 0,
-            // SAFETY: dummy telemetry default tokens at start (↑0·↓0)
           } as unknown as TurnTelemetry;
           tokensText = formatTelemetryTokens(
             dummy,
@@ -208,16 +202,9 @@ export class LiveBorder {
             glyphs as never,
           );
         }
-        if (tokensText) {
-          if (text) {
-            // SAFETY: pi seam - theme fg for pipe separator
-            text = `${text} ${(theme as unknown as { fg: (c: string, t: string) => string }).fg("dim", "|")} ${tokensText}`; // SAFETY: pi seam - theme fg for pipe separator
-          } else {
-            text = tokensText;
-          }
-        }
       }
-      editor.setTopContextText(text);
+      editor.setTopContextText(contextText);
+      editor.setTopTokensText(tokensText);
     } catch {
       // ignore
     }

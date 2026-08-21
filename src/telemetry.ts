@@ -61,7 +61,12 @@ type AgentMessage = { role: string } & AssistantMessage;
 export type TelemetryEvent =
   | { type: "agent_start" }
   | { type: "agent_settled" }
-  | { type: "turn_start"; turnIndex?: number; timestamp?: number }
+  | {
+      type: "turn_start";
+      turnIndex?: number;
+      timestamp?: number;
+      inputTokens?: number;
+    }
   | { type: "message_start"; message: AgentMessage }
   | {
       type: "message_update";
@@ -81,7 +86,6 @@ export type TelemetryEvent =
       message?: AgentMessage;
       toolResults?: unknown[];
     };
-
 interface MessageTiming {
   lastUpdateMs: number;
   firstOutputMs: number | null;
@@ -98,6 +102,7 @@ interface TurnTiming {
   stallCount: number;
   liveEstimatedTokens: number;
   liveDeltaChars: number;
+  liveInputTokens: number | null;
 }
 
 function isAssistantMessage(message: AgentMessage): boolean {
@@ -170,17 +175,18 @@ export class TurnTelemetryTracker {
         const decayed = this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
         if (decayed >= 0.05) decayedTps = round(decayed, 1);
       }
+      const liveInput = turn.liveInputTokens ?? 0;
       return {
         tps: decayedTps,
         ttftMs: 0,
         totalMs: elapsed,
-        inputTokens: 0,
+        inputTokens: liveInput,
         outputTokens: 0,
         stallMs: turn.stallMs,
         stallCount: turn.stallCount,
         rateUsdPerMTokens: null,
         generationMs: elapsed,
-        totalTokens: 0,
+        totalTokens: liveInput,
         costUsd: 0,
         measurementMs: null,
       };
@@ -196,14 +202,23 @@ export class TurnTelemetryTracker {
       totalTokens += m.usage.totalTokens;
       costUsd += m.usage.cost.total;
     }
+    // Input is known at turn_start — use live estimate before authoritative usage arrives
+    if (
+      inputTokens === 0 &&
+      turn.liveInputTokens !== null &&
+      turn.liveInputTokens > 0
+    ) {
+      inputTokens = turn.liveInputTokens;
+      totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
+    }
     // During streaming no message has ended yet — use live estimate so TPS refreshes in real time
     if (outputTokens === 0 && turn.liveEstimatedTokens > 0) {
       outputTokens = turn.liveEstimatedTokens;
-      totalTokens = turn.liveEstimatedTokens;
+      totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
     } else if (turn.liveEstimatedTokens > outputTokens) {
       // streaming extension of current message — reflect growth even before message_end
       outputTokens = turn.liveEstimatedTokens;
-      totalTokens = Math.max(totalTokens, turn.liveEstimatedTokens);
+      totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
     }
     const measurementMs = genMs > 0 && outputTokens > 0 ? genMs : null;
     const tps =
@@ -242,7 +257,7 @@ export class TurnTelemetryTracker {
       case "agent_settled":
         return this.endAgent();
       case "turn_start":
-        this.startTurn();
+        this.startTurn((event as { inputTokens?: number }).inputTokens);
         return;
       case "message_start":
         this.startMessage(event.message);
@@ -266,7 +281,7 @@ export class TurnTelemetryTracker {
     }
   }
 
-  private startTurn(): void {
+  private startTurn(inputTokens?: number): void {
     // seed decay from last turn's TPS
     this.decayBaseTps = this.lastTelemetry?.tps ?? null;
     this.decayStartMs = this.now();
@@ -280,7 +295,18 @@ export class TurnTelemetryTracker {
       stallCount: 0,
       liveEstimatedTokens: 0,
       liveDeltaChars: 0,
+      liveInputTokens:
+        typeof inputTokens === "number" && Number.isFinite(inputTokens)
+          ? inputTokens
+          : null,
     };
+  }
+  /** Set/override the live input estimate for the current turn (known at turn_start via getContextUsage). */
+  setTurnInputEstimate(tokens: number): void {
+    if (!this.turn) return;
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0)
+      return;
+    this.turn.liveInputTokens = Math.round(tokens);
   }
 
   private startMessage(message: AgentMessage): void {
@@ -512,7 +538,7 @@ export function formatTurnTelemetry(
     parts.push(
       theme.fg(
         "warning",
-        `${g.stall}${telemetry.stallCount}·${formatTurnDuration(telemetry.stallMs)}`,
+        `${g.stall}${telemetry.stallCount}×${formatTurnDuration(telemetry.stallMs).trim()}`,
       ),
     );
   }

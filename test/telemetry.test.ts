@@ -197,7 +197,7 @@ describe("TurnTelemetryTracker", () => {
     assert.equal(stalled.stallCount, 2);
     assert.match(
       formatTurnTelemetry(stalled, theme, fullConfig),
-      /!2·\s*3\.3s/,
+      /!2×\s*3\.3s/,
     );
   });
 

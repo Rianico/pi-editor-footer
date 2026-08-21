@@ -35,13 +35,14 @@ export class BorderRenderer {
       bottomLeftText?: string;
       topRightText?: string;
       topContextText?: string;
+      topTokensText?: string;
     },
   ): string[] {
     let out = [...lines];
     if (out.length === 0) return out;
 
     // Top: model info left, context bar right of it, run-activity far right
-    const hasTop = opts.glowEnabled || opts.topRightText || opts.topContextText;
+    const hasTop = opts.glowEnabled || opts.topContextText || (!opts.topTokensText && opts.topRightText);
     if (hasTop) {
       const theme = this.getLiveTheme();
       const info = this.getModelInfo();
@@ -49,6 +50,7 @@ export class BorderRenderer {
         try {
           const maybeGlow = (
             theme as unknown as {
+              // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
               getThinkingBorderColor?: (l: string) => (s: string) => string;
             }
           ).getThinkingBorderColor;
@@ -59,24 +61,38 @@ export class BorderRenderer {
         }
         return s;
       };
+      // When tokens line exists, right moves to that line (one padding) — don't duplicate on top
+      const topRightForTop = opts.topTokensText ? "" : opts.topRightText;
       if (opts.glowEnabled) {
         // Build left label; if context bar present, append it to the right of model info with pipe separator
-        let leftLabel = buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow);
+        let leftLabel = buildLabel(
+          theme,
+          info.provider,
+          info.modelId,
+          info.level,
+          info.contextWindow,
+        );
         if (opts.topContextText) {
           leftLabel = `${leftLabel} ${theme.fg("dim", "|")} ${opts.topContextText}`;
         }
         // Embed left (model+context) and optional right (run activity) in one pass to avoid double-truncate
-        if (opts.topRightText) {
-          out = embedTopWithLeftAndRight(out, width, leftLabel, opts.topRightText, glow);
+        if (topRightForTop) {
+          out = embedTopWithLeftAndRight(
+            out,
+            width,
+            leftLabel,
+            topRightForTop,
+            glow,
+          );
         } else {
           // Only left (model+context), no right — use applyModelInfo replacement but with combined left
           // Reuse embedTopWithLeftAndRight with empty right
           out = embedTopWithLeftAndRight(out, width, leftLabel, "", glow);
         }
-      } else if (opts.topContextText || opts.topRightText) {
+      } else if (opts.topContextText || topRightForTop) {
         // No glow, but still need top borders for context/run activity
         const left = opts.topContextText ?? "";
-        const right = opts.topRightText ?? "";
+        const right = topRightForTop ?? "";
         if (left && right) {
           out = embedTopWithLeftAndRight(out, width, left, right, glow);
         } else if (left) {
@@ -86,6 +102,22 @@ export class BorderRenderer {
         }
       }
     }
+
+    // Tokens above model info — left aligned, no border; right moved close to tokens with | separator per user request
+    if (opts.topTokensText || opts.topRightText) {
+      const tokensLeft = opts.topTokensText ?? "";
+      const tokensRight = opts.topRightText ?? "";
+      if (tokensLeft) {
+        // Use | as separator between ↑/↓ and tool turns (dimmed) per user request
+        // SAFETY: pi theme seam — fg is optional theme method
+        const themeForTokens = this.getLiveTheme() as unknown as { fg: (c:string,t:string)=>string };
+        const fg = themeForTokens.fg;
+        const dimPipe = typeof fg === "function" ? fg.call(themeForTokens, "dim", " | ") : " | ";
+        const combined = tokensRight ? `${tokensLeft}${dimPipe}${tokensRight}` : tokensLeft;
+        out = embedTokensAbove(out, width, combined);
+      }
+    }
+
     // Bottom embedding (telemetry left/right)
     if (opts.telemetryText || opts.bottomLeftText) {
       const theme = this.getLiveTheme();
@@ -93,6 +125,7 @@ export class BorderRenderer {
         try {
           const maybeGlow = (
             theme as unknown as {
+              // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
               getThinkingBorderColor?: (l: string) => (s: string) => string;
             }
           ).getThinkingBorderColor;
@@ -115,6 +148,20 @@ export class BorderRenderer {
   }
 }
 
+function embedTokensAbove(
+  lines: string[],
+  width: number,
+  tokensText: string,
+): string[] {
+  if (!tokensText || lines.length === 0) return lines;
+  // Left aligned, no border; one leading padding as before
+  const raw = ` ${tokensText}`;
+  const display = truncateToWidth(raw, width, "");
+  const result = [...lines];
+  result.splice(0, 0, display);
+  return result;
+}
+
 function embedTopWithLeftAndRight(
   lines: string[],
   width: number,
@@ -133,9 +180,14 @@ function embedTopWithLeftAndRight(
   let displayLeft = leftText;
   let displayRight = rightText;
   if (leftW > maxLeft) displayLeft = truncateToWidth(leftText, maxLeft, "");
-  if (rightW > maxRight) displayRight = truncateToWidth(rightText, maxRight, "");
-  const leftSegment = displayLeft ? `${getGlow("─")} ${displayLeft} ` : getGlow("─");
-  const rightSegment = displayRight ? ` ${displayRight} ${getGlow("─")}` : getGlow("─");
+  if (rightW > maxRight)
+    displayRight = truncateToWidth(rightText, maxRight, "");
+  const leftSegment = displayLeft
+    ? `${getGlow("─")} ${displayLeft} `
+    : getGlow("─");
+  const rightSegment = displayRight
+    ? ` ${displayRight} ${getGlow("─")}`
+    : getGlow("─");
   const used = visibleWidth(leftSegment) + visibleWidth(rightSegment);
   const middleWidth = Math.max(0, width - used);
   const middle = getGlow("─".repeat(middleWidth));
