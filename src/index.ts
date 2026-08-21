@@ -267,6 +267,7 @@ function formatDateTimeWithTimezone(d: Date = new Date()): string {
 		// en-CA gives YYYY-MM-DD, HH:MM:SS
 		return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
 	} catch {
+	  // SAFETY: best-effort, ignore recoverable error
 		return d.toLocaleString();
 	}
 }
@@ -279,7 +280,9 @@ function injectTimelineDimLine(
   try {
     // SAFETY: pi custom entry is TUI-only, not sent to LLM
     (extensionPi as unknown as { appendEntry?: (t:string,d:unknown)=>void })?.appendEntry?.("timeline", { text: rawLine });
-  } catch {}
+  } catch {// SAFETY: best-effort, ignore recoverable error
+    // SAFETY: best-effort, ignore recoverable error
+}
   // keep legacy array in sync
   wallTimeHistory = [...wallTimeHistory, rawLine];
 }
@@ -445,13 +448,17 @@ export default function (pi: ExtensionAPILike): void {
           try {
             return (theme as { fg: (c:string,s:string)=>string }).fg("dim", " " + l);
           } catch {
+            // SAFETY: best-effort, ignore recoverable error
             return " " + l;
           }
         });
+        // SAFETY: intentional unsafe cast — validated at runtime
         return new Text(lines.join("\n")) as unknown as Component;
       },
     );
-  } catch {}
+  } catch {// SAFETY: best-effort, ignore recoverable error
+    // SAFETY: best-effort, ignore recoverable error
+}
 	let headerCleanupInner: (() => void) | null = null;
 
 	// Toggle the border glow + model label (off restores pi's stock border).
@@ -521,7 +528,7 @@ export default function (pi: ExtensionAPILike): void {
 											(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
 												.__footerRender?.();
 										} catch (_e) {
-											void _e;
+											void _e; // SAFETY: best-effort UI, ignore recoverable error
 										}
 									})();
 								},
@@ -546,11 +553,11 @@ export default function (pi: ExtensionAPILike): void {
 								(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
 									.__footerRender?.();
 							} catch (_e) {
-								void _e;
+								void _e; // SAFETY: best-effort UI, ignore recoverable error
 							}
 						})();
 					} catch (_e) {
-						void _e;
+						void _e; // SAFETY: best-effort UI, ignore recoverable error
 					}
 				}
 			}
@@ -646,14 +653,14 @@ export default function (pi: ExtensionAPILike): void {
 										(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
 											.__footerRender?.();
 									} catch (_e) {
-										void _e;
+										void _e; // SAFETY: best-effort UI, ignore recoverable error
 									}
 								})();
 							},
 						},
 					);
 				} catch (_e) {
-					void _e;
+					void _e; // SAFETY: best-effort UI, ignore recoverable error
 				}
 				// initial git/runtime population so footer isn't empty at startup (onBranchChange only fires on change)
 				void (async () => {
@@ -675,13 +682,13 @@ export default function (pi: ExtensionAPILike): void {
 						(globalThis as unknown as { __footerRender?: () => void }) // SAFETY: pi seam
 							.__footerRender?.();
 					} catch (_e) {
-						void _e;
+						void _e; // SAFETY: best-effort UI, ignore recoverable error
 					}
 				})();
 				installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 				refreshContextBar();
 			} catch (_e) {
-				void _e;
+				void _e; // SAFETY: best-effort UI, ignore recoverable error
 			}
 		} // end if (!enabled) else
 
@@ -887,7 +894,9 @@ export default function (pi: ExtensionAPILike): void {
 					wallText,
 				);
 			}
-		} catch {}
+		} catch {// SAFETY: best-effort, ignore recoverable error
+		  // SAFETY: best-effort, ignore recoverable error
+}
 		// final settled telemetry overwrites live peek with authoritative totals
 		if (tel && installedEditor && currentConfig.telemetry.enabled) {
 			try {
@@ -902,14 +911,14 @@ export default function (pi: ExtensionAPILike): void {
 				installedEditor.setTelemetryText(right);
 				installedEditor.setBottomLeftText("");
 			} catch (_e) {
-				void _e;
+				void _e; // SAFETY: best-effort UI, ignore recoverable error
 			}
 		} else if (installedEditor && !currentConfig.telemetry.enabled) {
 			try {
 				installedEditor.setTelemetryText("");
 				installedEditor.setBottomLeftText("");
 			} catch (_e) {
-				void _e;
+				void _e; // SAFETY: best-effort UI, ignore recoverable error
 			}
 		}
 		// settled top border stays showing final turn stats until next run

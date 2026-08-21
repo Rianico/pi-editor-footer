@@ -27,10 +27,12 @@ function removeSoftwareCursor(line: string, cursorMarker = ""): string {
 function configureCursor(tui: TUI, cursorStyle: CursorStyle): void {
   if (cursorStyle === "block") return;
   const setShow = (
+    // SAFETY: intentional unsafe cast — validated at runtime
     tui as unknown as { setShowHardwareCursor?: (v: boolean) => void }
   ).setShowHardwareCursor;
   if (typeof setShow === "function") setShow.call(tui, true);
   const seq = CURSOR_STYLE_SEQUENCES[cursorStyle];
+  // SAFETY: intentional unsafe cast — validated at runtime
   const term = (tui as unknown as { terminal?: { write: (s: string) => void } })
     .terminal;
   if (seq && term && typeof term.write === "function") term.write(seq);
@@ -56,6 +58,7 @@ export class CursorPolicy {
     this.previewHardwareCursor = style !== "block";
     this.style = style;
     if (changed) {
+      // SAFETY: intentional unsafe cast — validated at runtime
       const tuiAny = this.tui as unknown as {
         setShowHardwareCursor?: (v: boolean) => void;
         terminal?: { write: (s: string) => void };

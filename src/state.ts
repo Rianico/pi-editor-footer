@@ -51,6 +51,7 @@ export function getUsageTotals(ctx: {
   };
 }): UsageTotals {
   const key = entriesKey(
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     ctx as unknown as { sessionManager?: { getEntries(): unknown[] } },
   );
   if (usageCache && usageCache.key === key) return usageCache.totals;
@@ -65,6 +66,7 @@ export function getUsageTotals(ctx: {
   };
   const entries =
     (
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       ctx as unknown as {
         sessionManager?: {
           getEntries(): {

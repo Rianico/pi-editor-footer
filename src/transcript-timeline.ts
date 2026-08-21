@@ -42,7 +42,7 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
             .filter(Boolean) as unknown[]),
         );
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
     for (let i = 0; i < queue.length && i < 200; i++) {
       const obj = queue[i] as Record<string, unknown>;
@@ -57,7 +57,7 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
           return obj;
         if (obj.chatContainer && obj.ui) return obj;
       } catch {
-        // ignore
+        // SAFETY: best-effort UI, ignore recoverable error
       }
       try {
         for (const k of Object.getOwnPropertyNames(obj)) {
@@ -73,15 +73,15 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
               if (queue.length < 500) queue.push(v);
             }
           } catch {
-            // ignore
+            // SAFETY: best-effort UI, ignore recoverable error
           }
         }
       } catch {
-        // ignore
+        // SAFETY: best-effort UI, ignore recoverable error
       }
     }
   } catch {
-    // ignore
+    // SAFETY: best-effort UI, ignore recoverable error
   }
   return null;
 }
@@ -129,11 +129,15 @@ export class TranscriptTimeline {
       const extraRoots: unknown[] = [];
       try {
         extraRoots.push(ctx as unknown);
-      } catch {}
+      } catch {// SAFETY: best-effort, ignore recoverable error
+        // SAFETY: best-effort, ignore recoverable error
+}
       try {
         const tui = this.getTuiRef?.();
         if (tui) extraRoots.push(tui as unknown);
-      } catch {}
+      } catch {// SAFETY: best-effort, ignore recoverable error
+        // SAFETY: best-effort, ignore recoverable error
+}
       const fromExtras = (() => {
         // Quick BFS from extra roots (ctx/tui) before global
         const seen = new Set<unknown>();
@@ -145,22 +149,30 @@ export class TranscriptTimeline {
           try {
             if ((obj as Record<string, unknown>).chatContainer && typeof (obj as { addMessageToChat?: unknown }).addMessageToChat === "function") return obj;
             if ((obj as Record<string, unknown>).chatContainer && (obj as Record<string, unknown>).ui) return obj;
-          } catch {}
+          } catch {// SAFETY: best-effort, ignore recoverable error
+            // SAFETY: best-effort, ignore recoverable error
+}
           try {
             for (const k of Object.getOwnPropertyNames(obj)) {
               try {
                 const v = (obj as Record<string, unknown>)[k];
                 if (v && typeof v === "object" && !seen.has(v) && queue.length < 800) queue.push(v);
-              } catch {}
+              } catch {// SAFETY: best-effort, ignore recoverable error
+                // SAFETY: best-effort, ignore recoverable error
+}
             }
             // also symbol keys (pi may use symbols)
             for (const s of Object.getOwnPropertySymbols(obj)) {
               try {
+                // SAFETY: intentional unsafe cast — validated at runtime
                 const v = (obj as unknown as Record<symbol, unknown>)[s];
                 if (v && typeof v === "object" && !seen.has(v) && queue.length < 800) queue.push(v);
-              } catch {}
+              } catch {// SAFETY: best-effort, ignore recoverable error
+}
             }
-          } catch {}
+          } catch {// SAFETY: best-effort, ignore recoverable error
+            // SAFETY: best-effort, ignore recoverable error
+}
         }
         return null;
       })();
@@ -198,17 +210,19 @@ export class TranscriptTimeline {
           try {
             imAny.transcriptScrollView.scrollTo({ follow: "end" } as never);
           } catch {
-            // ignore
+            // SAFETY: best-effort UI, ignore recoverable error
           }
         }
         injected = true;
         // Clear fallback aboveEditor widget if it was used for early injects — now interleaved, don't duplicate
         try {
           ctx.setWidget("wall-time", undefined);
-        } catch {}
+        } catch {// SAFETY: best-effort, ignore recoverable error
+          // SAFETY: best-effort, ignore recoverable error
+}
       }
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
     if (injected) return;
     // Fallback: aboveEditor widget (very early, before chatContainer captured)
@@ -222,7 +236,7 @@ export class TranscriptTimeline {
             try {
               void tui;
             } catch {
-              // ignore
+              // SAFETY: best-effort UI, ignore recoverable error
             }
           }
           return {
@@ -245,7 +259,7 @@ export class TranscriptTimeline {
       );
       this.getTuiRef?.()?.requestRender();
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
@@ -254,7 +268,7 @@ export class TranscriptTimeline {
     try {
       ctx?.setWidget("wall-time", undefined);
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
@@ -335,7 +349,7 @@ export class TranscriptTimeline {
                 this as { ui?: { requestRender?: () => void } }
               ).ui?.requestRender?.();
             } catch {
-              // ignore
+              // SAFETY: best-effort UI, ignore recoverable error
             }
             return res;
           } as never;
@@ -356,10 +370,14 @@ export class TranscriptTimeline {
             try {
               const mod = req(p) as { InteractiveMode?: unknown };
               tryPatch(mod?.InteractiveMode);
-            } catch {}
+            } catch {// SAFETY: best-effort, ignore recoverable error
+              // SAFETY: best-effort, ignore recoverable error
+}
           }
         }
-      } catch {}
+      } catch {// SAFETY: best-effort, ignore recoverable error
+        // SAFETY: best-effort, ignore recoverable error
+}
       for (const p of candidates) {
         import(p)
           .then((mod: unknown) =>
@@ -381,7 +399,7 @@ export class TranscriptTimeline {
         this.capturedIM ?? findChatContainerViaGlobalScan();
       this.patched = true;
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 }

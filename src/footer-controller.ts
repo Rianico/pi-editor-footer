@@ -42,7 +42,7 @@ export class FooterController {
       const git = await readGitStatus(cwd);
       this.state = { ...this.state, git };
     } catch {
-      // best-effort
+      // SAFETY: best-effort, ignore recoverable error
     }
   }
 
@@ -52,7 +52,7 @@ export class FooterController {
       const runtime = await readRuntimeInfo(cwd);
       this.state = { ...this.state, runtime };
     } catch {
-      // best-effort
+      // SAFETY: best-effort, ignore recoverable error
     }
   }
 

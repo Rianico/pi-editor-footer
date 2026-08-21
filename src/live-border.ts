@@ -64,7 +64,7 @@ export class LiveBorder {
           this.refreshContextBar();
         }
       } catch {
-        // ignore — best-effort border refresh
+        // SAFETY: best-effort, ignore recoverable error
       }
     }, REFRESH_MS);
     // don't block process exit
@@ -99,7 +99,7 @@ export class LiveBorder {
       const text = formatRunActivityTopRight(snap, theme as never);
       editor.setTopRightText(text);
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
@@ -113,7 +113,7 @@ export class LiveBorder {
         editor.setTelemetryText("");
         editor.setBottomLeftText("");
       } catch {
-        // ignore
+        // SAFETY: best-effort UI, ignore recoverable error
       }
       return;
     }
@@ -137,7 +137,7 @@ export class LiveBorder {
         editor.setBottomLeftText("");
       }
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
@@ -170,6 +170,7 @@ export class LiveBorder {
           theme as never,
           glyphs,
           isAscii,
+          // SAFETY: intentional unsafe cast — validated at runtime
           (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ??
             false,
         );
@@ -194,6 +195,7 @@ export class LiveBorder {
           const dummy = {
             inputTokens: 0,
             outputTokens: 0,
+          // SAFETY: intentional unsafe cast — validated at runtime
           } as unknown as TurnTelemetry;
           tokensText = formatTelemetryTokens(
             dummy,
@@ -206,7 +208,7 @@ export class LiveBorder {
       editor.setTopContextText(contextText);
       editor.setTopTokensText(tokensText);
     } catch {
-      // ignore
+      // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 }

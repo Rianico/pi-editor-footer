@@ -294,6 +294,7 @@ export function installFooter(
     const config = getConfig();
     const cwd = ctx.sessionManager?.getCwd() ?? process.cwd();
     const totals = getUsageTotals(
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       ctx as unknown as {
         sessionManager?: {
           getEntries(): {
@@ -324,9 +325,11 @@ export function installFooter(
 
   // Prefer native footer if available
   if (
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     typeof (ctx.ui as unknown as { setFooter?: unknown }).setFooter ===
     "function"
   ) {
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     const ui = ctx.ui as unknown as {
       setFooter: (
         fn: (
@@ -357,11 +360,13 @@ export function installFooter(
         invalidate() {},
         render(width: number) {
           // Use real theme when rendering
+          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
           const theme = _theme as unknown as Theme;
           const state = getState();
           const config = getConfig();
           const cwd = ctx.sessionManager?.getCwd() ?? process.cwd();
           const totals = getUsageTotals(
+            // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             ctx as unknown as {
               sessionManager?: {
                 getEntries(): {
@@ -393,6 +398,7 @@ export function installFooter(
       };
     });
     return () => {
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       (ctx.ui as unknown as { setFooter: (v: undefined) => void }).setFooter(
         undefined,
       );

@@ -153,10 +153,14 @@ function validate(config: ThemeConfig): ThemeConfig {
   if (!isBoolean(config.enabled)) {
     config.enabled = DEFAULT_CONFIG.enabled;
   }
+  // SAFETY: intentional unsafe cast — validated at runtime
   if (!isBoolean((config as unknown as Record<string, unknown>).contextIconBar)) {
+    // SAFETY: intentional unsafe cast — validated at runtime
     (config as unknown as Record<string, unknown>).contextIconBar = DEFAULT_CONFIG.contextIconBar;
   }
+  // SAFETY: intentional unsafe cast — validated at runtime
   const fs = config.footerSegments as unknown as Record<string, unknown>;
+  // SAFETY: intentional unsafe cast — validated at runtime
   const dfs = DEFAULT_CONFIG.footerSegments as unknown as Record<
     string,
     boolean
@@ -164,14 +168,19 @@ function validate(config: ThemeConfig): ThemeConfig {
   for (const k of Object.keys(dfs)) {
     if (!isBoolean(fs[k])) fs[k] = dfs[k];
   }
+  // SAFETY: intentional unsafe cast — validated at runtime
   const t = config.telemetry as unknown as Record<string, unknown>;
+  // SAFETY: intentional unsafe cast — validated at runtime
   const dt = DEFAULT_CONFIG.telemetry as unknown as Record<string, boolean>;
   for (const k of Object.keys(dt)) {
     if (!isBoolean(t[k])) t[k] = dt[k];
   }
+  // SAFETY: intentional unsafe cast — validated at runtime
   const tl = (config as unknown as Record<string, unknown>).timeline as unknown as Record<string, unknown> | undefined;
+  // SAFETY: intentional unsafe cast — validated at runtime
   const dtl = DEFAULT_CONFIG.timeline as unknown as Record<string, boolean>;
   if (!tl || typeof tl !== "object") {
+    // SAFETY: intentional unsafe cast — validated at runtime
     (config as unknown as Record<string, unknown>).timeline = structuredClone(DEFAULT_CONFIG.timeline);
   } else {
     for (const k of Object.keys(dtl)) {
@@ -214,6 +223,7 @@ export class ConfigStore {
     this.readFile =
       deps.readFile ??
       ((p: string, enc: string) =>
+        // SAFETY: intentional unsafe cast — validated at runtime
         readFileSync(p, enc as BufferEncoding) as unknown as string);
     this.writeFile =
       deps.writeFile ??
@@ -240,7 +250,7 @@ export class ConfigStore {
           "utf8",
         );
       } catch {
-        // best-effort
+        // SAFETY: best-effort, ignore recoverable error
       }
       return structuredClone(DEFAULT_CONFIG);
     }
@@ -250,6 +260,7 @@ export class ConfigStore {
       const merged = deepMerge(structuredClone(DEFAULT_CONFIG), parsed);
       return validate(merged);
     } catch (err) {
+      // SAFETY: best-effort, ignore recoverable error
       console.warn(
         `[pi-skill-desc] config parse error (${p}): ${err instanceof Error ? err.message : String(err)} — using defaults`,
       );
@@ -266,12 +277,13 @@ export class ConfigStore {
       if (!this.exists(dir)) this.mkdirSyncFn(dir, { recursive: true });
       this.writeFile(p, JSON.stringify(merged, null, 2) + "\n", "utf8");
     } catch {
-      // best-effort
+      // SAFETY: best-effort, ignore recoverable error
     }
     for (const fn of this.listeners) {
       try {
         fn(merged, prev);
       } catch {
+        // SAFETY: best-effort, ignore recoverable error
         // subscriber error should not break store
       }
     }

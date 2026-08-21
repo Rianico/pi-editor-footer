@@ -57,7 +57,7 @@ export class BorderRenderer {
           if (typeof maybeGlow === "function")
             return maybeGlow.call(theme, info.level)(s);
         } catch {
-          // ignore
+          // SAFETY: best-effort UI, ignore recoverable error
         }
         return s;
       };
@@ -132,7 +132,7 @@ export class BorderRenderer {
           if (typeof maybeGlow === "function")
             return maybeGlow.call(theme, this.getModelInfo().level)(s);
         } catch {
-          // ignore
+          // SAFETY: best-effort UI, ignore recoverable error
         }
         return s;
       };

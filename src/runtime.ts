@@ -223,7 +223,8 @@ function fingerprint(cwd: string, def: RuntimeDef): string {
       const stat = statSync(join(cwd, f));
       parts.push(`${f}:${stat.mtimeMs}`);
     } catch {
-      /* ignore */
+      // SAFETY: best-effort, ignore recoverable error
+      // SAFETY: best-effort, ignore recoverable error
     }
   }
   if (def.extensions || def.folders) {
@@ -231,7 +232,8 @@ function fingerprint(cwd: string, def: RuntimeDef): string {
       const entries = readdirSync(cwd);
       parts.push(...entries.slice().sort());
     } catch {
-      /* ignore */
+      // SAFETY: best-effort, ignore recoverable error
+      // SAFETY: best-effort, ignore recoverable error
     }
   }
   if (def.env && process.env[def.env]) {
@@ -250,7 +252,8 @@ function matchesDef(cwd: string, def: RuntimeDef): boolean {
       if (entries.some((e) => def.extensions!.some((ext) => e.endsWith(ext))))
         return true;
     } catch {
-      /* ignore */
+      // SAFETY: best-effort, ignore recoverable error
+      // SAFETY: best-effort, ignore recoverable error
     }
   }
   return false;
@@ -277,6 +280,7 @@ async function fetchVersion(
     }
     return stdout.trim() || undefined;
   } catch {
+    // SAFETY: best-effort, ignore recoverable error
     return undefined;
   }
 }

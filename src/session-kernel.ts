@@ -212,7 +212,8 @@ export class SessionKernel {
     );
     // Window presentation is pure — kernel owns width/scroll, presentation owns border styling
     // Called with live theme from widget's render(width, theme) — kernel doesn't cache theme
-    return { lines, innerWidth } as unknown as string[]; // SAFETY: placeholder shape validated in makeDetailWidget // SAFETY: internal seam — actual decorate happens in widget factory using lines
+    // SAFETY: placeholder shape validated in makeDetailWidget // SAFETY: internal seam — actual decorate happens in widget factory using lines
+    return { lines, innerWidth } as unknown as string[];
   }
 
   // Convenience for widget factory — returns decorated window lines

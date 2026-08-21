@@ -134,15 +134,18 @@ export function createChromeSnapshot(
 ): ChromeSnapshot {
   const cwd =
     ctx?.sessionManager?.getCwd?.() ??
-    (ctx as unknown as { cwd?: string })?.cwd ?? // SAFETY: pi seam
+    // SAFETY: pi seam
+    (ctx as unknown as { cwd?: string })?.cwd ??
     process.cwd();
   const sessionName = ctx?.sessionManager?.getSessionName?.();
   const contextUsage = ctx?.getContextUsage?.() as ContextUsage | undefined;
   const totals = getUsageTotals(
-    (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
+    // SAFETY: pi seam
+    (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0],
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults
-  const git = (footerState as FooterState | undefined)?.git ?? ({ branch: undefined, ahead: 0, behind: 0, modified: 0, untracked: 0, staged: 0, stashed: 0, conflicted: 0, renamed: 0, deleted: 0, commit: null } as unknown as GitStatus); // SAFETY: pi seam
+  // SAFETY: pi seam
+  const git = (footerState as FooterState | undefined)?.git ?? ({ branch: undefined, ahead: 0, behind: 0, modified: 0, untracked: 0, staged: 0, stashed: 0, conflicted: 0, renamed: 0, deleted: 0, commit: null } as unknown as GitStatus);
   const runtime = (footerState as FooterState | undefined)?.runtime ?? null;
   return {
     cwd,

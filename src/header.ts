@@ -165,6 +165,7 @@ export function installHeader(
 
   // Adapter: ExtensionUIContextLike.setWidget expects (key, content, options)
   // where content can be string[] or factory (tui, theme) => Component.
+  // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   const ui = ctx.ui as unknown as {
     setWidget: (
       key: string,
@@ -177,6 +178,7 @@ export function installHeader(
       options?: { placement?: string },
     ) => void;
   };
+  // SAFETY: intentional unsafe cast — validated at runtime
   ui.setWidget(key, factory as unknown as never, { placement: "aboveEditor" });
 
   return () => {

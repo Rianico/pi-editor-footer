@@ -51,6 +51,7 @@ async function gitExec(args: string[], cwd: string): Promise<string | null> {
     });
     return stdout;
   } catch {
+    // SAFETY: best-effort, ignore recoverable error
     return null;
   }
 }
