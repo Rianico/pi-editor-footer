@@ -504,7 +504,7 @@ export function formatTurnTelemetry(
     parts.push(
       theme.fg(
         telemetry.tps === null ? "muted" : "accent",
-        `${g.speed}${value}`,
+        `${g.speed} TPS ${value}`,
       ),
     );
   }
@@ -512,7 +512,7 @@ export function formatTurnTelemetry(
     parts.push(
       theme.fg(
         "text",
-        `${g.latency}${formatTurnDuration(telemetry.ttftMs)}`,
+        `${g.latency} TTFT ${formatTurnDuration(telemetry.ttftMs)}`,
       ),
     );
   }

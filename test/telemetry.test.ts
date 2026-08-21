@@ -119,7 +119,7 @@ describe("TurnTelemetryTracker", () => {
     });
     assert.equal(
       formatTurnTelemetry(telemetry!, theme, fullConfig),
-      ">4.0 tok/s · ~4.0s · +5.0s · ↑50 · ↓20 · $4.00",
+      "> TPS 4.0 tok/s · ~ TTFT 4.0s · +5.0s · ↑50 · ↓20 · $4.00",
     );
   });
 
