@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Telemetry TPS display throttled to 1 s (data vs display separated) — `message_update` now only updates `liveDeltaChars`/`liveEstimatedTokens` in `TurnTelemetryTracker`, display `peekLive()` → `formatTurnTelemetry` only via `liveTickTimer` every `REFRESH_MS` and `message_start`/`end`/`turn_end`/`agent_settled` for approximately accurate TPS without per-delta TUI jank
 - Telemetry cost toggling `telemetry.cost` off/on no longer resets cost to `$0.00` — `refreshLiveTelemetry` now falls back to `getLastTelemetry()` when `peekLive()` is null (idle) and `onConfigChanged` calls `refreshLiveTelemetry()` immediately
 - Refresh rate set to one second (`REFRESH_MS = 1000` for `liveTickTimer` telemetry/top/context and `watchTimer` editor ownership watchdog, was hardcoded `1000`)
 - Context icon bar now switchable via config `contextIconBar` (default `false` disabled) — `0.0% · 0/1.0M | c 0.0%` by default, `# [████░░] 39.6% · 416k/1.0M | c 85.3%` when enabled (footer top, `nerd`/`ascii` glyphs)
