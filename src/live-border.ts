@@ -175,7 +175,7 @@ export class LiveBorder {
             false,
         );
       }
-      // Tokens line above model info — separate from context bar (moved per user request)
+      // Tokens line above model info — left aligned, no border; hidden at startup per user request
       let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
         // SAFETY: pi TUI seam - telemetry tokens for top tokens line
@@ -185,20 +185,6 @@ export class LiveBorder {
         if (live) {
           tokensText = formatTelemetryTokens(
             live,
-            theme as never,
-            cfg.telemetry,
-            glyphs as never,
-          );
-        } else {
-          // default at start time
-          // SAFETY: dummy telemetry default tokens at start (↑0·↓0)
-          const dummy = {
-            inputTokens: 0,
-            outputTokens: 0,
-          // SAFETY: intentional unsafe cast — validated at runtime
-          } as unknown as TurnTelemetry;
-          tokensText = formatTelemetryTokens(
-            dummy,
             theme as never,
             cfg.telemetry,
             glyphs as never,
