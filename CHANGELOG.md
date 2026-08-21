@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Dim line after `agent_end` now with specified timeline metrics (`timeline.enabled`/`wallTime`/`tokens`/`cost` in `ThemeConfig`, `Timeline` tab in `/pi-editor-footer` settings) — `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim aboveEditor, never exposed to model
 - Wall time dim line after `agent_end` now positioned after last agent message in transcript (`aboveEditor` widget `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim, not footer second line) — visible right after `agent_end` message, hidden on next `agent_start`, never exposed to model
 - Wall time dim line after `agent_end` now a separate footer row (was inline `cwd · wall`) — now `line1: cwd · runtime | ↑·↓·$` and `line2: · 8s wall · ↑ 1.2k · ↓ 800 · $0.12` dim, so timeline is visible
 - Tokens separator now `·` not `|` (`↑ 1.2k · ↓ 800 · $0.12` in footer stats and `· 8s wall · ↑ · ↓ · $` dim line)
