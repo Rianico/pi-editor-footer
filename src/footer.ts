@@ -61,6 +61,7 @@ export function formatContextBar(
   isAscii: boolean,
   barWidth = 10,
   cacheHitRate?: number,
+  showIconBar = false,
 ): string {
   const contextWindow = contextUsage?.contextWindow ?? 0;
   if (contextWindow <= 0) return "";
@@ -71,9 +72,10 @@ export function formatContextBar(
   );
   const contextTokens = contextUsage?.tokens ?? 0;
   const ctxText = `${theme.fg("text", fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg("text", fmtTokens(contextWindow))}`;
-  const contextIcon = theme.fg(stressColor(contextPct), glyphs.context);
-  const bar = renderBar(theme, contextPct, barWidth, isAscii);
-  const base = `${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
+  const baseCore = `${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
+  const base = showIconBar
+    ? `${theme.fg(stressColor(contextPct), glyphs.context)} ${renderBar(theme, contextPct, barWidth, isAscii)} ${baseCore}`
+    : baseCore;
   const rate = cacheHitRate !== undefined && Number.isFinite(cacheHitRate) ? cacheHitRate : 0;
   const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;
   return `${base} ${theme.fg("dim", "|")} ${theme.fg(cacheHitColor(rate), cacheText)}`;

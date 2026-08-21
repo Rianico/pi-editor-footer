@@ -336,7 +336,7 @@ function refreshContextBar(): void {
 		} catch {
 			void 0;
 		}
-		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10, cacheHitRate);
+		const text = formatContextBar(usage, theme as any, glyphs, isAscii, 10, cacheHitRate, currentConfig.contextIconBar);
 		installedEditor.setTopContextText(text);
 	} catch {
 		void 0;

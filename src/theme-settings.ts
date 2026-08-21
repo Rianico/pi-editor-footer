@@ -74,6 +74,7 @@ const COPY = {
     gitCommit: "Git commit (detached)",
     runtime: "Runtime",
     context: "Context bar",
+    contextIconBar: "Context icon bar",
     tokens: "Tokens",
     cost: "Cost",
     extensionStatuses: "Extension status line",
@@ -212,6 +213,11 @@ function buildFooterItems(config: ThemeConfig): SettingItem[] {
       currentValue: flag(segs.context),
     },
     {
+      id: "contextIconBar",
+      label: COPY.labels.contextIconBar,
+      currentValue: flag((config as unknown as Record<string, unknown>).contextIconBar as boolean),
+    },
+    {
       id: "tokens",
       label: COPY.labels.tokens,
       currentValue: flag(segs.tokens),
@@ -276,6 +282,9 @@ function handleSettingChange(
     if (itemId === "iconMode") return cycleIconMode(config);
   }
   if (tab === "footer") {
+    if (itemId === "contextIconBar") {
+      return { ...config, contextIconBar: !config.contextIconBar };
+    }
     return toggleFlag(config, itemId as keyof ThemeConfig["footerSegments"]);
   }
   if (tab === "telemetry") {

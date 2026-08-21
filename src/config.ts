@@ -38,6 +38,7 @@ export interface ThemeConfig {
   icons: {
     mode: IconMode;
   };
+  contextIconBar: boolean;
   telemetry: TelemetryConfig;
   footerSegments: FooterSegments;
 }
@@ -49,6 +50,7 @@ export const DEFAULT_CONFIG: ThemeConfig = {
   icons: {
     mode: "auto",
   },
+  contextIconBar: false,
   footerSegments: {
     cwd: true,
     sessionName: false,
@@ -136,6 +138,9 @@ function validate(config: ThemeConfig): ThemeConfig {
   }
   if (!isBoolean(config.enabled)) {
     config.enabled = DEFAULT_CONFIG.enabled;
+  }
+  if (!isBoolean((config as unknown as Record<string, unknown>).contextIconBar)) {
+    (config as unknown as Record<string, unknown>).contextIconBar = DEFAULT_CONFIG.contextIconBar;
   }
   const fs = config.footerSegments as unknown as Record<string, unknown>;
   const dfs = DEFAULT_CONFIG.footerSegments as unknown as Record<
