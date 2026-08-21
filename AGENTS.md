@@ -65,6 +65,10 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 ### Context icon bar switchable — default disabled
 - Top context bar `formatContextBar` now takes `showIconBar` and returns `pct · tokens/W | c` without `icon`/`bar` by default (`0.0% · 0/1.0M | c 0.0%`), and `icon bar pct · tokens/W | c` when `showIconBar` true (`# [████░░] 39.6% · 416k/1.0M | c`). Config `ThemeConfig.contextIconBar` default `false`, validated in `validate()`, persisted via `ConfigStore`, toggled in `theme-settings` footer tab as “Context icon bar” On/Off, passed from `src/index.ts:refreshContextBar` as `currentConfig.contextIconBar`.
 
+### Telemetry cost ` $0.00` after toggling `cost` off/on
+- `refreshLiveTelemetry` was `peekLive()`-only, so when no turn was running (`this.turn` undefined) toggling `telemetry.cost` did nothing and cost stayed `null` → `$0.00`. Also `onConfigChanged` only did `setCursorStyle`/`refreshContextBar`/`requestRender`, not `refreshLiveTelemetry`.
+- Fix: `refreshLiveTelemetry` now `peekLive() ?? getLastTelemetry()` so last turn's `$0.16` is shown immediately, and `onConfigChanged` calls `refreshLiveTelemetry()` right after `saveConfig`.
+
 ### Refresh `1000` → `REFRESH_MS`
 - `liveTickTimer` (telemetry/top/context `refreshAllLive` every `1000`) and `watchTimer` (editor ownership `ensureEditorOwnership` every `1000`) were hardcoded `1000`. User asked to set refresh rate to one second explicitly, so added `const REFRESH_MS = 1000` in `src/index.ts` and used it for both `setInterval(..., REFRESH_MS)`.
 
