@@ -231,33 +231,139 @@ function updateWidget(ctx: ExtensionUIContextLike): void {
 	tuiRef?.requestRender();
 }
 
-function makeWallTimeWidget(history: string[], ctx: ExtensionUIContextLike): import("@earendil-works/pi-tui").Component {
-	return {
-		invalidate() {},
-		render(width: number): string[] {
-			const theme = ctx.theme as unknown as { fg(s: string, t: string): string };
-			// Left aligned dim timeline — one line per agent run, permanently between runs
-			// Rendered aboveEditor (between transcript bottom and input), stacked, dim, left aligned
-			return history.map((line) => theme.fg("dim", line));
-		},
-	};
+// Timeline injection — dim line between each agent run, left-aligned, permanent in transcript
+// Inserts directly into chatContainer (scrollable transcript) so it appears as:
+//   User: hello? / Assistant: hi. / <dim timeline> / User: nice ... / Assistant: ... / <dim timeline>
+// This scrolls with history and is not exposed to model (not via sessionManager).
+// Falls back to aboveEditor widget only if chatContainer cannot be found (very early).
+let capturedIM: any = null;
+
+function findChatContainerViaGlobalScan(): any {
+	try {
+		// Scan globalThis and process for any object that looks like InteractiveMode (has chatContainer + addMessageToChat)
+		const seen = new Set<any>();
+		const queue: any[] = [globalThis as any, global as any, process as any];
+		// Also try require.cache if available
+		try {
+			const req: any = (globalThis as any).require ?? (typeof require !== "undefined" ? require : null);
+			if (req?.cache) queue.push(...Object.values(req.cache).map((m: any) => m?.exports).filter(Boolean));
+		} catch {}
+		for (let i = 0; i < queue.length && i < 200; i++) {
+			const obj = queue[i];
+			if (!obj || typeof obj !== "object" || seen.has(obj)) continue;
+			seen.add(obj);
+			try {
+				if (obj.chatContainer && typeof obj.addMessageToChat === "function") return obj;
+				if (obj.chatContainer && obj.ui) return obj;
+			} catch {}
+			try {
+				for (const k of Object.getOwnPropertyNames(obj)) {
+					try {
+						const v = obj[k];
+						if (v && typeof v === "object" && !seen.has(v)) {
+							if (v.chatContainer && typeof v.addMessageToChat === "function") return v;
+							if (queue.length < 500) queue.push(v);
+						}
+					} catch {}
+				}
+			} catch {}
+		}
+	} catch {}
+	return null;
 }
 
-function showWallTimeWidget(ctx: ExtensionUIContextLike, text: string): void {
-	wallTimeHistory.push(text);
-	const snapshot = [...wallTimeHistory];
-	ctx.setWidget("wall-time", (tui) => {
-		tuiRef = tui as unknown as typeof tuiRef;
-		return makeWallTimeWidget(snapshot, ctx);
-	}, { placement: "aboveEditor" });
-	tuiRef?.requestRender();
+function captureInteractiveMode(): void {
+	try {
+		const tryPatch = (IM: any) => {
+			if (!IM || (IM as any).__timelinePatched) return;
+			(IM as any).__timelinePatched = true;
+			const origAdd = IM.prototype.addMessageToChat;
+			if (origAdd) {
+				IM.prototype.addMessageToChat = function(...args: any[]) {
+					capturedIM = this;
+					return origAdd.apply(this, args);
+				};
+			}
+			const origRebuild = IM.prototype.rebuildChatFromMessages;
+			if (origRebuild) {
+				IM.prototype.rebuildChatFromMessages = function(...args: any[]) {
+					capturedIM = this;
+					const res = origRebuild.apply(this, args);
+					// Re-inject all historical timelines after rebuild (not in sessionManager)
+					try {
+						for (const line of wallTimeHistory) {
+							const theme: any = (this as any).ui?.theme ?? (lastSessionCtx as any)?.ui?.theme;
+							if (!theme) continue;
+							const dim = theme.fg("dim", line);
+							const spacerComp = { invalidate() {}, render(w: number) { return [""]; } } as any;
+							const textComp = { invalidate() {}, render() { return [dim]; } } as any;
+							(this as any).chatContainer?.addChild(spacerComp);
+							(this as any).chatContainer?.addChild(textComp);
+						}
+						(this as any).ui?.requestRender?.();
+					} catch {}
+					return res;
+				};
+			}
+		};
+		// Try multiple import paths for robustness (global install vs local)
+		const candidates = [
+			"/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+			"/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+			"/opt/homebrew/lib/node_modules/@earendil-works/pi-agent-core/dist/modes/interactive/interactive-mode.js",
+		];
+		for (const p of candidates) {
+			import(p).then((mod: any) => tryPatch(mod.InteractiveMode)).catch(() => {});
+		}
+		// Also try package-name resolve (may work if pi-coding-agent is resolvable)
+		import("@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js" as any).then((mod: any) => tryPatch(mod.InteractiveMode)).catch(() => {});
+		// @ts-ignore
+		(globalThis as any).__piTimelineIM = () => capturedIM ?? findChatContainerViaGlobalScan();
+	} catch {}
+}
+captureInteractiveMode();
+
+function injectTimelineDimLine(ctx: ExtensionUIContextLike, rawLine: string): void {
+	wallTimeHistory.push(rawLine);
+	const theme: any = (ctx as any).theme ?? (lastSessionCtx as any)?.ui?.theme;
+	const dim = theme ? theme.fg("dim", rawLine) : rawLine;
+	let injected = false;
+	try {
+		const im: any = capturedIM ?? (globalThis as any).__piTimelineIM?.() ?? findChatContainerViaGlobalScan();
+		if (im?.chatContainer) {
+			capturedIM = im;
+			const spacerComp = { invalidate() {}, render(w: number) { return [""]; } } as any;
+			const textComp = { invalidate() {}, render() { return [dim]; } } as any;
+			im.chatContainer.addChild(spacerComp);
+			im.chatContainer.addChild(textComp);
+			im.ui?.requestRender?.();
+			if (im?.transcriptScrollView?.scrollTo) {
+				try { im.transcriptScrollView.scrollTo({ follow: "end" } as any); } catch {}
+			}
+			injected = true;
+		}
+	} catch {}
+	if (injected) return;
+	// Fallback: aboveEditor widget (very early, before chatContainer captured)
+	try {
+		const snapshot = [...wallTimeHistory];
+		ctx.setWidget("wall-time", (tui) => {
+			tuiRef = tui as unknown as typeof tuiRef;
+			return {
+				invalidate() {},
+				render() {
+					const th: any = (ctx as any).theme;
+					return snapshot.map((l) => th.fg("dim", l));
+				},
+			};
+		}, { placement: "aboveEditor" });
+		tuiRef?.requestRender();
+	} catch {}
 }
 
-function hideWallTimeWidget(ctx: ExtensionUIContextLike): void {
-	if (wallTimeHistory.length === 0) return;
+function clearTimelineHistory(ctx?: ExtensionUIContextLike): void {
 	wallTimeHistory = [];
-	ctx.setWidget("wall-time", undefined);
-	tuiRef?.requestRender();
+	try { ctx?.setWidget("wall-time", undefined); } catch {}
 }
 
 /** shift+up/down handler: scroll the detail window one line, clamped. */
@@ -594,20 +700,8 @@ export default function (pi: ExtensionAPILike): void {
 			installedEditor?.setCursorStyle(currentConfig.cursorStyle);
 			refreshContextBar();
 			refreshLiveTelemetry();
-			// refresh wall time dim timeline if visible — respects timeline.enabled (preserve history)
-			if (wallTimeHistory.length > 0 && lastSessionCtx) {
-				try {
-					if (!currentConfig.timeline.enabled) {
-						lastSessionCtx.ui.setWidget("wall-time", undefined);
-					} else {
-						const snapshot = [...wallTimeHistory];
-						lastSessionCtx.ui.setWidget("wall-time", (tui) => {
-							tuiRef = tui as unknown as typeof tuiRef;
-							return makeWallTimeWidget(snapshot, lastSessionCtx!.ui as unknown as ExtensionUIContextLike);
-						}, { placement: "aboveEditor" });
-					}
-				} catch {}
-			}
+			// timeline is now in chatContainer (permanent between runs); no widget refresh needed on config change
+			// future agent_settled will use new timeline.* settings; existing lines stay as rendered
 			tuiRef?.requestRender();
 		},
 		onOverlayClosed: () => {
@@ -749,7 +843,7 @@ export default function (pi: ExtensionAPILike): void {
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
 	pi.on("session_shutdown", () => {
 		if (lastSessionCtx) {
-			try { hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike); } catch {}
+			try { clearTimelineHistory(lastSessionCtx.ui as unknown as ExtensionUIContextLike); } catch {}
 		}
 		agentStartMs = null;
 		footerState = { ...footerState, workingSince: undefined, lastDoneIn: undefined };
@@ -862,7 +956,7 @@ export default function (pi: ExtensionAPILike): void {
 		} else {
 			footerState = { ...footerState, workingSince: undefined };
 		}
-		// wall time dim row after last message — TUI-only, never exposed to model (aboveEditor widget)
+		// dimmed timeline between each agent run — TUI-only, not via sessionManager, left-aligned dim in chatContainer
 		try {
 			if (lastSessionCtx && footerState.lastDoneIn !== undefined && currentConfig.timeline.enabled) {
 				const totals = getUsageTotals(lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0]);
@@ -880,10 +974,10 @@ export default function (pi: ExtensionAPILike): void {
 					parts.push(`$${totals.cost.toFixed(2)}`);
 				}
 				if (parts.length === 0) {
-					hideWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
+					clearTimelineHistory(lastSessionCtx.ui as unknown as ExtensionUIContextLike);
 				} else {
 					const wallText = parts.join(" · ");
-					showWallTimeWidget(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
+					injectTimelineDimLine(lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
 				}
 			}
 		} catch {}
