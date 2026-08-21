@@ -260,8 +260,10 @@ export function renderFooter(
       leftParts.push({ text: `${sep}${runtimeSeg}`, priority: 4 });
     }
   }
+  // working stays inline; wall time after agent_end is a separate dim row (never model-exposed)
+  const isWallTime = state.lastDoneIn !== undefined && state.workingSince === undefined;
   const timerSeg = renderTimerSegment(theme, state, glyphs, totals, config);
-  if (timerSeg) {
+  if (timerSeg && !isWallTime) {
     const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
     leftParts.push({ text: `${sep}${timerSeg}`, priority: 1 });
   }
@@ -300,9 +302,16 @@ export function renderFooter(
   const fittedContext = rightBlock ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
 
+  const wallTimeLine =
+    isWallTime && timerSeg
+      ? truncateToWidth(theme.fg("dim", timerSeg), width, theme.fg("dim", "..."))
+      : null;
   const mainLines = [line1].map((line) =>
     truncateToWidth(line, width, theme.fg("dim", "...")),
   );
+  if (wallTimeLine) {
+    mainLines.push(wallTimeLine);
+  }
   if (segments.extensionStatuses && ctx.extensionStatuses) {
     const statuses = Array.from(ctx.extensionStatuses.entries())
       .sort(([a], [b]) => a.localeCompare(b))
