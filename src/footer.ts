@@ -74,9 +74,9 @@ export function formatContextBar(
   const contextIcon = theme.fg(stressColor(contextPct), glyphs.context);
   const bar = renderBar(theme, contextPct, barWidth, isAscii);
   const base = `${contextIcon} ${bar} ${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
-  if (cacheHitRate === undefined || !Number.isFinite(cacheHitRate)) return base;
-  const cacheText = `${glyphs.cacheHit} ${cacheHitRate.toFixed(1)}%`;
-  return `${base} ${theme.fg("dim", "|")} ${theme.fg(cacheHitColor(cacheHitRate), cacheText)}`;
+  const rate = cacheHitRate !== undefined && Number.isFinite(cacheHitRate) ? cacheHitRate : 0;
+  const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;
+  return `${base} ${theme.fg("dim", "|")} ${theme.fg(cacheHitColor(rate), cacheText)}`;
 }
 
 function renderGitSegment(
@@ -265,15 +265,13 @@ export function renderFooter(
     stats.push(theme.fg("warning", costText));
   }
   if (segments.tokens) {
-    const hasCacheTokens = totals.cacheRead > 0 || totals.cacheWrite > 0;
-    if (hasCacheTokens && totals.latestCacheHitRate !== undefined) {
-      stats.push(
-        theme.fg(
-          cacheHitColor(totals.latestCacheHitRate),
-          `${glyphs.cacheHit} ${totals.latestCacheHitRate.toFixed(1)}%`,
-        ),
-      );
-    }
+    const rate = totals.latestCacheHitRate ?? 0;
+    stats.push(
+      theme.fg(
+        cacheHitColor(rate),
+        `${glyphs.cacheHit} ${rate.toFixed(1)}%`,
+      ),
+    );
   }
   const statsBlock = stats.join(` ${theme.fg("dim", "|")} `);
 
