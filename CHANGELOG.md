@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-22
+
+### Changed
+- Remove duration section positioned to the right of `TTFT` in bottom telemetry (`telemetry:formatTurnTelemetry` now `TPS · TTFT` only, `duration` config ignored)
+- Use `<number> turns` to replace `T<number>` in top run-activity (`run-activity:formatRunActivityTopRight` now `1 turns` / `N turns` instead of `T1`/`T N`)
+- Exchange positions of cache rate section (`c %`) and context bar section (`pct · tokens/window` + bar) in top border — now `c % | pct · tokens/window` instead of `pct · tokens/window | c %` (`chrome-state:formatContextBar`)
+
+### Fixed
+- Clamp live TPS window and throttle `LiveBorder` for multi-turn runs
+- Add inline `SAFETY` for live-border casts (pi-lens)
+
 ## [0.4.0] - 2026-08-22
 
 ### Added
