@@ -91,7 +91,7 @@ export function formatContextBar(
       ? cacheHitRate
       : 0;
   const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;
-  return `${base} ${theme.fg("dim", "|")} ${theme.fg(cacheHitColor(rate), cacheText)}`;
+  return `${theme.fg(cacheHitColor(rate), cacheText)} ${theme.fg("dim", "|")} ${base}`;
 }
 
 /** Border adapter helper — one call from snapshot + theme/glyphs. */
@@ -139,7 +139,7 @@ export function createChromeSnapshot(
 ): ChromeSnapshot {
   const cwd =
     ctx?.sessionManager?.getCwd?.() ??
-    // SAFETY: pi seam
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     (ctx as unknown as { cwd?: string })?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     process.cwd();
   const sessionName = ctx?.sessionManager?.getSessionName?.();
