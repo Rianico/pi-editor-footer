@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-24
+
+### Changed
+- Context usage colors now `12.5%`/`25%`/`50%` quotas — `dim` 0-12.5 → `accent` 12.5-25 → `warning` 25-50 → `error` 50-100 via `color-policy:contextUsageColor` (was `25%`/`50%`/`75%`), respects theme semantic tokens
+- Live `↑`/`↓` tokens now per agent run (option B) — cumulative across turns in this agent via `telemetry:peekAgentLive()` + `live-border` top `↑`/`↓` (was per-turn via `getLastTurnTelemetry`), `getLastTelemetry` stays agent sum
+- Stall relocated from bottom telemetry to top right of tool use with `dim |` pipe — `run-activity` now `tools | !2×3.3s` top, bottom `telemetry:formatTurnTelemetry` now `TPS · TTFT` only (suppressed `stalls:false`)
+
 ## [0.5.0] - 2026-08-22
 
 ### Changed
