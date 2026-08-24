@@ -150,15 +150,88 @@ export class TurnTelemetryTracker {
   private agentStartMs: number | null = null;
   private agentTurns: TurnTelemetry[] = [];
   private lastTelemetry: TurnTelemetry | null = null;
+  private lastTurnTelemetry: TurnTelemetry | null = null;
   private decayBaseTps: number | null = null;
   private decayStartMs: number | null = null;
-
   constructor(now: () => number = () => performance.now()) {
     this.now = now;
   }
 
   getLastTelemetry(): TurnTelemetry | null {
     return this.lastTelemetry;
+  }
+
+  getLastTurnTelemetry(): TurnTelemetry | null {
+    return this.lastTurnTelemetry;
+  }
+
+  /** Agent-run live: cumulative across turns in current agent, including current live turn. Option B. */
+  peekAgentLive(): TurnTelemetry | null {
+    // No agent active -> show last agent sum (option B) or current live turn if any
+    if (this.agentStartMs === null) {
+      const live = this.peekLive();
+      if (live) return live;
+      return this.lastTelemetry ?? this.lastTurnTelemetry;
+    }
+    const live = this.peekLive();
+    const hasCompleted = this.agentTurns.length > 0;
+    if (!hasCompleted && !live) return null;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let totalTokens = 0;
+    let costUsd = 0;
+    let stallMs = 0;
+    let stallCount = 0;
+    let generationMs = 0;
+    let ttftMs = 0;
+    // sum completed turns
+    for (const t of this.agentTurns) {
+      inputTokens += t.inputTokens;
+      outputTokens += t.outputTokens;
+      totalTokens += t.totalTokens;
+      costUsd += t.costUsd;
+      stallMs += t.stallMs;
+      stallCount += t.stallCount;
+      generationMs += t.generationMs;
+    }
+    if (this.agentTurns.length > 0) ttftMs = this.agentTurns[0]!.ttftMs;
+    if (live) {
+      inputTokens += live.inputTokens;
+      outputTokens += live.outputTokens;
+      totalTokens += live.totalTokens;
+      costUsd += live.costUsd;
+      stallMs += live.stallMs;
+      stallCount += live.stallCount;
+      generationMs += live.generationMs;
+      if (ttftMs === 0) ttftMs = live.ttftMs;
+    }
+    const now = this.now();
+    const totalMs = Math.max(0, now - this.agentStartMs);
+    const measurementMs =
+      outputTokens > 0 && generationMs > 0 ? generationMs : null;
+    const tps =
+      measurementMs === null
+        ? null
+        : round(outputTokens / (measurementMs / 1000), 1);
+    const validCost = Number.isFinite(costUsd) && costUsd > 0;
+    const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
+    return {
+      tps,
+      ttftMs,
+      totalMs,
+      inputTokens,
+      outputTokens,
+      stallMs,
+      stallCount,
+      rateUsdPerMTokens:
+        validCost && validTokens
+          ? round(costUsd / (totalTokens / 1_000_000), 2)
+          : null,
+      generationMs,
+      totalTokens,
+      costUsd: validCost ? costUsd : 0,
+      measurementMs,
+    };
   }
   /** Live snapshot while a turn is running — for real-time border refresh. Returns null when idle. */
   peekLive(): TurnTelemetry | null {
@@ -386,7 +459,10 @@ export class TurnTelemetryTracker {
     const telemetry = this.endTurn();
     if (telemetry && this.agentStartMs !== null)
       this.agentTurns.push(telemetry);
-    if (telemetry) this.lastTelemetry = telemetry;
+    if (telemetry) {
+      this.lastTurnTelemetry = telemetry;
+      this.lastTelemetry = telemetry;
+    }
     return telemetry;
   }
 
@@ -478,11 +554,12 @@ export class TurnTelemetryTracker {
       measurementMs,
     };
     this.lastTelemetry = result;
+    // keep lastTurnTelemetry as last turn's per-turn telemetry (live input stays per-turn, not agent total)
     return result;
   }
 }
 
-function formatTurnDuration(ms: number): string {
+export function formatTurnDuration(ms: number): string {
   if (ms < 60_000) {
     // TTFT fixed width: 2-digit integer + one decimal -> padded 4 + "s" =5, then overall duration field padded to 7 for telemetry totalMs
     // For TTFT we want 5, for duration we want 7 — caller will pad accordingly, so here return 5 for <60s case

@@ -8,11 +8,19 @@ export function stressColor(value: number, warn = 70, danger = 90): ThemeColor {
 }
 
 export function contextUsageColor(pct: number): ThemeColor {
-  // 25% 50% 75% thresholds — transit from dimmed (low) to highlight (high)
-  // for intuitive quota status: dim (<25) → accent (25-50) → warning (50-75) → error (≥75)
-  if (pct >= 75) return "error";
-  if (pct >= 50) return "warning";
-  if (pct >= 25) return "accent";
+  // 12.5 / 25 / 50 quotas — four urgency tiers, increasingly aggressive as context fills.
+  // 0 – 12.5%  dim      — plenty of headroom, visually quiet.
+  // 12.5 – 25% accent   — first nudge, noticeable but calm.
+  // 25 – 50%   warning  — half consumed, needs attention.
+  // 50 – 100%  error     — critical, about to run out.
+  // Uses theme semantic tokens (dim/accent/warning/error) so the progression
+  // respects the active theme and remains legible on light/dark/custom palettes.
+  // A fixed hex palette (e.g. grey→sky→amber→red) would be more vivid but
+  // would ignore the user's theme and can clash with light backgrounds —
+  // semantic tokens keep the "aggressive" ordering while staying theme-coherent.
+  if (pct >= 50) return "error";
+  if (pct >= 25) return "warning";
+  if (pct >= 12.5) return "accent";
   return "dim";
 }
 

@@ -18,7 +18,11 @@ import {
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
-import { formatTelemetryTokens, formatTurnTelemetry } from "./telemetry.js";
+import {
+  formatTelemetryTokens,
+  formatTurnDuration,
+  formatTurnTelemetry,
+} from "./telemetry.js";
 import type { TurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
@@ -113,14 +117,43 @@ export class LiveBorder {
   private refreshTopBorder(): void {
     const editor = this.deps.getEditor();
     const ctx = this.deps.getCtx();
+    const cfg = this.deps.getConfig();
     if (!editor || !ctx) return;
     try {
-      // SAFETY: theme is live pi TUI theme read at render time
+      // SAFETY: theme is live pi TUI theme read at render time — intentional unsafe cast, validated at runtime
       const theme = (
         ctx.ui as unknown as { theme: { fg(s: string, t: string): string } }
-      ).theme; // SAFETY: pi seam — intentional unsafe cast, validated at runtime // SAFETY: pi seam
+      ).theme; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       const snap = this.deps.runActivityTracker.getSnapshot();
-      const text = formatRunActivityTopRight(snap, theme as never);
+      let text = formatRunActivityTopRight(snap, theme as never);
+      // Relocate stall to the right of tool use with pipe separator — agent-run live (option B), not bottom telemetry
+      if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
+        // SAFETY: pi seam — intentional unsafe cast, validated at runtime — telemetry tracker for stall (agent run, option B)
+        const tracker = this.deps.telemetryTracker as unknown as {
+          peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+          getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
+        };
+        const tel = tracker.peekAgentLive() ?? tracker.getLastTelemetry();
+        if (tel && tel.stallMs > 0) {
+          const glyphs = resolveGlyphs(cfg.icons.mode);
+          // SAFETY: pi seam — intentional unsafe cast, validated at runtime — theme fg
+          const stallText = (
+            theme as unknown as { fg: (s: string, t: string) => string }
+          ).fg(
+            "warning",
+            `${glyphs.stall}${tel.stallCount}×${formatTurnDuration(tel.stallMs).trim()}`,
+          );
+          if (text) {
+            // SAFETY: pi seam — intentional unsafe cast, validated at runtime — theme fg for pipe
+            const pipe = (
+              theme as unknown as { fg: (s: string, t: string) => string }
+            ).fg("dim", " | ");
+            text = `${text}${pipe}${stallText}`;
+          } else {
+            text = stallText;
+          }
+        }
+      }
       editor.setTopRightText(text);
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
@@ -142,18 +175,20 @@ export class LiveBorder {
       return;
     }
     try {
-      // SAFETY: peekLive ?? getLastTelemetry preserves cost after toggle (AGENTS.md gotcha)
+      // SAFETY: peekLive ?? getLastTelemetry preserves cost after toggle (AGENTS.md gotcha) — intentional unsafe cast, validated at runtime
       const live =
         this.deps.telemetryTracker.peekLive() ??
         this.deps.telemetryTracker.getLastTelemetry();
       if (!live) return;
-      // SAFETY: pi TUI seam read-only - theme from extension context
-      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime — theme from extension context
+      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
       const glyphs = resolveGlyphs(cfg.icons.mode);
+      // Stall relocated to top right of tool use with pipe — suppress in bottom telemetry
+      const bottomCfg = { ...cfg.telemetry, stalls: false };
       const right = formatTurnTelemetry(
         live,
         theme as never,
-        cfg.telemetry,
+        bottomCfg as never,
         glyphs as never,
       );
       if (live.totalMs > 0) {
@@ -202,10 +237,14 @@ export class LiveBorder {
       // Tokens line above model info — left aligned, no border; hidden at startup per user request
       let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
-        // SAFETY: pi TUI seam - telemetry tokens for top tokens line
-        const live =
-          this.deps.telemetryTracker.peekLive() ??
-          this.deps.telemetryTracker.getLastTelemetry();
+        // Live input/output per agent run (option B) — cumulative across turns in this agent, like live output
+        // SAFETY: pi seam — intentional unsafe cast, validated at runtime — telemetry tracker for top tokens line (agent run)
+        const tracker = this.deps.telemetryTracker as unknown as {
+          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+          peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+          getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
+        };
+        const live = tracker.peekAgentLive() ?? tracker.getLastTelemetry();
         if (live) {
           tokensText = formatTelemetryTokens(
             live,
