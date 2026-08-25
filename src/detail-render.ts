@@ -68,6 +68,21 @@ export function renderDetail(
 }
 
 /**
+ * Number of wrapped content lines for a description at a given width
+ * (excluding the header). Single source of wrapping truth for both render
+ * and scroll clamping — avoids re-parsing the rendered header marker.
+ */
+export function contentLineCount(item: DetailItem | null, width: number): number {
+	if (!item || item.description.trim() === "") {
+		return 0;
+	}
+	return wrapDescription(
+		item.description,
+		Math.max(1, Math.floor(width)),
+	).length;
+}
+
+/**
  * Next scroll offset after moving by `delta` (-1 = back/up, +1 = forward/down).
  *
  * - Returns 0 when there is nothing to scroll (description fits the window).

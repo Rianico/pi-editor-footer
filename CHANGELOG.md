@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Deepen architecture — 5 candidates behind single seams: AgentRunLedger owns per-agent capping and max-vs-sum (C2), ChromeComposition centralizes glyph/theme (C3), TurnTelemetryTracker turn-scoped with ledger delegation (C4), DetailChrome owns Highlight→Detail window (C5), SessionOrchestrator owns lifecycle, footer deduplication and detail wiring — `src/index.ts` 899→93 lines, 139 tests (+52) (#20)
+
 ## [0.6.2] - 2026-08-25
 
 ### Fixed

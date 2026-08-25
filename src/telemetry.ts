@@ -1,8 +1,12 @@
 /**
- * Turn telemetry tracker — pure, TUI-free.
+ * Turn telemetry tracker — pure, TUI-free. Turn-scoped only.
  *
  * Rebuilt bespoke from tmp/pi-open-tui/extensions/open-tui/telemetry.ts.
  * No imports beyond stdlib and pi-tui width utils omitted here (pure maths).
+ *
+ * Agent-run lifecycle is owned by AgentRunLedger (agent-run-ledger.ts) —
+ * this tracker deliberately has NO agent window (no agentStartMs/agentTurns/
+ * peekAgentLive). Agent events are accepted as no-ops for event-shape compat.
  */
 
 const STALL_THRESHOLD_MS = 1000;
@@ -148,8 +152,6 @@ export function formatDuration(ms: number): string {
 export class TurnTelemetryTracker {
   private readonly now: () => number;
   private turn: TurnTiming | undefined;
-  private agentStartMs: number | null = null;
-  private agentTurns: TurnTelemetry[] = [];
   private lastTelemetry: TurnTelemetry | null = null;
   private lastTurnTelemetry: TurnTelemetry | null = null;
   private decayBaseTps: number | null = null;
@@ -166,76 +168,6 @@ export class TurnTelemetryTracker {
     return this.lastTurnTelemetry;
   }
 
-  /** Agent-run live: cumulative across turns in current agent, including current live turn. Option B. */
-  peekAgentLive(): TurnTelemetry | null {
-    // No agent active -> show last agent sum (option B) or current live turn if any
-    if (this.agentStartMs === null) {
-      const live = this.peekLive();
-      if (live) return live;
-      return this.lastTelemetry ?? this.lastTurnTelemetry;
-    }
-    const live = this.peekLive();
-    const hasCompleted = this.agentTurns.length > 0;
-    if (!hasCompleted && !live) return null;
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let totalTokens = 0;
-    let costUsd = 0;
-    let stallMs = 0;
-    let stallCount = 0;
-    let generationMs = 0;
-    let ttftMs = 0;
-    // input per turn is the full prompt (includes history), summing double-counts overlapping
-    // history and makes live input exceed context usage (e.g. 50k+60k=110k > window 60k).
-    // Display input as peak window occupancy (max), not sum. Output/cost still sum.
-    for (const t of this.agentTurns) {
-      inputTokens = Math.max(inputTokens, t.inputTokens);
-      outputTokens += t.outputTokens;
-      costUsd += t.costUsd;
-      stallMs += t.stallMs;
-      stallCount += t.stallCount;
-      generationMs += t.generationMs;
-    }
-    if (this.agentTurns.length > 0) ttftMs = this.agentTurns[0]!.ttftMs;
-    if (live) {
-      inputTokens = Math.max(inputTokens, live.inputTokens);
-      outputTokens += live.outputTokens;
-      costUsd += live.costUsd;
-      stallMs += live.stallMs;
-      stallCount += live.stallCount;
-      generationMs += live.generationMs;
-      if (ttftMs === 0) ttftMs = live.ttftMs;
-    }
-    // totalTokens is window input (max) + cumulative output, not sum of per-turn totals
-    totalTokens = inputTokens + outputTokens;
-    const now = this.now();
-    const totalMs = Math.max(0, now - this.agentStartMs);
-    const measurementMs =
-      outputTokens > 0 && generationMs > 0 ? generationMs : null;
-    const tps =
-      measurementMs === null
-        ? null
-        : round(outputTokens / (measurementMs / 1000), 1);
-    const validCost = Number.isFinite(costUsd) && costUsd > 0;
-    const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
-    return {
-      tps,
-      ttftMs,
-      totalMs,
-      inputTokens,
-      outputTokens,
-      stallMs,
-      stallCount,
-      rateUsdPerMTokens:
-        validCost && validTokens
-          ? round(costUsd / (totalTokens / 1_000_000), 2)
-          : null,
-      generationMs,
-      totalTokens,
-      costUsd: validCost ? costUsd : 0,
-      measurementMs,
-    };
-  }
   /** Live snapshot while a turn is running — for real-time border refresh. Returns null when idle. */
   peekLive(): TurnTelemetry | null {
     const turn = this.turn;
@@ -331,13 +263,12 @@ export class TurnTelemetryTracker {
 
   handle(event: TelemetryEvent): TurnTelemetry | undefined {
     switch (event.type) {
+      // Agent lifecycle is owned by AgentRunLedger — this tracker is turn-scoped.
+      // Accepted as no-ops so index.ts can keep a uniform handle() call shape.
       case "agent_start":
-        this.agentStartMs = this.now();
-        this.agentTurns = [];
-        return;
       case "agent_end":
       case "agent_settled":
-        return this.endAgent();
+        return;
       case "turn_start":
         this.startTurn((event as { inputTokens?: number }).inputTokens);
         return;
@@ -459,8 +390,6 @@ export class TurnTelemetryTracker {
 
   private endTurnAndCollect(): TurnTelemetry | undefined {
     const telemetry = this.endTurn();
-    if (telemetry && this.agentStartMs !== null)
-      this.agentTurns.push(telemetry);
     if (telemetry) {
       this.lastTurnTelemetry = telemetry;
       this.lastTelemetry = telemetry;
@@ -518,51 +447,6 @@ export class TurnTelemetryTracker {
     };
   }
 
-  private endAgent(): TurnTelemetry | undefined {
-    const startMs = this.agentStartMs;
-    const turns = this.agentTurns;
-    this.agentStartMs = null;
-    this.agentTurns = [];
-    if (startMs === null || turns.length === 0) return;
-
-    const outputTokens = turns.reduce((sum, t) => sum + t.outputTokens, 0);
-    const inputTokens = turns.reduce(
-      (sum, t) => Math.max(sum, t.inputTokens),
-      0,
-    );
-    // totalTokens is window input (max) + cumulative output, not sum of per-turn totals
-    const totalTokens = inputTokens + outputTokens;
-    const costUsd = turns.reduce((sum, t) => sum + t.costUsd, 0);
-    const stallMs = turns.reduce((sum, t) => sum + t.stallMs, 0);
-    const stallCount = turns.reduce((sum, t) => sum + t.stallCount, 0);
-    const generationMs = turns.reduce((sum, t) => sum + t.generationMs, 0);
-    const measurementMs =
-      outputTokens > 0 && generationMs > 0 ? generationMs : null;
-    const tps =
-      measurementMs === null
-        ? null
-        : round(outputTokens / (measurementMs / 1000), 1);
-    const validRate = costUsd > 0 && totalTokens > 0;
-    const result: TurnTelemetry = {
-      tps,
-      ttftMs: turns[0]!.ttftMs,
-      totalMs: this.now() - startMs,
-      inputTokens,
-      outputTokens,
-      stallMs,
-      stallCount,
-      rateUsdPerMTokens: validRate
-        ? round(costUsd / (totalTokens / 1_000_000), 2)
-        : null,
-      generationMs,
-      totalTokens,
-      costUsd,
-      measurementMs,
-    };
-    this.lastTelemetry = result;
-    // keep lastTurnTelemetry as last turn's per-turn telemetry (live input stays per-turn, not agent total)
-    return result;
-  }
 }
 
 export function formatTurnDuration(ms: number): string {

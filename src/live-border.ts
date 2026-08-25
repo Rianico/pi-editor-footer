@@ -7,23 +7,18 @@
  *
  * Depth: small interface (render / startTick / stopTick) hides coalesced border composition
  * (run-activity + telemetry + context usage) and timer ownership. Callers learn one shape.
- * Impl hides resolveGlyphs, formatContextBar, formatRunActivityTopRight, formatTurnTelemetry,
- * getUsageTotals. One coalesced render per tick/event — not per-delta.
+ * Impl hides ChromeComposition (glyphs + theme + chrome format), getUsageTotals, and the
+ * AgentRunLedger capping. One coalesced render per tick/event — not per-delta.
+ *
+ * Glyph/theme derivation (C3) lives in ChromeComposition — LiveBorder no longer calls
+ * resolveGlyphs/resolveIconMode or casts the live theme; it queries composition once.
  */
 
-import {
-  createChromeSnapshot,
-  formatTopContextFromSnapshot,
-} from "./chrome-state.js";
-import { resolveGlyphs, resolveIconMode } from "./icons.js";
-import { formatRunActivityTopRight } from "./run-activity.js";
+import { createChromeSnapshot } from "./chrome-state.js";
+import { ChromeComposition } from "./chrome-composition.js";
 import type { RunActivityTracker } from "./run-activity.js";
-import {
-  formatTelemetryTokens,
-  formatTurnDuration,
-  formatTurnTelemetry,
-} from "./telemetry.js";
 import type { UsageTotals } from "./state.js";
+import type { AgentRunLedger } from "./agent-run-ledger.js";
 import type { TurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
@@ -38,6 +33,7 @@ export interface LiveBorderDeps {
   getConfig: () => ThemeConfig;
   telemetryTracker: TurnTelemetryTracker;
   runActivityTracker: RunActivityTracker;
+  agentLedger?: AgentRunLedger;
 }
 
 export class LiveBorder {
@@ -45,6 +41,9 @@ export class LiveBorder {
   private lastRenderMs = 0;
   private pendingRender: ReturnType<typeof setTimeout> | null = null;
   private agentBaseline: UsageTotals | null = null;
+  private get agentLedger(): AgentRunLedger | undefined {
+    return this.deps.agentLedger;
+  }
 
   constructor(private readonly deps: LiveBorderDeps) {}
 
@@ -121,40 +120,35 @@ export class LiveBorder {
 
   // ——— internal: three islands now hidden behind one seam ———
 
-  private refreshTopBorder(): void {
-    const editor = this.deps.getEditor();
+  /** Build one ChromeComposition from the live config + theme (per-render, theme is live). */
+  private composition(): ChromeComposition | null {
     const ctx = this.deps.getCtx();
     const cfg = this.deps.getConfig();
-    if (!editor || !ctx) return;
+    if (!ctx) return null;
+    // SAFETY: pi context seam — ctx.ui.theme is the live TUI theme (ThemeLike shape)
+    return new ChromeComposition(cfg.icons.mode, ctx.ui.theme);
+  }
+
+  private refreshTopBorder(): void {
+    const editor = this.deps.getEditor();
+    const cfg = this.deps.getConfig();
+    if (!editor) return;
     try {
-      // SAFETY: theme is live pi TUI theme read at render time — intentional unsafe cast, validated at runtime
-      const theme = (
-        ctx.ui as unknown as { theme: { fg(s: string, t: string): string } }
-      ).theme; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      const comp = this.composition();
+      if (!comp) return;
       const snap = this.deps.runActivityTracker.getSnapshot();
-      let text = formatRunActivityTopRight(snap, theme as never);
+      let text = comp.formatRunActivityTopRight(snap);
       // Relocate stall to the right of tool use with pipe separator — agent-run live (option B), not bottom telemetry
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
-        // SAFETY: pi seam — intentional unsafe cast, validated at runtime — telemetry tracker for stall (agent run, option B)
-        const tracker = this.deps.telemetryTracker as unknown as {
-          peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
-          getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
-        };
-        const tel = tracker.peekAgentLive() ?? tracker.getLastTelemetry();
+        // Deepened via AgentRunLedger — stall is agent-run live, single source
+        const tel =
+          this.agentLedger?.getLiveTotals(
+            this.deps.telemetryTracker.peekLive(),
+          ) ?? this.deps.telemetryTracker.getLastTelemetry();
         if (tel && tel.stallMs > 0) {
-          const glyphs = resolveGlyphs(cfg.icons.mode);
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime — theme fg
-          const stallText = (
-            theme as unknown as { fg: (s: string, t: string) => string }
-          ).fg(
-            "warning",
-            `${glyphs.stall}${tel.stallCount}×${formatTurnDuration(tel.stallMs).trim()}`,
-          );
+          const stallText = comp.formatStall(tel);
           if (text) {
-            // SAFETY: pi seam — intentional unsafe cast, validated at runtime — theme fg for pipe
-            const pipe = (
-              theme as unknown as { fg: (s: string, t: string) => string }
-            ).fg("dim", " | ");
+            const pipe = comp.dim(" | ");
             text = `${text}${pipe}${stallText}`;
           } else {
             text = stallText;
@@ -169,7 +163,6 @@ export class LiveBorder {
 
   private refreshLiveTelemetry(): void {
     const editor = this.deps.getEditor();
-    const ctx = this.deps.getCtx();
     const cfg = this.deps.getConfig();
     if (!editor) return;
     if (!cfg.telemetry.enabled) {
@@ -182,22 +175,16 @@ export class LiveBorder {
       return;
     }
     try {
-      // SAFETY: peekLive ?? getLastTelemetry preserves cost after toggle (AGENTS.md gotcha) — intentional unsafe cast, validated at runtime
+      // peekLive ?? getLastTelemetry preserves cost after toggle (AGENTS.md gotcha)
       const live =
         this.deps.telemetryTracker.peekLive() ??
         this.deps.telemetryTracker.getLastTelemetry();
       if (!live) return;
-      // SAFETY: pi seam — intentional unsafe cast, validated at runtime — theme from extension context
-      const theme = (ctx as unknown as { ui?: { theme?: unknown } })?.ui?.theme;
-      const glyphs = resolveGlyphs(cfg.icons.mode);
+      const comp = this.composition();
+      if (!comp) return;
       // Stall relocated to top right of tool use with pipe — suppress in bottom telemetry
       const bottomCfg = { ...cfg.telemetry, stalls: false };
-      const right = formatTurnTelemetry(
-        live,
-        theme as never,
-        bottomCfg as never,
-        glyphs as never,
-      );
+      const right = comp.formatTurnTelemetry(live, bottomCfg);
       if (live.totalMs > 0) {
         editor.setTelemetryText(right);
         editor.setBottomLeftText("");
@@ -213,54 +200,61 @@ export class LiveBorder {
     const cfg = this.deps.getConfig();
     if (!editor || !ctx) return;
     try {
-      // Deepened via ChromeState: snapshot owns contextUsage + totals derivation behind one seam.
-      // Two adapters (footer + border) now share the same snapshot — proves the seam.
-      // SAFETY: pi seam - snapshot derivation from extension context
+      const comp = this.composition();
+      if (!comp) return;
       const snapshot = createChromeSnapshot(
         ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         undefined,
       );
-      // SAFETY: pi seam - theme from extension context
-      const theme = (ctx as unknown as { ui: { theme: unknown } }).ui // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        .theme as unknown as never; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      const glyphs = resolveGlyphs(cfg.icons.mode);
-      const isAscii = resolveIconMode(cfg.icons.mode) === "ascii";
       let contextText = "";
       if (
         cfg.footerSegments.context &&
         snapshot.contextUsage &&
         snapshot.contextUsage.contextWindow
       ) {
-        contextText = formatTopContextFromSnapshot(
+        contextText = comp.formatTopContext(
           snapshot,
-          theme as never,
-          glyphs,
-          isAscii,
           // SAFETY: intentional unsafe cast — validated at runtime
           (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             false,
         );
       }
-      // Tokens line above model info — left aligned, no border; hidden at startup per user request
       let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
         const isRunning = this.deps.runActivityTracker.isRunning();
-        // Live input: window occupancy (max), not sum. Summing full prompts double-counts
-        // overlapping history (50k+60k=110k > window 60k) and exceeds context/total.
-        // Idle shows per-agent max via telemetry (fallback to delta capped), running shows
-        // current turn window (peekLive) + per-agent output/cost, both capped to context/total.
-        if (!isRunning && this.agentBaseline) {
+        const contextTokens = snapshot.contextUsage?.tokens;
+        // Deepened via AgentRunLedger — single source for capped per-agent display.
+        if (this.agentLedger) {
+          if (!isRunning) {
+            const telIdle =
+              this.agentLedger?.getLiveTotals(
+                this.deps.telemetryTracker.peekLive(),
+              ) ?? this.deps.telemetryTracker.getLastTelemetry();
+            const display = this.agentLedger.getIdleDisplayTotals(
+              snapshot.totals,
+              contextTokens,
+              telIdle,
+            );
+            tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
+          } else {
+            const liveTurn = this.deps.telemetryTracker.peekLive();
+            const agentLive =
+              this.agentLedger?.getLiveTotals(liveTurn) ??
+              this.deps.telemetryTracker.getLastTelemetry();
+            const display = this.agentLedger.getLiveDisplayTotals(
+              liveTurn,
+              agentLive,
+              contextTokens,
+            );
+            if (display) {
+              tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
+            }
+          }
+        } else if (!isRunning && this.agentBaseline) {
+          // Fallback when ledger not wired (backward compat)
           const cur = snapshot.totals;
           const base = this.agentBaseline;
-          // Idle per-agent display — input is peak window (max), not sum, to avoid
-          // double-count exceed (sum of prompts double-counts overlapping history).
-          // Prefer telemetry max when available, else delta capped to context/totals.
-          const trackerIdle = this.deps.telemetryTracker as unknown as {
-            peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
-            getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
-          };
-          const telIdle =
-            trackerIdle.peekAgentLive() ?? trackerIdle.getLastTelemetry();
+          const telIdle = this.deps.telemetryTracker.getLastTelemetry();
           let displayInput: number;
           let displayOutput: number;
           let displayCost: number;
@@ -273,7 +267,6 @@ export class LiveBorder {
             displayOutput = Math.max(0, cur.output - base.output);
             displayCost = Math.max(0, cur.cost - base.cost);
           }
-          // Guarantee invariant: live input never exceeds context window or session total
           if (snapshot.contextUsage?.tokens)
             displayInput = Math.min(displayInput, snapshot.contextUsage.tokens);
           if (cur.input > 0) displayInput = Math.min(displayInput, cur.input);
@@ -291,30 +284,16 @@ export class LiveBorder {
             costUsd: displayCost,
             measurementMs: null,
           };
-          tokensText = formatTelemetryTokens(
-            deltaTel,
-            theme as never,
-            cfg.telemetry,
-            glyphs as never,
-          );
-        } else {
-          // Live per-agent — input is current window (peekLive), not per-agent sum,
-          // to avoid sum(50k+60k)=110k > window 60k. Output/cost still per-agent sum.
-          const tracker = this.deps.telemetryTracker as unknown as {
-            peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
-            peekLive(): import("./telemetry.js").TurnTelemetry | null;
-            getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
-          };
-          const agentLive =
-            tracker.peekAgentLive() ?? tracker.getLastTelemetry();
-          const liveTurn = tracker.peekLive();
+          tokensText = comp.formatTelemetryTokens(deltaTel, cfg.telemetry);
+        } else if (isRunning) {
+          const liveTurn = this.deps.telemetryTracker.peekLive();
+          const agentLive = this.deps.telemetryTracker.getLastTelemetry();
           let displayLive = agentLive;
           if (
             agentLive &&
             liveTurn &&
             this.deps.runActivityTracker.isRunning()
           ) {
-            // Input = current turn window (liveTurn), output/cost = per-agent sum
             displayLive = {
               ...agentLive,
               inputTokens: liveTurn.inputTokens,
@@ -325,23 +304,12 @@ export class LiveBorder {
             let cappedInput = displayLive.inputTokens;
             if (snapshot.contextUsage?.tokens)
               cappedInput = Math.min(cappedInput, snapshot.contextUsage.tokens);
-            // Note: not capping to session totals during running — totals is authoritative
-            // (lagging) while liveTurn is predictive (current window). Capping to totals
-            // would make live stale (50k) during second turn streaming instead of showing
-            // current window 60k. After fix to max, live 60k == context 60k, not exceed context;
-            // live may still be > authoritative totals interim (60k > 50k) but will be <= totals
-            // after turn completes (60k <= 110k). This is expected predictive vs authoritative.
             displayLive = {
               ...displayLive,
               inputTokens: cappedInput,
               totalTokens: cappedInput + displayLive.outputTokens,
             };
-            tokensText = formatTelemetryTokens(
-              displayLive,
-              theme as never,
-              cfg.telemetry,
-              glyphs as never,
-            );
+            tokensText = comp.formatTelemetryTokens(displayLive, cfg.telemetry);
           }
         }
       }

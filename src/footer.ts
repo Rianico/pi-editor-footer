@@ -9,7 +9,8 @@ import type { RuntimeInfo } from "./runtime.js";
 import type { FooterState, ModelMeta, UsageTotals } from "./state.js";
 import { getUsageTotals } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
-import { resolveGlyphs, runtimeSymbol } from "./icons.js";
+import { runtimeSymbol } from "./icons.js";
+import { ChromeComposition } from "./chrome-composition.js";
 import {
   alignRight,
   fitSegmentsByPriority,
@@ -134,7 +135,8 @@ export function renderFooter(
   },
 ): string[] {
   if (width <= 0) return [""];
-  const glyphs = resolveGlyphs(config.icons.mode);
+  const comp = new ChromeComposition(config.icons.mode, theme);
+  const glyphs = comp.glyphs;
   const segments = config.footerSegments;
   const totals = ctx.totals ?? {
     input: 0,
