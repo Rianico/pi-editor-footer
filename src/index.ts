@@ -25,6 +25,7 @@ import { registerThemeSettingsCommand } from "./theme-settings.js";
 import { resolveGlyphs, resolveIconMode } from "./icons.js";
 import { fmtTokens, formatDuration } from "./format.js";
 import { LiveBorder } from "./live-border.js";
+import { AgentRunLedger } from "./agent-run-ledger.js";
 import { TranscriptTimeline } from "./transcript-timeline.js";
 /**
  * Minimal local declarations for the slice of pi's ExtensionAPI this extension
@@ -129,12 +130,14 @@ void timeline; // keep import used while now using pi.appendEntry interleaved pa
 let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
+const agentLedger = new AgentRunLedger();
 const liveBorder = new LiveBorder({
 	getEditor: () => installedEditor,
 	getCtx: () => lastSessionCtx as unknown as ExtensionContextLike | null, // SAFETY: pi context seam
 	getConfig: () => currentConfig,
 	telemetryTracker,
 	runActivityTracker,
+	agentLedger,
 });
 const REFRESH_MS = 1000;
 let liveTickTimer: ReturnType<typeof setInterval> | null = null;
@@ -613,6 +616,8 @@ export default function (pi: ExtensionAPILike): void {
 		currentModelInfo = modelInfoOf(ctx);
 		lastSessionCtx = ctx;
 		agentBaselineTotals = null;
+		agentLedger.setBaseline(null);
+		agentLedger.reset();
 		liveBorder.setAgentBaseline(null);
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
@@ -719,6 +724,8 @@ export default function (pi: ExtensionAPILike): void {
 		wallTimeHistory = [];
 		agentStartMs = null;
 		agentBaselineTotals = null;
+		agentLedger.setBaseline(null);
+		agentLedger.reset();
 		liveBorder.setAgentBaseline(null);
 		footerState = {
 			...footerState,
@@ -779,6 +786,8 @@ export default function (pi: ExtensionAPILike): void {
 			>[0];
 			if (baselineCtx?.sessionManager?.getEntries) {
 				agentBaselineTotals = getUsageTotals(baselineCtx);
+				agentLedger.setBaseline(agentBaselineTotals);
+				agentLedger.startRun(Date.now());
 				liveBorder.setAgentBaseline(agentBaselineTotals);
 			}
 		} catch {
@@ -858,7 +867,8 @@ export default function (pi: ExtensionAPILike): void {
 		refreshAllLive();
 	});
 	pi.on("turn_end", (e) => {
-		telemetryTracker.handle(e as never);
+		const tel = telemetryTracker.handle(e as never);
+		if (tel) agentLedger.recordTurn(tel);
 		refreshAllLive();
 	});
 	pi.on("agent_settled", (e, c) => {
@@ -893,35 +903,20 @@ export default function (pi: ExtensionAPILike): void {
 				const wallDur = formatDuration(footerState.lastDoneIn!);
 				const cacheRate = totals.latestCacheHitRate ?? 0;
 				const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
-				// Respect timeline.* toggles for specified metrics (wallTime/tokens/cost), but datetime/cache/turn/tools are always shown per user spec
-        // Timeline tokens per-agent: input is peak window (max), not sum — summing full prompts
-        // double-counts overlapping history (50k+60k=110k > window 60k). Prefer telemetry max
-        // (tel.inputTokens after fix) when available, else delta capped to context/total.
-        // Output/cost remain per-agent sum for billing.
-        let telInput: number;
-        let telOutput: number;
-        let telCost: number;
-        if (tel) {
-          telInput = tel.inputTokens;
-          telOutput = tel.outputTokens;
-          telCost = tel.costUsd;
-        } else if (agentBaselineTotals) {
-          telInput = Math.max(0, totals.input - agentBaselineTotals.input);
-          telOutput = Math.max(0, totals.output - agentBaselineTotals.output);
-          telCost = Math.max(0, totals.cost - agentBaselineTotals.cost);
-          // Cap input to not exceed context window (peak) or session total
-          const ctxTokens = (
-            lastSessionCtx as unknown as { // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-              getContextUsage?: () => { tokens?: number };
-            }
-          )?.getContextUsage?.()?.tokens;
-          if (typeof ctxTokens === "number" && Number.isFinite(ctxTokens)) telInput = Math.min(telInput, ctxTokens);
-          if (totals.input > 0) telInput = Math.min(telInput, totals.input);
-        } else {
-          telInput = totals.input;
-          telOutput = totals.output;
-          telCost = totals.cost;
-        }
+				// Deepened via AgentRunLedger — single source for per-agent capping.
+				const ctxTokens = (
+					lastSessionCtx as unknown as { // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+						getContextUsage?: () => { tokens?: number };
+					}
+				)?.getContextUsage?.()?.tokens;
+				const perAgent = agentLedger.getPerAgentTotalsForTimeline(
+					tel ?? null,
+					totals,
+					ctxTokens,
+				);
+				const telInput = perAgent.input;
+				const telOutput = perAgent.output;
+				const telCost = perAgent.cost;
 				const line1Parts: string[] = [dt];
 				if (currentConfig.timeline.wallTime) line1Parts.push(wallDur);
 				else line1Parts.push(wallDur); // wall time always per spec (11s)
@@ -976,6 +971,7 @@ export default function (pi: ExtensionAPILike): void {
 				void _e; // SAFETY: best-effort UI, ignore recoverable error
 			}
 		}
+		agentLedger.reset();
 		// settled top border stays showing final turn stats until next run
 		refreshTopBorder();
 	});

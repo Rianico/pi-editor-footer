@@ -24,6 +24,7 @@ import {
   formatTurnTelemetry,
 } from "./telemetry.js";
 import type { UsageTotals } from "./state.js";
+import type { AgentRunLedger } from "./agent-run-ledger.js";
 import type { TurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
@@ -38,6 +39,7 @@ export interface LiveBorderDeps {
   getConfig: () => ThemeConfig;
   telemetryTracker: TurnTelemetryTracker;
   runActivityTracker: RunActivityTracker;
+  agentLedger?: AgentRunLedger;
 }
 
 export class LiveBorder {
@@ -45,6 +47,9 @@ export class LiveBorder {
   private lastRenderMs = 0;
   private pendingRender: ReturnType<typeof setTimeout> | null = null;
   private agentBaseline: UsageTotals | null = null;
+  private get agentLedger(): AgentRunLedger | undefined {
+    return this.deps.agentLedger;
+  }
 
   constructor(private readonly deps: LiveBorderDeps) {}
 
@@ -213,14 +218,10 @@ export class LiveBorder {
     const cfg = this.deps.getConfig();
     if (!editor || !ctx) return;
     try {
-      // Deepened via ChromeState: snapshot owns contextUsage + totals derivation behind one seam.
-      // Two adapters (footer + border) now share the same snapshot — proves the seam.
-      // SAFETY: pi seam - snapshot derivation from extension context
       const snapshot = createChromeSnapshot(
         ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         undefined,
       );
-      // SAFETY: pi seam - theme from extension context
       const theme = (ctx as unknown as { ui: { theme: unknown } }).ui // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         .theme as unknown as never; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       const glyphs = resolveGlyphs(cfg.icons.mode);
@@ -241,20 +242,57 @@ export class LiveBorder {
             false,
         );
       }
-      // Tokens line above model info — left aligned, no border; hidden at startup per user request
       let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
         const isRunning = this.deps.runActivityTracker.isRunning();
-        // Live input: window occupancy (max), not sum. Summing full prompts double-counts
-        // overlapping history (50k+60k=110k > window 60k) and exceeds context/total.
-        // Idle shows per-agent max via telemetry (fallback to delta capped), running shows
-        // current turn window (peekLive) + per-agent output/cost, both capped to context/total.
-        if (!isRunning && this.agentBaseline) {
+        const contextTokens = snapshot.contextUsage?.tokens;
+        // Deepened via AgentRunLedger — single source for capped per-agent display.
+        if (this.agentLedger) {
+          if (!isRunning) {
+            const telIdle = (
+              this.deps.telemetryTracker as unknown as {
+                peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+                getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
+              }
+            ).peekAgentLive() ?? this.deps.telemetryTracker.getLastTelemetry();
+            const display = this.agentLedger.getIdleDisplayTotals(
+              snapshot.totals,
+              contextTokens,
+              telIdle,
+            );
+            tokensText = formatTelemetryTokens(
+              display,
+              theme as never,
+              cfg.telemetry,
+              glyphs as never,
+            );
+          } else {
+            const tracker = this.deps.telemetryTracker as unknown as {
+              peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+              peekLive(): import("./telemetry.js").TurnTelemetry | null;
+              getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
+            };
+            const agentLive =
+              tracker.peekAgentLive() ?? tracker.getLastTelemetry();
+            const liveTurn = tracker.peekLive();
+            const display = this.agentLedger.getLiveDisplayTotals(
+              liveTurn,
+              agentLive,
+              contextTokens,
+            );
+            if (display) {
+              tokensText = formatTelemetryTokens(
+                display,
+                theme as never,
+                cfg.telemetry,
+                glyphs as never,
+              );
+            }
+          }
+        } else if (!isRunning && this.agentBaseline) {
+          // Fallback when ledger not wired (backward compat)
           const cur = snapshot.totals;
           const base = this.agentBaseline;
-          // Idle per-agent display — input is peak window (max), not sum, to avoid
-          // double-count exceed (sum of prompts double-counts overlapping history).
-          // Prefer telemetry max when available, else delta capped to context/totals.
           const trackerIdle = this.deps.telemetryTracker as unknown as {
             peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
             getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
@@ -273,7 +311,6 @@ export class LiveBorder {
             displayOutput = Math.max(0, cur.output - base.output);
             displayCost = Math.max(0, cur.cost - base.cost);
           }
-          // Guarantee invariant: live input never exceeds context window or session total
           if (snapshot.contextUsage?.tokens)
             displayInput = Math.min(displayInput, snapshot.contextUsage.tokens);
           if (cur.input > 0) displayInput = Math.min(displayInput, cur.input);
@@ -297,9 +334,7 @@ export class LiveBorder {
             cfg.telemetry,
             glyphs as never,
           );
-        } else {
-          // Live per-agent — input is current window (peekLive), not per-agent sum,
-          // to avoid sum(50k+60k)=110k > window 60k. Output/cost still per-agent sum.
+        } else if (isRunning) {
           const tracker = this.deps.telemetryTracker as unknown as {
             peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
             peekLive(): import("./telemetry.js").TurnTelemetry | null;
@@ -314,7 +349,6 @@ export class LiveBorder {
             liveTurn &&
             this.deps.runActivityTracker.isRunning()
           ) {
-            // Input = current turn window (liveTurn), output/cost = per-agent sum
             displayLive = {
               ...agentLive,
               inputTokens: liveTurn.inputTokens,
@@ -325,12 +359,6 @@ export class LiveBorder {
             let cappedInput = displayLive.inputTokens;
             if (snapshot.contextUsage?.tokens)
               cappedInput = Math.min(cappedInput, snapshot.contextUsage.tokens);
-            // Note: not capping to session totals during running — totals is authoritative
-            // (lagging) while liveTurn is predictive (current window). Capping to totals
-            // would make live stale (50k) during second turn streaming instead of showing
-            // current window 60k. After fix to max, live 60k == context 60k, not exceed context;
-            // live may still be > authoritative totals interim (60k > 50k) but will be <= totals
-            // after turn completes (60k <= 110k). This is expected predictive vs authoritative.
             displayLive = {
               ...displayLive,
               inputTokens: cappedInput,
