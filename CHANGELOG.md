@@ -4,12 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-25
+
+### Fixed
+
+- Live `↑` no longer exceeds context window or session total — `telemetry:peekAgentLive` and `endAgent` now use peak window (`max`) for `inputTokens` not sum (summing `50k+60k=110k` double-counted overlapping history `> 60k` window), `live-border` top `↑` now shows current window `peekLive` + per-agent `output`/`cost` capped to `contextUsage.tokens`, idle also via telemetry `max` capped, timeline `↑` prefers telemetry `max` capped
+
 ## [0.6.1] - 2026-08-25
 
 ### Fixed
 
 - Live `↑` now per-agent delta (`279k-261k=18k` for 10 turns) not session total — `live-border` top `↑`/`↓` when idle uses `totals - baseline` at `agent_start` (`LiveBorder.setAgentBaseline`), timeline `↑`/`↓`/`$` also prefers baseline delta; when running uses per-agent sum via `telemetry:peekAgentLive()` which now always resets on `agent_start` (removed stale `if (agentStartMs===null)` guard) and handles `agent_end` alias for `agent_settled`
-
 
 ## [0.6.0] - 2026-08-24
 

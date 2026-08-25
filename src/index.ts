@@ -802,9 +802,8 @@ export default function (pi: ExtensionAPILike): void {
 	pi.on("turn_start", (e, ctx) => {
 		// Input is known at turn_start via context usage — seed live input so peekLive shows it during streaming (output already streams via liveDeltaChars)
 		const usageTokens = (
-			ctx as unknown as { getContextUsage?: () => { tokens?: number } }
-		) // SAFETY: pi context seam — getContextUsage is ExtensionContext API
-			?.getContextUsage?.()?.tokens;
+            ctx as unknown as { getContextUsage?: () => { tokens?: number } } // SAFETY: pi context seam — getContextUsage is ExtensionContext API
+        )?.getContextUsage?.()?.tokens;
 		if (
 			typeof usageTokens === "number" &&
 			Number.isFinite(usageTokens) &&
@@ -895,24 +894,34 @@ export default function (pi: ExtensionAPILike): void {
 				const cacheRate = totals.latestCacheHitRate ?? 0;
 				const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
 				// Respect timeline.* toggles for specified metrics (wallTime/tokens/cost), but datetime/cache/turn/tools are always shown per user spec
-				// Timeline tokens per-agent: prefer baseline delta (totals - baseline) which yields 18k (279k-261k) not 279k total.
-				// Fallback to tel (tracker sum) then session totals.
-				let telInput: number;
-				let telOutput: number;
-				let telCost: number;
-				if (agentBaselineTotals) {
-					telInput = Math.max(0, totals.input - agentBaselineTotals.input);
-					telOutput = Math.max(0, totals.output - agentBaselineTotals.output);
-					telCost = Math.max(0, totals.cost - agentBaselineTotals.cost);
-				} else if (tel) {
-					telInput = tel.inputTokens;
-					telOutput = tel.outputTokens;
-					telCost = tel.costUsd;
-				} else {
-					telInput = totals.input;
-					telOutput = totals.output;
-					telCost = totals.cost;
-				}
+        // Timeline tokens per-agent: input is peak window (max), not sum — summing full prompts
+        // double-counts overlapping history (50k+60k=110k > window 60k). Prefer telemetry max
+        // (tel.inputTokens after fix) when available, else delta capped to context/total.
+        // Output/cost remain per-agent sum for billing.
+        let telInput: number;
+        let telOutput: number;
+        let telCost: number;
+        if (tel) {
+          telInput = tel.inputTokens;
+          telOutput = tel.outputTokens;
+          telCost = tel.costUsd;
+        } else if (agentBaselineTotals) {
+          telInput = Math.max(0, totals.input - agentBaselineTotals.input);
+          telOutput = Math.max(0, totals.output - agentBaselineTotals.output);
+          telCost = Math.max(0, totals.cost - agentBaselineTotals.cost);
+          // Cap input to not exceed context window (peak) or session total
+          const ctxTokens = (
+            lastSessionCtx as unknown as { // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+              getContextUsage?: () => { tokens?: number };
+            }
+          )?.getContextUsage?.()?.tokens;
+          if (typeof ctxTokens === "number" && Number.isFinite(ctxTokens)) telInput = Math.min(telInput, ctxTokens);
+          if (totals.input > 0) telInput = Math.min(telInput, totals.input);
+        } else {
+          telInput = totals.input;
+          telOutput = totals.output;
+          telCost = totals.cost;
+        }
 				const line1Parts: string[] = [dt];
 				if (currentConfig.timeline.wallTime) line1Parts.push(wallDur);
 				else line1Parts.push(wallDur); // wall time always per spec (11s)

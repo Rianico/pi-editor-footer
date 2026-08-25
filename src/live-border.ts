@@ -245,27 +245,50 @@ export class LiveBorder {
       let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
         const isRunning = this.deps.runActivityTracker.isRunning();
-        // When idle (settled) and baseline available, show per-agent delta (input/output/cost) = cur totals - baseline at agent_start.
-        // This yields 18k for the example (279k session - 261k baseline = 18k agent) instead of 279k total.
-        // When running, use live agent tracker (sum of turns in this agent + live turn) which is already per-agent after guard fix.
+        // Live input: window occupancy (max), not sum. Summing full prompts double-counts
+        // overlapping history (50k+60k=110k > window 60k) and exceeds context/total.
+        // Idle shows per-agent max via telemetry (fallback to delta capped), running shows
+        // current turn window (peekLive) + per-agent output/cost, both capped to context/total.
         if (!isRunning && this.agentBaseline) {
           const cur = snapshot.totals;
           const base = this.agentBaseline;
-          const deltaInput = Math.max(0, cur.input - base.input);
-          const deltaOutput = Math.max(0, cur.output - base.output);
-          // Build minimal telemetry for formatting (only tokens matter for formatTelemetryTokens)
+          // Idle per-agent display — input is peak window (max), not sum, to avoid
+          // double-count exceed (sum of prompts double-counts overlapping history).
+          // Prefer telemetry max when available, else delta capped to context/totals.
+          const trackerIdle = this.deps.telemetryTracker as unknown as {
+            peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+            getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
+          };
+          const telIdle =
+            trackerIdle.peekAgentLive() ?? trackerIdle.getLastTelemetry();
+          let displayInput: number;
+          let displayOutput: number;
+          let displayCost: number;
+          if (telIdle) {
+            displayInput = telIdle.inputTokens;
+            displayOutput = telIdle.outputTokens;
+            displayCost = telIdle.costUsd;
+          } else {
+            displayInput = Math.max(0, cur.input - base.input);
+            displayOutput = Math.max(0, cur.output - base.output);
+            displayCost = Math.max(0, cur.cost - base.cost);
+          }
+          // Guarantee invariant: live input never exceeds context window or session total
+          if (snapshot.contextUsage?.tokens)
+            displayInput = Math.min(displayInput, snapshot.contextUsage.tokens);
+          if (cur.input > 0) displayInput = Math.min(displayInput, cur.input);
           const deltaTel: TurnTelemetry = {
             tps: null,
             ttftMs: 0,
             totalMs: 0,
-            inputTokens: deltaInput,
-            outputTokens: deltaOutput,
+            inputTokens: displayInput,
+            outputTokens: displayOutput,
             stallMs: 0,
             stallCount: 0,
             rateUsdPerMTokens: null,
             generationMs: 0,
-            totalTokens: deltaInput + deltaOutput,
-            costUsd: Math.max(0, cur.cost - base.cost),
+            totalTokens: displayInput + displayOutput,
+            costUsd: displayCost,
             measurementMs: null,
           };
           tokensText = formatTelemetryTokens(
@@ -275,16 +298,46 @@ export class LiveBorder {
             glyphs as never,
           );
         } else {
-          // Live or fallback — per-agent sum from tracker (option B), correctly reset per agent_start
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime — telemetry tracker for top tokens line (agent run)
+          // Live per-agent — input is current window (peekLive), not per-agent sum,
+          // to avoid sum(50k+60k)=110k > window 60k. Output/cost still per-agent sum.
           const tracker = this.deps.telemetryTracker as unknown as {
             peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+            peekLive(): import("./telemetry.js").TurnTelemetry | null;
             getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
           };
-          const live = tracker.peekAgentLive() ?? tracker.getLastTelemetry();
-          if (live) {
+          const agentLive =
+            tracker.peekAgentLive() ?? tracker.getLastTelemetry();
+          const liveTurn = tracker.peekLive();
+          let displayLive = agentLive;
+          if (
+            agentLive &&
+            liveTurn &&
+            this.deps.runActivityTracker.isRunning()
+          ) {
+            // Input = current turn window (liveTurn), output/cost = per-agent sum
+            displayLive = {
+              ...agentLive,
+              inputTokens: liveTurn.inputTokens,
+              totalTokens: liveTurn.inputTokens + agentLive.outputTokens,
+            };
+          }
+          if (displayLive) {
+            let cappedInput = displayLive.inputTokens;
+            if (snapshot.contextUsage?.tokens)
+              cappedInput = Math.min(cappedInput, snapshot.contextUsage.tokens);
+            // Note: not capping to session totals during running — totals is authoritative
+            // (lagging) while liveTurn is predictive (current window). Capping to totals
+            // would make live stale (50k) during second turn streaming instead of showing
+            // current window 60k. After fix to max, live 60k == context 60k, not exceed context;
+            // live may still be > authoritative totals interim (60k > 50k) but will be <= totals
+            // after turn completes (60k <= 110k). This is expected predictive vs authoritative.
+            displayLive = {
+              ...displayLive,
+              inputTokens: cappedInput,
+              totalTokens: cappedInput + displayLive.outputTokens,
+            };
             tokensText = formatTelemetryTokens(
-              live,
+              displayLive,
               theme as never,
               cfg.telemetry,
               glyphs as never,

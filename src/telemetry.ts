@@ -185,11 +185,12 @@ export class TurnTelemetryTracker {
     let stallCount = 0;
     let generationMs = 0;
     let ttftMs = 0;
-    // sum completed turns
+    // input per turn is the full prompt (includes history), summing double-counts overlapping
+    // history and makes live input exceed context usage (e.g. 50k+60k=110k > window 60k).
+    // Display input as peak window occupancy (max), not sum. Output/cost still sum.
     for (const t of this.agentTurns) {
-      inputTokens += t.inputTokens;
+      inputTokens = Math.max(inputTokens, t.inputTokens);
       outputTokens += t.outputTokens;
-      totalTokens += t.totalTokens;
       costUsd += t.costUsd;
       stallMs += t.stallMs;
       stallCount += t.stallCount;
@@ -197,15 +198,16 @@ export class TurnTelemetryTracker {
     }
     if (this.agentTurns.length > 0) ttftMs = this.agentTurns[0]!.ttftMs;
     if (live) {
-      inputTokens += live.inputTokens;
+      inputTokens = Math.max(inputTokens, live.inputTokens);
       outputTokens += live.outputTokens;
-      totalTokens += live.totalTokens;
       costUsd += live.costUsd;
       stallMs += live.stallMs;
       stallCount += live.stallCount;
       generationMs += live.generationMs;
       if (ttftMs === 0) ttftMs = live.ttftMs;
     }
+    // totalTokens is window input (max) + cumulative output, not sum of per-turn totals
+    totalTokens = inputTokens + outputTokens;
     const now = this.now();
     const totalMs = Math.max(0, now - this.agentStartMs);
     const measurementMs =
@@ -524,8 +526,12 @@ export class TurnTelemetryTracker {
     if (startMs === null || turns.length === 0) return;
 
     const outputTokens = turns.reduce((sum, t) => sum + t.outputTokens, 0);
-    const inputTokens = turns.reduce((sum, t) => sum + t.inputTokens, 0);
-    const totalTokens = turns.reduce((sum, t) => sum + t.totalTokens, 0);
+    const inputTokens = turns.reduce(
+      (sum, t) => Math.max(sum, t.inputTokens),
+      0,
+    );
+    // totalTokens is window input (max) + cumulative output, not sum of per-turn totals
+    const totalTokens = inputTokens + outputTokens;
     const costUsd = turns.reduce((sum, t) => sum + t.costUsd, 0);
     const stallMs = turns.reduce((sum, t) => sum + t.stallMs, 0);
     const stallCount = turns.reduce((sum, t) => sum + t.stallCount, 0);
