@@ -774,6 +774,8 @@ export default function (pi: ExtensionAPILike): void {
 	});
 	pi.on("agent_settled", (e, c) => {
 		const tel = telemetryTracker.handle(e as never);
+		const settledFromLedger = agentLedger.getSettledTotals();
+		const effectiveTel = (tel as unknown as import("./telemetry.js").TurnTelemetry | null | undefined) ?? settledFromLedger;
 		runActivityTracker.settle();
 		stopLiveTick();
 		if (agentStartMs !== null) {
@@ -811,7 +813,7 @@ export default function (pi: ExtensionAPILike): void {
 					}
 				)?.getContextUsage?.()?.tokens;
 				const perAgent = agentLedger.getPerAgentTotalsForTimeline(
-					tel ?? null,
+					effectiveTel,
 					totals,
 					ctxTokens,
 				);
@@ -849,12 +851,12 @@ export default function (pi: ExtensionAPILike): void {
 			// SAFETY: best-effort, ignore recoverable error
 		}
 		// final settled telemetry overwrites live peek with authoritative totals
-		if (tel && installedEditor && currentConfig.telemetry.enabled) {
+		if (effectiveTel && installedEditor && currentConfig.telemetry.enabled) {
 			try {
 				const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam
 				const glyphs = resolveGlyphs(currentConfig.icons.mode);
 				const right = formatTurnTelemetry(
-					tel,
+					effectiveTel,
 					themeArg as never,
 					currentConfig.telemetry,
 					glyphs as never,
