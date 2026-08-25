@@ -4,9 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-25
+
+### Fixed
+
+- Live `↑` now per-agent delta (`279k-261k=18k` for 10 turns) not session total — `live-border` top `↑`/`↓` when idle uses `totals - baseline` at `agent_start` (`LiveBorder.setAgentBaseline`), timeline `↑`/`↓`/`$` also prefers baseline delta; when running uses per-agent sum via `telemetry:peekAgentLive()` which now always resets on `agent_start` (removed stale `if (agentStartMs===null)` guard) and handles `agent_end` alias for `agent_settled`
+
+
 ## [0.6.0] - 2026-08-24
 
 ### Changed
+
 - Context usage colors now `12.5%`/`25%`/`50%` quotas — `dim` 0-12.5 → `accent` 12.5-25 → `warning` 25-50 → `error` 50-100 via `color-policy:contextUsageColor` (was `25%`/`50%`/`75%`), respects theme semantic tokens
 - Live `↑`/`↓` tokens now per agent run (option B) — cumulative across turns in this agent via `telemetry:peekAgentLive()` + `live-border` top `↑`/`↓` (was per-turn via `getLastTurnTelemetry`), `getLastTelemetry` stays agent sum
 - Stall relocated from bottom telemetry to top right of tool use with `dim |` pipe — `run-activity` now `tools | !2×3.3s` top, bottom `telemetry:formatTurnTelemetry` now `TPS · TTFT` only (suppressed `stalls:false`)
@@ -14,32 +22,39 @@ All notable changes to this project will be documented in this file.
 ## [0.5.0] - 2026-08-22
 
 ### Changed
+
 - Remove duration section positioned to the right of `TTFT` in bottom telemetry (`telemetry:formatTurnTelemetry` now `TPS · TTFT` only, `duration` config ignored)
 - Use `<number> turns` to replace `T<number>` in top run-activity (`run-activity:formatRunActivityTopRight` now `1 turns` / `N turns` instead of `T1`/`T N`)
 - Exchange positions of cache rate section (`c %`) and context bar section (`pct · tokens/window` + bar) in top border — now `c % | pct · tokens/window` instead of `pct · tokens/window | c %` (`chrome-state:formatContextBar`)
 
 ### Fixed
+
 - Clamp live TPS window and throttle `LiveBorder` for multi-turn runs
 - Add inline `SAFETY` for live-border casts (pi-lens)
 
 ## [0.4.0] - 2026-08-22
 
 ### Added
+
 - Tiered context usage colors — `contextUsageColor(pct)` with 25%/50%/75% thresholds (`dim` <25 → `accent` 25–50 → `warning` 50–75 → `error` ≥75) applied to both `percent` and `tokens/window` sections and to bar/icon, so low usage stays dimmed and high usage highlights for quota visibility (`color-policy`, `chrome-state:formatContextBar`, `utils` barrel)
 - Deepened architecture — candidates 1–5 (`TrackingEditor`, `TranscriptTimeline`, `LiveBorder`, `ChromeState`, `SessionKernel`) behind single seams, plus sync contract extension for transcript timeline seam (candidate 2)
-- Telemetry formatting — `TPS`/`TTFT` with units and fixed width (` 60.6 tok/s TPS`, ` 2.5s TTFT`), default tokens at start, and `↑`/`↓` relocated to right of cache with `|` separator
+- Telemetry formatting — `TPS`/`TTFT` with units and fixed width (`60.6 tok/s TPS`, `2.5s TTFT`), default tokens at start, and `↑`/`↓` relocated to right of cache with `|` separator
 
 ### Changed
+
 - Hide `↑`/`↓` tokens at startup (only after `turn_start` via `liveInputTokens`)
 - Dim line padding and fixed-width `TPS`/`TTFT`/`duration` with gradual TPS decay (half-life ~5s, reset after 2s idle)
 
 ### Fixed
+
 - Reset TPS to default after 2s without incoming tokens before first token
 - Interleave timeline in transcript (`chatContainer` injection, left-aligned dim `·`/`↑`/`↓`/`c`/`$` with `|`, close right) and correct `pi` extension path (`src/index.ts`)
 - Satisfy `pi-lens` blocking — `SAFETY` comments for `as unknown as` casts (including `chrome-state`, `live-border`) and best-effort catches
 
 ## [0.3.0] - 2026-08-21
+
 ### Changed
+
 - Timeline format now two-line dim per user spec: `2026-08-21 13:48:46 GMT+8 · 11s · ↑ 495 · ↓ 708 · c 85.3% · $0.00` + `3 turns · 5 tools · 1 failed` (datetime with timezone via `Intl` `en-CA` `short` TZ, wall `formatDuration`, `↑`/`↓` `fmtTokens`, cache `glyphs.cacheHit` `latestCacheHitRate`, cost `$`, turn/tools/failed from `runActivity` snapshot)
 - Dimmed timeline now in transcript between runs — `User: hello? / Assistant: hi. / <dim timeline>` left-aligned dim, injected into `chatContainer` (scrollable) via `InteractiveMode` patch, not `aboveEditor` widget, so it sits between each `User/Assistant` pair and scrolls with history
 - Dimmed timeline between each agent run in transcript — `chatContainer` injection `User/Assistant/<dim timeline>` left-aligned dim `· 8s wall · ↑ 1.2k · ↓ 800 · $0.12` via `InteractiveMode` patch (not `aboveEditor` widget), one per `agent_settled` per `timeline.*`, permanent in scroll history, never exposed to model (between transcript bottom and input), one per `agent_settled` (`· 8s wall · ↑ 1.2k · ↓ 800 · $0.12`), permanent between runs, never exposed to model (pi-tui only exposes `aboveEditor`/`belowEditor` widgets, so stacking aboveEditor is the non-exposing compromise)
@@ -56,15 +71,15 @@ All notable changes to this project will be documented in this file.
 - Refresh rate set to one second (`REFRESH_MS = 1000` for `liveTickTimer` telemetry/top/context and `watchTimer` editor ownership watchdog, was hardcoded `1000`)
 - Context icon bar now switchable via config `contextIconBar` (default `false` disabled) — `0.0% · 0/1.0M | c 0.0%` by default, `# [████░░] 39.6% · 416k/1.0M | c 85.3%` when enabled (footer top, `nerd`/`ascii` glyphs)
 - Context bar format now `0.0% · 0/1.0M | c 0.0%` (was `# [#####-------] 39.6% · 416k/1.0M | c`; no icon/bar, compact `pct · tokens/W`)
-- Context bar and cache now follow icon mode (`nerd` ``/``/`█` vs `ascii` ` #`/`c`/`#`) — `refreshContextBar` called in `onConfigChanged` so top ` # [...] | c` updates immediately when `icons.mode` changes
+- Context bar and cache now follow icon mode (`nerd` ``/``/`█` vs `ascii` `#`/`c`/`#`) — `refreshContextBar` called in `onConfigChanged` so top `# [...] | c` updates immediately when `icons.mode` changes
 - Telemetry `>`, `~`, `+` glyphs removed (`TPS 60.6 tok/s · TTFT 2.5s · 8.3s · ↑395 · ↓505 · $0.16` not `> TPS … · ~ TTFT … · +8.3s`)
 - Telemetry bottom border compacted (`TPS 60.6 tok/s · TTFT 2.5s · 8.3s · ↑395 · ↓505 · $0.16` not `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16`; `TPS`/`TTFT` labels preserved, no space after `↑`/`↓`, joiner `·` not ` | `, stall `!2·3.3s` not `! stall 2x / 3.3s`)
-- Footer cache omitted to the right of input/output (`↑ 395 | ↓ 505 | $0.16` not `| c 85.3%`; cache remains only in top context bar ` # [...] | c 0.0%`)
-- Nerd mode cost now `$0.00` not ` $0.00` (always single `$` in both footer `renderFooter` and telemetry `formatTurnTelemetry`, was `glyph === "$" ? `$ / ` : `glyph $` -> ` $`)
-- Cache session now always shown with zero value (`c 0.0%` in footer `↑ | ↓ | $ | c` and ` | c 0.0%` in top context bar) instead of hidden when no cache tokens
+- Footer cache omitted to the right of input/output (`↑ 395 | ↓ 505 | $0.16` not `| c 85.3%`; cache remains only in top context bar `# [...] | c 0.0%`)
+- Nerd mode cost now `$0.00` not ` $0.00` (always single `$` in both footer `renderFooter` and telemetry `formatTurnTelemetry`, was `glyph === "$" ?`$ / ` : `glyph $` -> ` $`)
+- Cache session now always shown with zero value (`c 0.0%` in footer `↑ | ↓ | $ | c` and `| c 0.0%` in top context bar) instead of hidden when no cache tokens
 - Footer cost now `toFixed(2)` (`$0.16` not `$0.160`) and moved directly after input/output (`↑ 395 | ↓ 505 | $0.16 | c 85.3%` not `c | $`; `theme.fg("dim","|")` pipe)
 - Top border model label no longer shows context window (`provider/model · thinking` not `· 1.0M`; `buildLabel` ignores `contextWindow`)
-- Context bar now appends cache hit rate with pipe (` # [#####-------] 39.6% · 416k/1.0M | c 85.3%` via `formatContextBar(..., cacheHitRate)` from `getUsageTotals`) and model/context are pipe-separated (`model | context` via dim `|`)
+- Context bar now appends cache hit rate with pipe (`# [#####-------] 39.6% · 416k/1.0M | c 85.3%` via `formatContextBar(..., cacheHitRate)` from `getUsageTotals`) and model/context are pipe-separated (`model | context` via dim `|`)
 - Context bar moved from left bottom border to top border right of model info (`── model · thinking · 1.0M  # [#####-------] 39.6% · 416k/1.0M ── T1 · 8s` via `embedTopWithLeftAndRight`, `TrackingEditor.setTopContextText`)
 
 ## [0.2.0] - 2026-08-21
