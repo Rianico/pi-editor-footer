@@ -23,6 +23,7 @@ import {
   formatTurnDuration,
   formatTurnTelemetry,
 } from "./telemetry.js";
+import type { UsageTotals } from "./state.js";
 import type { TurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
@@ -43,8 +44,14 @@ export class LiveBorder {
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastRenderMs = 0;
   private pendingRender: ReturnType<typeof setTimeout> | null = null;
+  private agentBaseline: UsageTotals | null = null;
 
   constructor(private readonly deps: LiveBorderDeps) {}
+
+  /** Set baseline totals at agent_start for per-agent delta (input/output/cost). */
+  setAgentBaseline(baseline: UsageTotals | null): void {
+    this.agentBaseline = baseline ? { ...baseline } : null;
+  }
 
   /** Coalesced render: top (run-activity) + bottom (telemetry) + context bar → editor. */
   render(): void {
@@ -237,21 +244,52 @@ export class LiveBorder {
       // Tokens line above model info — left aligned, no border; hidden at startup per user request
       let tokensText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
-        // Live input/output per agent run (option B) — cumulative across turns in this agent, like live output
-        // SAFETY: pi seam — intentional unsafe cast, validated at runtime — telemetry tracker for top tokens line (agent run)
-        const tracker = this.deps.telemetryTracker as unknown as {
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
-          getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
-        };
-        const live = tracker.peekAgentLive() ?? tracker.getLastTelemetry();
-        if (live) {
+        const isRunning = this.deps.runActivityTracker.isRunning();
+        // When idle (settled) and baseline available, show per-agent delta (input/output/cost) = cur totals - baseline at agent_start.
+        // This yields 18k for the example (279k session - 261k baseline = 18k agent) instead of 279k total.
+        // When running, use live agent tracker (sum of turns in this agent + live turn) which is already per-agent after guard fix.
+        if (!isRunning && this.agentBaseline) {
+          const cur = snapshot.totals;
+          const base = this.agentBaseline;
+          const deltaInput = Math.max(0, cur.input - base.input);
+          const deltaOutput = Math.max(0, cur.output - base.output);
+          // Build minimal telemetry for formatting (only tokens matter for formatTelemetryTokens)
+          const deltaTel: TurnTelemetry = {
+            tps: null,
+            ttftMs: 0,
+            totalMs: 0,
+            inputTokens: deltaInput,
+            outputTokens: deltaOutput,
+            stallMs: 0,
+            stallCount: 0,
+            rateUsdPerMTokens: null,
+            generationMs: 0,
+            totalTokens: deltaInput + deltaOutput,
+            costUsd: Math.max(0, cur.cost - base.cost),
+            measurementMs: null,
+          };
           tokensText = formatTelemetryTokens(
-            live,
+            deltaTel,
             theme as never,
             cfg.telemetry,
             glyphs as never,
           );
+        } else {
+          // Live or fallback — per-agent sum from tracker (option B), correctly reset per agent_start
+          // SAFETY: pi seam — intentional unsafe cast, validated at runtime — telemetry tracker for top tokens line (agent run)
+          const tracker = this.deps.telemetryTracker as unknown as {
+            peekAgentLive(): import("./telemetry.js").TurnTelemetry | null;
+            getLastTelemetry(): import("./telemetry.js").TurnTelemetry | null;
+          };
+          const live = tracker.peekAgentLive() ?? tracker.getLastTelemetry();
+          if (live) {
+            tokensText = formatTelemetryTokens(
+              live,
+              theme as never,
+              cfg.telemetry,
+              glyphs as never,
+            );
+          }
         }
       }
       editor.setTopContextText(contextText);

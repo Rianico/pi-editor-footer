@@ -60,6 +60,7 @@ type AgentMessage = { role: string } & AssistantMessage;
 
 export type TelemetryEvent =
   | { type: "agent_start" }
+  | { type: "agent_end" }
   | { type: "agent_settled" }
   | {
       type: "turn_start";
@@ -329,11 +330,10 @@ export class TurnTelemetryTracker {
   handle(event: TelemetryEvent): TurnTelemetry | undefined {
     switch (event.type) {
       case "agent_start":
-        if (this.agentStartMs === null) {
-          this.agentStartMs = this.now();
-          this.agentTurns = [];
-        }
+        this.agentStartMs = this.now();
+        this.agentTurns = [];
         return;
+      case "agent_end":
       case "agent_settled":
         return this.endAgent();
       case "turn_start":

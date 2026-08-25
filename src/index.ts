@@ -122,8 +122,8 @@ let lastSessionCtx: ExtensionContextLike | null = null;
 let extensionPi: unknown = null;
 let wallTimeHistory: string[] = []; // kept for compat, not used for widget
 const timeline = new TranscriptTimeline({
-  getLastSessionCtx: () => lastSessionCtx,
-  getTuiRef: () => tuiRef,
+	getLastSessionCtx: () => lastSessionCtx,
+	getTuiRef: () => tuiRef,
 });
 void timeline; // keep import used while now using pi.appendEntry interleaved path
 let currentConfig: ThemeConfig = loadConfig();
@@ -140,6 +140,7 @@ const REFRESH_MS = 1000;
 let liveTickTimer: ReturnType<typeof setInterval> | null = null;
 let footerState: FooterState = createInitialState();
 let agentStartMs: number | null = null;
+let agentBaselineTotals: ReturnType<typeof getUsageTotals> | null = null;
 let currentModelInfo: ModelInfo = {
 	provider: "",
 	modelId: "unknown",
@@ -267,28 +268,31 @@ function formatDateTimeWithTimezone(d: Date = new Date()): string {
 		// en-CA gives YYYY-MM-DD, HH:MM:SS
 		return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
 	} catch {
-	  // SAFETY: best-effort, ignore recoverable error
+		// SAFETY: best-effort, ignore recoverable error
 		return d.toLocaleString();
 	}
 }
 
 function injectTimelineDimLine(
-  _ctx: ExtensionUIContextLike,
-  rawLine: string,
+	_ctx: ExtensionUIContextLike,
+	rawLine: string,
 ): void {
-  // Use pi.appendEntry so it is interleaved in chat container (not aboveEditor stacked widget)
-  try {
-    // SAFETY: pi custom entry is TUI-only, not sent to LLM
-    (extensionPi as unknown as { appendEntry?: (t:string,d:unknown)=>void })?.appendEntry?.("timeline", { text: rawLine });
-  } catch {// SAFETY: best-effort, ignore recoverable error
-    // SAFETY: best-effort, ignore recoverable error
-}
-  // keep legacy array in sync
-  wallTimeHistory = [...wallTimeHistory, rawLine];
+	// Use pi.appendEntry so it is interleaved in chat container (not aboveEditor stacked widget)
+	try {
+		// SAFETY: pi custom entry is TUI-only, not sent to LLM
+		(
+			extensionPi as unknown as { appendEntry?: (t: string, d: unknown) => void }
+		)?.appendEntry?.("timeline", { text: rawLine });
+	} catch {
+		// SAFETY: best-effort, ignore recoverable error
+		// SAFETY: best-effort, ignore recoverable error
+	}
+	// keep legacy array in sync
+	wallTimeHistory = [...wallTimeHistory, rawLine];
 }
 function clearTimelineHistory(_ctx?: ExtensionUIContextLike): void {
-  // No widget to clear — entries are interleaved and persist with session
-  wallTimeHistory = [];
+	// No widget to clear — entries are interleaved and persist with session
+	wallTimeHistory = [];
 }
 
 /** shift+up/down handler: scroll the detail window one line, clamped. */
@@ -435,30 +439,36 @@ export default function (pi: ExtensionAPILike): void {
 	extensionPi = pi;
 	let watchTimer: ReturnType<typeof setInterval> | null = null;
 	let deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
-  // Timeline now uses pi.appendEntry("timeline") interleaved in chat container — not aboveEditor widget
-  // Register renderer for timeline custom entries (dim, left-aligned, interleaved)
-  try {
-    // SAFETY: pi entry renderer is public API — timeline entries are TUI-only, not sent to LLM
-    (pi as unknown as { registerEntryRenderer?: (t:string, r:unknown)=>void }).registerEntryRenderer?.(
-      "timeline",
-      (entry: unknown, _opts: unknown, theme: unknown) => {
-        const data = (entry as { data?: { text?: string } }).data;
-        const text = data?.text ?? "";
-        const lines = text.split("\n").map((l: string) => {
-          try {
-            return (theme as { fg: (c:string,s:string)=>string }).fg("dim", " " + l);
-          } catch {
-            // SAFETY: best-effort, ignore recoverable error
-            return " " + l;
-          }
-        });
-        // SAFETY: intentional unsafe cast — validated at runtime
-        return new Text(lines.join("\n")) as unknown as Component;
-      },
-    );
-  } catch {// SAFETY: best-effort, ignore recoverable error
-    // SAFETY: best-effort, ignore recoverable error
-}
+	// Timeline now uses pi.appendEntry("timeline") interleaved in chat container — not aboveEditor widget
+	// Register renderer for timeline custom entries (dim, left-aligned, interleaved)
+	try {
+		// SAFETY: pi entry renderer is public API — timeline entries are TUI-only, not sent to LLM
+		(
+			pi as unknown as { registerEntryRenderer?: (t: string, r: unknown) => void }
+		).registerEntryRenderer?.(
+			"timeline",
+			(entry: unknown, _opts: unknown, theme: unknown) => {
+				const data = (entry as { data?: { text?: string } }).data;
+				const text = data?.text ?? "";
+				const lines = text.split("\n").map((l: string) => {
+					try {
+						return (theme as { fg: (c: string, s: string) => string }).fg(
+							"dim",
+							" " + l,
+						);
+					} catch {
+						// SAFETY: best-effort, ignore recoverable error
+						return " " + l;
+					}
+				});
+				// SAFETY: intentional unsafe cast — validated at runtime
+				return new Text(lines.join("\n")) as unknown as Component;
+			},
+		);
+	} catch {
+		// SAFETY: best-effort, ignore recoverable error
+		// SAFETY: best-effort, ignore recoverable error
+	}
 	let headerCleanupInner: (() => void) | null = null;
 
 	// Toggle the border glow + model label (off restores pi's stock border).
@@ -602,7 +612,8 @@ export default function (pi: ExtensionAPILike): void {
 
 		currentModelInfo = modelInfoOf(ctx);
 		lastSessionCtx = ctx;
-
+		agentBaselineTotals = null;
+		liveBorder.setAgentBaseline(null);
 		// Deferred so we win the single editor slot (see installEditor).
 		deferredInstallTimer = setTimeout(() => installEditor(ctx.ui), 0);
 
@@ -703,10 +714,12 @@ export default function (pi: ExtensionAPILike): void {
 	// before re-evaluating the module on /reload). Any timer that captured this
 	// session's ctx must be dead before then — otherwise its next tick hits the
 	// stale `ctx.ui` getter and assertActive() throws, crashing the process.
-	  pi.on("session_shutdown", () => {
-    // timeline entries are custom entries interleaved — no aboveEditor widget to clear
-    wallTimeHistory = [];
+	pi.on("session_shutdown", () => {
+		// timeline entries are custom entries interleaved — no aboveEditor widget to clear
+		wallTimeHistory = [];
 		agentStartMs = null;
+		agentBaselineTotals = null;
+		liveBorder.setAgentBaseline(null);
 		footerState = {
 			...footerState,
 			workingSince: undefined,
@@ -755,9 +768,22 @@ export default function (pi: ExtensionAPILike): void {
 		liveBorder.render();
 	};
 
-	pi.on("agent_start", (e) => {
+	pi.on("agent_start", (e, ctx) => {
 		telemetryTracker.handle(e as never);
 		runActivityTracker.startRun();
+		// Capture baseline totals for per-agent delta (live input 18k not 279k = totals - baseline)
+		try {
+			// SAFETY: pi seam — intentional unsafe cast, validated at runtime
+			const baselineCtx = (ctx ?? lastSessionCtx) as unknown as Parameters<
+				typeof getUsageTotals
+			>[0];
+			if (baselineCtx?.sessionManager?.getEntries) {
+				agentBaselineTotals = getUsageTotals(baselineCtx);
+				liveBorder.setAgentBaseline(agentBaselineTotals);
+			}
+		} catch {
+			// SAFETY: best-effort, ignore recoverable error
+		}
 		// timeline stays permanently between each run — do not hide on start
 		agentStartMs = Date.now();
 		footerState = {
@@ -767,6 +793,11 @@ export default function (pi: ExtensionAPILike): void {
 		};
 		startLiveTick();
 		refreshAllLive();
+	});
+	pi.on("agent_end", (e) => {
+		// Alias for agent_settled — ensure tracker resets even if only agent_end is emitted
+		telemetryTracker.handle(e as never);
+		runActivityTracker.settle();
 	});
 	pi.on("turn_start", (e, ctx) => {
 		// Input is known at turn_start via context usage — seed live input so peekLive shows it during streaming (output already streams via liveDeltaChars)
@@ -864,10 +895,24 @@ export default function (pi: ExtensionAPILike): void {
 				const cacheRate = totals.latestCacheHitRate ?? 0;
 				const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
 				// Respect timeline.* toggles for specified metrics (wallTime/tokens/cost), but datetime/cache/turn/tools are always shown per user spec
-				// Timeline tokens now mirror telemetry (per-agent) not session totals — input known at turn_start via liveInputTokens
-				const telInput = tel ? tel.inputTokens : totals.input;
-				const telOutput = tel ? tel.outputTokens : totals.output;
-				const telCost = tel ? tel.costUsd : totals.cost;
+				// Timeline tokens per-agent: prefer baseline delta (totals - baseline) which yields 18k (279k-261k) not 279k total.
+				// Fallback to tel (tracker sum) then session totals.
+				let telInput: number;
+				let telOutput: number;
+				let telCost: number;
+				if (agentBaselineTotals) {
+					telInput = Math.max(0, totals.input - agentBaselineTotals.input);
+					telOutput = Math.max(0, totals.output - agentBaselineTotals.output);
+					telCost = Math.max(0, totals.cost - agentBaselineTotals.cost);
+				} else if (tel) {
+					telInput = tel.inputTokens;
+					telOutput = tel.outputTokens;
+					telCost = tel.costUsd;
+				} else {
+					telInput = totals.input;
+					telOutput = totals.output;
+					telCost = totals.cost;
+				}
 				const line1Parts: string[] = [dt];
 				if (currentConfig.timeline.wallTime) line1Parts.push(wallDur);
 				else line1Parts.push(wallDur); // wall time always per spec (11s)
@@ -894,9 +939,10 @@ export default function (pi: ExtensionAPILike): void {
 					wallText,
 				);
 			}
-		} catch {// SAFETY: best-effort, ignore recoverable error
-		  // SAFETY: best-effort, ignore recoverable error
-}
+		} catch {
+			// SAFETY: best-effort, ignore recoverable error
+			// SAFETY: best-effort, ignore recoverable error
+		}
 		// final settled telemetry overwrites live peek with authoritative totals
 		if (tel && installedEditor && currentConfig.telemetry.enabled) {
 			try {
