@@ -16,9 +16,8 @@ import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
 import { createRunActivityTracker } from "./run-activity.js";
 import { readGitStatus } from "./git.js";
 import { readRuntimeInfo } from "./runtime.js";
-import { type DetailItem, renderDetail, scroll } from "./detail-render.js";
+import { DetailChrome } from "./detail-chrome.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
-import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 import { loadConfig, saveConfig } from "./config.js";
 import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
@@ -102,17 +101,6 @@ export interface ExtensionAPILike {
 	): void;
 }
 
-/** Height cap of the detail window (the user's spec: up to 5 lines). */
-const MAX_LINES = 5;
-
-/**
- * Window state shared between the highlight callback, the widget component,
- * and the scroll shortcuts. Kept at module scope: only one editor/window is
- * ever active per session.
- */
-let currentItem: SelectItem | null = null;
-let scrollOffset = 0;
-let lastWidth = 0;
 let tuiRef: TUI | null = null;
 let shortcutsRegistered = false;
 // eslint-disable-next-line prefer-const -- toggled by the /model-info command
@@ -131,6 +119,7 @@ let currentConfig: ThemeConfig = loadConfig();
 const telemetryTracker = new TurnTelemetryTracker();
 const runActivityTracker = createRunActivityTracker();
 const agentLedger = new AgentRunLedger();
+const detailChrome = new DetailChrome();
 const liveBorder = new LiveBorder({
 	getEditor: () => installedEditor,
 	getCtx: () => lastSessionCtx as unknown as ExtensionContextLike | null, // SAFETY: pi context seam
@@ -151,102 +140,28 @@ let currentModelInfo: ModelInfo = {
 	contextWindow: 0,
 };
 
-/** Kind tag for the header — derived from the candidate's command prefix. */
-function kindOf(value: string): string {
-	return value.startsWith("skill:") ? "skill" : "command";
-}
-
-function detailItemOf(item: SelectItem): DetailItem {
-	return {
-		label: item.label,
-		kind: kindOf(item.value),
-		description: item.description ?? "",
-	};
-}
-
-/**
- * Content-line count for the current description, derived from the renderer's
- * own output so it can never drift from T1's wrapping logic:
- * - Overflowing: the header carries a ` offset/total` marker — read `total`.
- * - Fitting: renderDetail at offset 0 returns `[header, ...content]` — count.
- */
-function contentLinesFrom(lines: string[]): number {
-	if (lines.length === 0) {
-		return 0;
-	}
-	const marker = lines[0].match(/ (\d+)\/(\d+)$/);
-	if (marker) {
-		return Number.parseInt(marker[2], 10);
-	}
-	return lines.length - 1;
-}
-
-/** The widget component: renders the current window at the TUI's actual width. */
-/**
- * The widget component: renders the bordered window at the TUI's actual width,
- * reading the LIVE theme at render time (so theme swaps apply immediately).
- */
 function makeWidget(ctx: ExtensionUIContextLike): Component {
-	const themeOf = (theme: unknown): WindowThemeLike => {
-		const t = theme as {
-			fg(color: string, s: string): string;
-			bold(s: string): string;
-		};
-		return {
-			border: (s) => t.fg("border", s),
-			highlight: (s) => t.fg("accent", t.bold(s)),
-			dim: (s) => t.fg("dim", s),
-		};
-	};
-	return {
-		invalidate(): void {
-			// No cached render state — nothing to invalidate.
-		},
-		render(width: number): string[] {
-			lastWidth = width;
-			if (!currentItem) {
-				return [];
-			}
-			// Two border columns on each side: content wraps at width - 4.
-			const innerWidth = Math.max(1, width - 4);
-			const lines = renderDetail(
-				detailItemOf(currentItem),
-				innerWidth,
-				MAX_LINES,
-				scrollOffset,
-			);
-			return decorateWindow(lines, width, themeOf(ctx.theme));
-		},
-	};
+  return {
+    invalidate(): void {},
+    render(width: number): string[] {
+      return detailChrome.render(width, ctx.theme);
+    },
+  };
 }
-
 function installWidget(ctx: ExtensionUIContextLike): void {
-	ctx.setWidget(
-		"pi-skill-desc",
-		(tui) => {
-			tuiRef = tui;
-			return makeWidget(ctx);
-		},
-		{ placement: "aboveEditor" },
-	);
+  ctx.setWidget("pi-skill-desc", (tui) => {
+    tuiRef = tui;
+    return makeWidget(ctx);
+  }, { placement: "aboveEditor" });
 }
-
 function removeWidget(ctx: ExtensionUIContextLike): void {
-	ctx.setWidget("pi-skill-desc", undefined);
+  ctx.setWidget("pi-skill-desc", undefined);
 }
-
-/** Reflect the current highlight in the widget: install, remove, or repaint. */
 function updateWidget(ctx: ExtensionUIContextLike): void {
-	const hasContent =
-		currentItem !== null && (currentItem.description ?? "").trim() !== "";
-	if (hasContent) {
-		installWidget(ctx);
-	} else {
-		removeWidget(ctx);
-	}
-	tuiRef?.requestRender();
+  if (detailChrome.hasContent()) installWidget(ctx);
+  else removeWidget(ctx);
+  tuiRef?.requestRender();
 }
-
 // Timeline injection — dim line between each agent run, left-aligned, permanent in transcript
 // Inserts directly into chatContainer (scrollable transcript) so it appears as:
 //   User: hello? / Assistant: hi. / <dim timeline> / User: nice ... / Assistant: ... / <dim timeline>
@@ -298,22 +213,9 @@ function clearTimelineHistory(_ctx?: ExtensionUIContextLike): void {
 	wallTimeHistory = [];
 }
 
-/** shift+up/down handler: scroll the detail window one line, clamped. */
 function scrollWindow(delta: -1 | 1): void {
-	if (!currentItem || (currentItem.description ?? "").trim() === "") {
-		return; // window not shown — keys stay inert
-	}
-	const width = lastWidth > 0 ? lastWidth : 80;
-	// Match the widget's content width (borders take 4 columns).
-	const innerWidth = Math.max(1, width - 4);
-	const lines = renderDetail(
-		detailItemOf(currentItem),
-		innerWidth,
-		MAX_LINES,
-		0,
-	);
-	scrollOffset = scroll(scrollOffset, delta, contentLinesFrom(lines), MAX_LINES);
-	tuiRef?.requestRender();
+  detailChrome.scrollBy(delta);
+  tuiRef?.requestRender();
 }
 
 function modelInfoOf(ctx: ExtensionContextLike): ModelInfo {
@@ -375,8 +277,7 @@ function installEditor(ctx: ExtensionUIContextLike): void {
 		// bottom border left is intentionally empty (cwd removed per user request; cwd lives in footer)
 		refreshContextBar();
 		editor.onHighlight = (item) => {
-			currentItem = item;
-			scrollOffset = 0; // a new candidate restarts the scroll
+			detailChrome.setItem(item);
 			updateWidget(ctx);
 		};
 		return editor;
