@@ -96,6 +96,7 @@ export function aggregateAgentTurns(
     totalTokens,
     costUsd: validCost ? costUsd : 0,
     measurementMs,
+    estimated: live?.estimated === true,
   };
 }
 
@@ -193,12 +194,7 @@ export class AgentRunLedger {
     now?: number,
   ): TurnTelemetry | null {
     const n = typeof now === "number" ? now : this.now();
-    const result = aggregateAgentTurns(
-      this.turns,
-      liveTurn,
-      this.startMs,
-      n,
-    );
+    const result = aggregateAgentTurns(this.turns, liveTurn, this.startMs, n);
     // If no agent active (startMs null) but we have turns/live, aggregateTurns handles it;
     // otherwise fallback to null.
     return result;
@@ -293,6 +289,7 @@ export class AgentRunLedger {
       totalTokens: cappedInput + displayOutput,
       costUsd: displayCost,
       measurementMs: null,
+      estimated: false,
     };
   }
 
@@ -318,14 +315,12 @@ export class AgentRunLedger {
       displayLive = liveTurn;
     }
     if (!displayLive) return null;
-    const cappedInput = capInputForLive(
-      displayLive.inputTokens,
-      contextTokens,
-    );
+    const cappedInput = capInputForLive(displayLive.inputTokens, contextTokens);
     return {
       ...displayLive,
       inputTokens: cappedInput,
       totalTokens: cappedInput + displayLive.outputTokens,
+      estimated: true,
     };
   }
 

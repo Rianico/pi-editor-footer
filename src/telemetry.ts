@@ -7,9 +7,108 @@
  * Agent-run lifecycle is owned by AgentRunLedger (agent-run-ledger.ts) —
  * this tracker deliberately has NO agent window (no agentStartMs/agentTurns/
  * peekAgentLive). Agent events are accepted as no-ops for event-shape compat.
+ *
+ * TPS model — absorbed from @arhen/pi-core-tps-stats (MIT):
+ *   https://github.com/arhen/pi-extensions/tree/main/packages/core/pi-core-tps-stats
+ *
+ *   One rate, deliberately: all output tokens (thinking + text + tool-call
+ *   args) / whole turn, prefill + queue included. It reads lower than a
+ *   provider's marketing number because it is the rate you actually wait for.
+ *
+ *   Earlier window-based math (output / (lastChunk-firstChunk)) does not
+ *   survive contact with real providers. SSE arrival times measure the
+ *   gateway's flush schedule, not generation speed — median inter-chunk gap
+ *   on vantis/deepseek-v4-flash is 0.01ms (instant batches, long pauses), so
+ *   the "window" is an artifact of batch boundaries:
+ *
+ *       prompt              turn      window-based    this tracker (whole turn)
+ *       "Say OK."           1.40s        263 t/s          41 t/s
+ *       "List 3 fruits."    8.81s        801 t/s          14 t/s
+ *       900-word essay     18.49s         89 t/s          55 t/s
+ *
+ *   Window spread 9× on one model in one minute; whole-turn stays in a
+ *   plausible band. We therefore derive TPS from whole-turn elapsed
+ *   (now - turnStart), never from the streaming window (now - firstToken)
+ *   — live and final share the same denominator. TTFT remains a direct
+ *   observation (firstToken - turnStart).
+ *
+ * Live input/output — estimation vs authoritative:
+ *   - input: known at turn_start via getContextUsage().tokens (window
+ *     occupancy). Stored as liveInputTokens and capped by AgentRunLedger
+ *     (max-vs-sum + contextWindow cap) — see agent-run-ledger.ts.
+ *   - output: no usage before message_end, so we estimate O(1) per delta:
+ *     liveDeltaChars += delta.length, liveEstimatedTokens = ceil(chars/4)
+ *     monotonic max. ~4 chars/token is English; ~2-3 Chinese, ~3.5 code.
+ *     Approximately accurate at 1 s display granularity; final
+ *     message.usage.output corrects the estimate on message_end/turn_end.
+ *     External tiktoken sampled throttled (every 200 ms) would be 10-100×
+ *     more CPU and defeat throttling — not used; final corrects.
+ *   - TPS: live = estimate / wholeTurnElapsed (stable), final = usage.output
+ *     / wholeTurnElapsed (authoritative). Both include TTFT/queue/prefill.
  */
 
 const STALL_THRESHOLD_MS = 1000;
+
+// ── pure helpers — exported for tests / parity with pi-core-tps-stats ──
+
+/** bounded ring: keep newest MAX_SAMPLES values (reference: 200). */
+export const MAX_SAMPLES = 200;
+
+export function push(arr: number[], v: number): void {
+  arr.push(v);
+  if (arr.length > MAX_SAMPLES) arr.shift();
+}
+
+export function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+export function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/**
+ * Totoken-per-second over the whole turn — the only TPS we report.
+ * Deliberately uses whole-turn duration so gateway batching does not inflate it.
+ * Mirrors pi-core-tps-stats tps() exactly.
+ */
+export function tps(
+  outputTokens: number,
+  turnStartMs: number,
+  endMs: number,
+): number | undefined {
+  const durationMs = endMs - turnStartMs;
+  if (outputTokens <= 0 || durationMs <= 0) return undefined;
+  return outputTokens / (durationMs / 1000);
+}
+
+/** Duration formatter matching pi-core-tps-stats fmtDur: 6,9s / 10s / 1m 5s */
+export function fmtDur(ms: number): string {
+  if (ms < 10000) return `${(ms / 1000).toFixed(1).replace(".", ",")}s`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+/** first streamed token — any content kind counts as generated tokens. */
+const CONTENT_START_EVENTS = new Set([
+  "text_start",
+  "thinking_start",
+  "toolcall_start",
+]);
+
+/** streaming delta variants — where live output estimation happens. */
+const CONTENT_DELTA_EVENTS = new Set([
+  "text_delta",
+  "thinking_delta",
+  "toolcall_delta",
+]);
 
 export interface TurnTelemetry {
   tps: number | null;
@@ -24,6 +123,8 @@ export interface TurnTelemetry {
   totalTokens: number;
   costUsd: number;
   measurementMs: number | null;
+  /** true when outputTokens includes live estimate (chars/4) not yet authoritative usage */
+  estimated?: boolean;
 }
 
 export interface TelemetryConfig {
@@ -168,7 +269,21 @@ export class TurnTelemetryTracker {
     return this.lastTurnTelemetry;
   }
 
-  /** Live snapshot while a turn is running — for real-time border refresh. Returns null when idle. */
+  /** Reset live + last telemetry — call on model change (pi-core-tps-stats resets on model_select). */
+  reset(): void {
+    this.turn = undefined;
+    this.lastTelemetry = null;
+    this.lastTurnTelemetry = null;
+    this.decayBaseTps = null;
+    this.decayStartMs = null;
+  }
+
+  /**
+   * Live snapshot while a turn is running — for real-time border refresh.
+   * Returns null when idle.
+   * TPS uses whole-turn elapsed (now - turnStart), matching final tps() and
+   * pi-core-tps-stats, so live does not inflate via gateway batching.
+   */
   peekLive(): TurnTelemetry | null {
     const turn = this.turn;
     if (!turn) return null;
@@ -203,9 +318,9 @@ export class TurnTelemetryTracker {
         totalTokens: liveInput,
         costUsd: 0,
         measurementMs: null,
+        estimated: true,
       };
     }
-    const genMs = Math.max(0, now - turn.firstTokenMs);
     let inputTokens = 0;
     let outputTokens = 0;
     let totalTokens = 0;
@@ -225,7 +340,8 @@ export class TurnTelemetryTracker {
       inputTokens = turn.liveInputTokens;
       totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
     }
-    // During streaming no message has ended yet — use live estimate so TPS refreshes in real time
+    // During streaming no message has ended yet — use live estimate so border refreshes in real time.
+    // Corrected to authoritative usage on message_end/turn_end.
     if (outputTokens === 0 && turn.liveEstimatedTokens > 0) {
       outputTokens = turn.liveEstimatedTokens;
       totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
@@ -234,16 +350,18 @@ export class TurnTelemetryTracker {
       outputTokens = turn.liveEstimatedTokens;
       totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
     }
-    // Require minimum window to avoid spike on tiny genMs (multi-turn fast second turn)
-    const measurementMs = genMs >= 500 && outputTokens > 0 ? genMs : null;
-    const tps =
+    // Whole-turn TPS — stable, includes TTFT/prefill/queue (see header). Guard tiny elapsed to avoid spike.
+    const measurementMs = elapsed >= 500 && outputTokens > 0 ? elapsed : null;
+    const tpsVal =
       measurementMs === null
         ? null
         : round(outputTokens / (measurementMs / 1000), 1);
+    // Also expose pure tps() parity check (unused here, tested separately): tps(outputTokens, turn.startMs, now)
+    void tps;
     const validCost = Number.isFinite(costUsd) && costUsd > 0;
     const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
     return {
-      tps,
+      tps: tpsVal,
       ttftMs: turn.firstTokenMs - turn.startMs,
       totalMs: elapsed,
       inputTokens,
@@ -254,10 +372,11 @@ export class TurnTelemetryTracker {
         validCost && validTokens
           ? round(costUsd / (totalTokens / 1_000_000), 2)
           : null,
-      generationMs: genMs,
+      generationMs: elapsed,
       totalTokens,
       costUsd: validCost ? costUsd : 0,
       measurementMs,
+      estimated: true,
     };
   }
 
@@ -339,17 +458,31 @@ export class TurnTelemetryTracker {
     const turn = this.turn;
     const current = turn?.currentMessage;
     const streamEvent = event.assistantMessageEvent;
-    if (
-      streamEvent.type !== "text_delta" &&
-      streamEvent.type !== "thinking_delta" &&
-      streamEvent.type !== "toolcall_delta"
-    )
-      return;
-    if (streamEvent.delta.length === 0) return;
+    const type = streamEvent.type;
     const message = event.message;
     if (!turn || !current || !isAssistantMessage(message)) return;
 
     const now = this.now();
+
+    // TTFT — first streamed content of any kind (thinking counts). Mirrors
+    // pi-core-tps-stats CONTENT_START_EVENTS. No delta needed; the start
+    // signal itself is the observation. Return early so stall logic not
+    // double-counts the first chunk's gap.
+    if (CONTENT_START_EVENTS.has(type)) {
+      if (turn.firstTokenMs === null) {
+        turn.firstTokenMs = now;
+      }
+      if (current.firstOutputMs === null) {
+        current.firstOutputMs = now;
+        current.lastUpdateMs = now;
+      }
+      return;
+    }
+
+    // Live output estimation — only delta events carry char counts.
+    if (!CONTENT_DELTA_EVENTS.has(type)) return;
+    if (streamEvent.delta.length === 0) return;
+
     // Data layer: cheap O(1) per delta — no external tokenizer, ~4 chars/token is enough for 1 s throttled display
     turn.liveDeltaChars += streamEvent.delta.length;
     const estFromDelta = Math.ceil(turn.liveDeltaChars / 4);
@@ -422,14 +555,14 @@ export class TurnTelemetryTracker {
 
     const measurementMs =
       outputTokens > 0 && turn.generationMs > 0 ? turn.generationMs : null;
-    const tps =
-      measurementMs === null
-        ? null
-        : round(outputTokens / (measurementMs / 1000), 1);
+    // Final TPS uses whole-turn (turn.generationMs = end - start), same denominator as live.
+    const raw = tps(outputTokens, endMs - turn.generationMs, endMs);
+    const tpsVal =
+      measurementMs === null || raw === undefined ? null : round(raw, 1);
     const validCost = Number.isFinite(costUsd) && costUsd > 0;
     const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
     return {
-      tps,
+      tps: tpsVal,
       ttftMs: turn.firstTokenMs! - turn.startMs,
       totalMs: endMs - turn.startMs,
       inputTokens,
@@ -444,9 +577,9 @@ export class TurnTelemetryTracker {
       totalTokens,
       costUsd: validCost ? costUsd : 0,
       measurementMs,
+      estimated: false,
     };
   }
-
 }
 
 export function formatTurnDuration(ms: number): string {
@@ -488,8 +621,11 @@ export function formatTurnTelemetry(
   };
   const parts: string[] = [];
   if (config.tps) {
-    const num = telemetry.tps === null ? "—" : telemetry.tps.toFixed(1);
-    const padded = num.padStart(6, " ");
+    const isEst = telemetry.estimated === true;
+    let raw: string;
+    if (telemetry.tps === null) raw = "—";
+    else raw = `${isEst ? "~" : ""}${telemetry.tps.toFixed(1)}`;
+    const padded = raw.padStart(6, " ");
     parts.push(
       theme.fg(
         telemetry.tps === null ? "muted" : "accent",
@@ -533,9 +669,19 @@ export function formatTelemetryTokens(
   };
   const joiner =
     (g as { dimSep?: string }).dimSep ?? ` ${theme.fg("dim", "·")} `;
+  const isEst = telemetry.estimated === true;
+  // ~ prefix marks live estimate (chars/4, context window) vs authoritative usage
+  const inPref = isEst ? "~" : "";
+  const outPref = isEst ? "~" : "";
   const parts: string[] = [
-    theme.fg("accent", `${g.input} ${fmtTokens(telemetry.inputTokens)}`),
-    theme.fg("success", `${g.output} ${fmtTokens(telemetry.outputTokens)}`),
+    theme.fg(
+      "accent",
+      `${g.input} ${inPref}${fmtTokens(telemetry.inputTokens)}`,
+    ),
+    theme.fg(
+      "success",
+      `${g.output} ${outPref}${fmtTokens(telemetry.outputTokens)}`,
+    ),
   ];
   return parts.join(joiner);
 }

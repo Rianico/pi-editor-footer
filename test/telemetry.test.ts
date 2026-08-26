@@ -116,6 +116,7 @@ describe("TurnTelemetryTracker", () => {
       totalTokens: 70,
       costUsd: 0.00028,
       measurementMs: 5000,
+      estimated: false,
     });
     assert.equal(
       formatTurnTelemetry(telemetry!, theme, fullConfig),
