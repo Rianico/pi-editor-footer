@@ -153,7 +153,7 @@ export class LiveBorder {
           }
         }
       }
-      editor.setTopRightText(text);
+      editor.setChrome({ topRightText: text });
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
@@ -165,8 +165,7 @@ export class LiveBorder {
     if (!editor) return;
     if (!cfg.telemetry.enabled) {
       try {
-        editor.setTelemetryText("");
-        editor.setBottomLeftText("");
+        editor.setChrome({ telemetryText: "", bottomLeftText: "" });
       } catch {
         // SAFETY: best-effort UI, ignore recoverable error
       }
@@ -182,8 +181,8 @@ export class LiveBorder {
       const bottomCfg = { ...cfg.telemetry, stalls: false };
       const right = comp.formatTurnTelemetry(live, bottomCfg);
       if (live.totalMs > 0) {
-        editor.setTelemetryText(right);
-        editor.setBottomLeftText("");
+        editor.setChrome({ telemetryText: right });
+        editor.setChrome({ bottomLeftText: "" });
       }
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
@@ -238,8 +237,8 @@ export class LiveBorder {
           }
         }
       }
-      editor.setTopContextText(contextText);
-      editor.setTopTokensText(tokensText);
+      editor.setChrome({ topContextText: contextText });
+      editor.setChrome({ topTokensText: tokensText });
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }

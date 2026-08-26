@@ -219,7 +219,7 @@ export class SessionOrchestrator {
     };
     this.liveBorder.stopTick();
     this.runActivityTracker.reset();
-    this.installedEditor?.setTopRightText("");
+    this.installedEditor?.setChrome({ topRightText: "" });
     this.lastSessionCtx = null;
     this.headerCleanupInner?.();
     this.headerCleanupInner = null;
@@ -310,9 +310,9 @@ export class SessionOrchestrator {
     ctx.setEditorComponent((tui, theme, keybindings) => {
       const editor = new TrackingEditor(tui, theme, keybindings, () => ctx.theme);
       this.installedEditor = editor;
-      editor.setModelInfo(this.currentModelInfo);
-      editor.glowEnabled = this.glowEnabled;
-      editor.setCursorStyle(this.currentConfig.cursorStyle);
+      editor.setChrome({ modelInfo: this.currentModelInfo });
+      editor.setChrome({ glowEnabled: this.glowEnabled });
+      editor.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
       this.refreshContextBar();
       editor.onHighlight = (item) => {
         this.detailChrome.setItem(item);
@@ -421,7 +421,7 @@ export class SessionOrchestrator {
         void _e; // SAFETY: best-effort UI, ignore recoverable error
       }
     })();
-    this.installedEditor?.setCursorStyle(this.currentConfig.cursorStyle);
+    this.installedEditor?.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
     this.refreshContextBar();
   }
 
@@ -439,7 +439,7 @@ export class SessionOrchestrator {
       description: "Toggle the model label + glow on the input border",
       handler: async (_args, ctx) => {
         this.glowEnabled = !this.glowEnabled;
-        this.installedEditor?.setGlowEnabled(this.glowEnabled);
+        this.installedEditor?.setChrome({ glowEnabled: this.glowEnabled });
         ctx.ui.notify(`Model info border ${this.glowEnabled ? "shown" : "hidden"}`, "info");
       },
     });
@@ -456,7 +456,7 @@ export class SessionOrchestrator {
             this.ensureFooter(this.lastSessionCtx);
           }
         }
-        this.installedEditor?.setCursorStyle(this.currentConfig.cursorStyle);
+        this.installedEditor?.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
         this.refreshContextBar();
         this.refreshLiveTelemetry();
         this.tuiRef?.requestRender();
@@ -682,15 +682,15 @@ export class SessionOrchestrator {
           const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam
           const glyphs = resolveGlyphs(this.currentConfig.icons.mode);
           const right = formatTurnTelemetry(effectiveTel, themeArg as never, this.currentConfig.telemetry, glyphs as never);
-          this.installedEditor.setTelemetryText(right);
-          this.installedEditor.setBottomLeftText("");
+          this.installedEditor.setChrome({ telemetryText: right });
+          this.installedEditor.setChrome({ bottomLeftText: "" });
         } catch (_e) {
           void _e; // SAFETY: best-effort UI, ignore recoverable error
         }
       } else if (this.installedEditor && !this.currentConfig.telemetry.enabled) {
         try {
-          this.installedEditor.setTelemetryText("");
-          this.installedEditor.setBottomLeftText("");
+          this.installedEditor.setChrome({ telemetryText: "" });
+          this.installedEditor.setChrome({ bottomLeftText: "" });
         } catch (_e) {
           void _e; // SAFETY: best-effort UI, ignore recoverable error
         }
@@ -703,13 +703,13 @@ export class SessionOrchestrator {
       if (ctx.mode !== "tui") return;
       this.currentModelInfo = modelInfoOf(ctx);
       this.lastSessionCtx = ctx;
-      this.installedEditor?.setModelInfo(this.currentModelInfo);
+      this.installedEditor?.setChrome({ modelInfo: this.currentModelInfo });
     });
     pi.on("thinking_level_select", (_event, ctx) => {
       if (ctx.mode !== "tui") return;
       this.currentModelInfo = modelInfoOf(ctx);
       this.lastSessionCtx = ctx;
-      this.installedEditor?.setModelInfo(this.currentModelInfo);
+      this.installedEditor?.setChrome({ modelInfo: this.currentModelInfo });
     });
   }
 }

@@ -128,72 +128,7 @@ export class TrackingEditor extends Editor {
     return { ...this._chrome, modelInfo: { ...this._chrome.modelInfo } };
   }
 
-  // glowEnabled as accessor kept for backward compat (direct field assign in index.ts)
-  get glowEnabled(): boolean {
-    return this._chrome.glowEnabled;
-  }
-  set glowEnabled(v: boolean) {
-    if (v === this._chrome.glowEnabled) return;
-    this._chrome.glowEnabled = v;
-    this.tui.requestRender();
-  }
-
-  // ——— Backward-compat wrappers: forward to setChrome (deprecated, keep for tests) ———
-  setModelInfo(info: ModelInfo): void {
-    this.setChrome({ modelInfo: info });
-  }
-
-  setGlowEnabled(enabled: boolean): void {
-    this.setChrome({ glowEnabled: enabled });
-  }
-
-  setCursorStyle(style: CursorStyle): void {
-    this.setChrome({ cursorStyle: style });
-  }
-
-  getCursorStyle(): CursorStyle {
-    return this.cursorPolicy.getStyle();
-  }
-
-  setTelemetryText(text: string): void {
-    this.setChrome({ telemetryText: text });
-  }
-
-  setBottomLeftText(text: string): void {
-    this.setChrome({ bottomLeftText: text });
-  }
-
-  getBottomLeftText(): string {
-    return this._chrome.bottomLeftText;
-  }
-
-  getTelemetryText(): string {
-    return this._chrome.telemetryText;
-  }
-
-  setTopRightText(text: string): void {
-    this.setChrome({ topRightText: text });
-  }
-
-  getTopRightText(): string {
-    return this._chrome.topRightText;
-  }
-
-  setTopContextText(text: string): void {
-    this.setChrome({ topContextText: text });
-  }
-
-  getTopContextText(): string {
-    return this._chrome.topContextText;
-  }
-
-  setTopTokensText(text: string): void {
-    this.setChrome({ topTokensText: text });
-  }
-
-  getTopTokensText(): string {
-    return this._chrome.topTokensText;
-  }
+  // Deep interface is setChrome/getChrome only — wrappers removed (C4). All chrome via setChrome({})
   private patchApplyAutocompleteSuggestions(): void {
     // SAFETY: EditorInternals is private pi-tui shape — existence validated via typeof check on applyAutocompleteSuggestions
     const internals = this as unknown as EditorInternals; // SAFETY: private pi-tui interior seam
