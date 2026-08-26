@@ -4,20 +4,105 @@
  * Previously src/index.ts scattered wallTimeHistory, capturedIM, findChatContainerViaGlobalScan,
  * captureInteractiveMode, injectTimelineDimLine and clearTimelineHistory as globals with no
  * locality. Fixing a rebuild bug required holding 4 functions in one head.
+ * Additionally SessionOrchestrator scattered wallTimeHistory, formatDateTimeWithTimezone
+ * and line-building (dt · wallDur · tokens · cache · cost + turns/tools) across
+ * agent_settled with no locality — now all Agent-run → dim-line derivation lives here.
  *
- * Depth: small interface (inject / clear / getHistory) hides global scan + prototype patch +
- * history replay + theme dim. Callers learn one shape. Two adapters (real chatContainer,
+ * Depth: small interface (inject / clear / getHistory / buildTimelineText / handleAgentSettled)
+ * hides global scan + prototype patch + history replay + theme dim + per-Agent-run totals
+ * capping + datetime formatting. Callers learn one shape. Two adapters (real chatContainer,
  * in-memory fake) justify the seam — impl stays inside.
  *
  * Leakage quarantined: globalThis breadth-first scan, InteractiveMode.prototype patch,
- * and theme.fg("dim") are internal seams, not part of external seam.
+ * and theme.fg("dim") are internal seams, not part of external seam. ExtensionPi.appendEntry
+ * (public seam) is preferred when available; private scan is fallback.
  */
 
 import type { TUI } from "@earendil-works/pi-tui";
+import type { ThemeConfig } from "./config.js";
+import type { UsageTotals } from "./state.js";
+import type { AgentRunLedger } from "./agent-run-ledger.js";
+import type { RunActivitySnapshot } from "./run-activity.js";
+import type { TurnTelemetry } from "./telemetry.js";
+import { resolveGlyphs } from "./icons.js";
+import { fmtTokens, formatDuration } from "./format.js";
 
 export interface TimelineDeps {
   getLastSessionCtx?: () => unknown;
   getTuiRef?: () => TUI | null;
+}
+
+// ——— Pure helpers: datetime + timeline text building (testable without TUI) ———
+
+export function formatDateTimeWithTimezone(d: Date = new Date()): string {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
+    });
+    const parts = fmt.formatToParts(d);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+    const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
+  } catch {
+    // SAFETY: best-effort, ignore recoverable error
+    return d.toLocaleString();
+  }
+}
+
+export interface BuildTimelineParams {
+  effectiveTel: TurnTelemetry | null | undefined;
+  totals: UsageTotals;
+  ctxTokens: number | undefined;
+  snap: RunActivitySnapshot;
+  config: ThemeConfig;
+  lastDoneIn: number;
+  now?: Date;
+  ledger: AgentRunLedger;
+}
+
+/**
+ * Pure timeline text builder: Agent-run → dim line (line1 · line2).
+ * Single source for dt · wallDur · cache · tokens · cost + turns/tools formatting.
+ * Respects timeline config but preserves current behaviour (wallDur/tokens/cost always shown;
+ * config flags gate future omit — currently both branches push same, kept for compat).
+ * Testable without TUI — no global scan.
+ */
+export function buildTimelineText(params: BuildTimelineParams): string {
+  const { effectiveTel, totals, ctxTokens, snap, config, lastDoneIn, now, ledger } = params;
+  const glyphs = resolveGlyphs(config.icons.mode);
+  const dt = formatDateTimeWithTimezone(now ?? new Date());
+  const wallDur = formatDuration(lastDoneIn);
+  const cacheRate = totals.latestCacheHitRate ?? 0;
+  const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
+  const perAgent = ledger.getPerAgentTotalsForTimeline(effectiveTel, totals, ctxTokens);
+  const telInput = perAgent.input;
+  const telOutput = perAgent.output;
+  const telCost = perAgent.cost;
+  const line1Parts: string[] = [dt];
+  if (config.timeline.wallTime) line1Parts.push(wallDur);
+  else line1Parts.push(wallDur);
+  if (config.timeline.tokens) {
+    line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
+    line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
+  } else {
+    line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
+    line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
+  }
+  line1Parts.push(cacheStr);
+  if (config.timeline.cost) line1Parts.push(`$${telCost.toFixed(2)}`);
+  else line1Parts.push(`$${telCost.toFixed(2)}`);
+  const line1 = line1Parts.join(" · ");
+  const turnNum = snap.turnNumber ?? 1;
+  const totalTools = snap.completedCount + snap.failedCount + snap.activeTools;
+  const line2 = `${turnNum} turns · ${totalTools} tools · ${snap.failedCount} failed`;
+  return `${line1}\n${line2}`;
 }
 
 interface ChatContainerLike { chatContainer?: { addChild(c: unknown): void }; ui?: unknown; addMessageToChat?: unknown }
@@ -261,6 +346,45 @@ export class TranscriptTimeline {
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
+  }
+
+  /**
+   * Build timeline text via pure helper (exposed for tests / orchestrator).
+   * Thin wrapper around buildTimelineText for instance convenience.
+   */
+  buildText(params: BuildTimelineParams): string {
+    return buildTimelineText(params);
+  }
+
+  /**
+   * Handle Agent settled: build wallText + inject via single seam.
+   * Tries public appendEntry (preferred) when extensionPi has it; falls back to private chatContainer scan.
+   * History is owned here — single source, no duplicate array in orchestrator.
+   * Returns wallText or null if not injected (disabled / missing context).
+   */
+  handleAgentSettled(
+    ctxUI: unknown,
+    extensionPi: unknown,
+    params: BuildTimelineParams,
+  ): string | null {
+    if (!params.config.timeline.enabled) return null;
+    if (params.lastDoneIn === undefined || params.lastDoneIn === null) return null;
+    const wallText = buildTimelineText(params);
+    // Prefer public seam: pi.appendEntry("timeline", {text}) + registerEntryRenderer
+    try {
+      const piAny = extensionPi as { appendEntry?: (t: string, d: unknown) => void } | null | undefined;
+      if (piAny && typeof piAny.appendEntry === "function") {
+        piAny.appendEntry("timeline", { text: wallText });
+        // history owned here even for public path — keeps getHistory() consistent for tests/fallback widget
+        this.history.push(wallText);
+        return wallText;
+      }
+    } catch {
+      // SAFETY: best-effort, ignore recoverable error
+    }
+    // Fallback: private scan + aboveEditor widget
+    this.inject(ctxUI as never, wallText);
+    return wallText;
   }
 
   clear(ctx?: { setWidget: (k: string, c: unknown) => void }): void {
