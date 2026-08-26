@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Collapse Agent-run timeline into one seam — `TranscriptTimeline` now owns history, formatting (`buildTimelineText`), injection and rebuild replay; `SessionOrchestrator` wallTimeHistory deleted, seam turns hypothetical → real with two adapters (prod `chatContainer` + in-memory fake) (#23)
+- Prune LiveBorder fallback — `AgentRunLedger` required, 80-line manual delta deleted, single `ChromeComposition` cached per `render()` (#24)
+
+### Fixed
+
+- Delete dead `SessionKernel` (255 lines, 0 adapters) and ghost `liveTickTimer` wrappers — `SessionOrchestrator` calls `LiveBorder.startTick/stopTick` directly (#27)
+
+### Refactored
+
+- Table-driven config validation — `CONFIG_SCHEMA` single source for defaults + validation; removes 10 `as unknown as` casts, `theme-settings` trusts typed boundaries (#25)
+- Retire TrackingEditor compat wrappers — `setChrome`/`getChrome` is the single interface; 7 wrappers + 2 glow accessors deleted, codemod `LiveBorder`/`SessionOrchestrator` (#26)
+
+
+
 ## [0.7.0] - 2026-08-25
 
 ### Changed
