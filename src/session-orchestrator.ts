@@ -41,7 +41,7 @@ import { loadConfig, saveConfig } from "./config.js";
 import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
 import { resolveGlyphs } from "./icons.js";
-import { fmtTokens, formatDuration } from "./format.js";
+import { TranscriptTimeline } from "./transcript-timeline.js";
 import { LiveBorder } from "./live-border.js";
 import { AgentRunLedger } from "./agent-run-ledger.js";
 
@@ -120,28 +120,6 @@ function modelInfoOf(ctx: ExtensionContextLike): ModelInfo {
   };
 }
 
-function formatDateTimeWithTimezone(d: Date = new Date()): string {
-  try {
-    const fmt = new Intl.DateTimeFormat("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-      timeZoneName: "short",
-    });
-    const parts = fmt.formatToParts(d);
-    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-    const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
-    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
-  } catch {
-    // SAFETY: best-effort, ignore recoverable error
-    return d.toLocaleString();
-  }
-}
-
 function assertInternals(): void {
   const missing: string[] = [];
   const proto = Editor.prototype as unknown as Record<string, unknown>; // SAFETY: pi seam
@@ -174,13 +152,13 @@ export class SessionOrchestrator {
   private installedEditor: TrackingEditor | null = null;
   private lastSessionCtx: ExtensionContextLike | null = null;
   private extensionPi: unknown = null;
-  private wallTimeHistory: string[] = [];
   private currentConfig: ThemeConfig;
   private readonly telemetryTracker: TurnTelemetryTracker;
   private readonly runActivityTracker: RunActivityTracker;
   private readonly agentLedger: AgentRunLedger;
   private readonly detailChrome: DetailChrome;
   private readonly liveBorder: LiveBorder;
+  private readonly transcriptTimeline: TranscriptTimeline;
   private footerState: FooterState;
   private agentStartMs: number | null = null;
   private agentBaselineTotals: ReturnType<typeof getUsageTotals> | null = null;
@@ -193,7 +171,6 @@ export class SessionOrchestrator {
   private watchTimer: ReturnType<typeof setInterval> | null = null;
   private deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
   private headerCleanupInner: (() => void) | null = null;
-  private liveTickTimer: ReturnType<typeof setInterval> | null = null;
   private readonly saveConfigFn: (patch: Partial<ThemeConfig> & Record<string, unknown>) => ThemeConfig;
 
   constructor(deps: SessionOrchestratorDeps = {}) {
@@ -204,6 +181,10 @@ export class SessionOrchestrator {
     this.runActivityTracker = createRunActivityTracker();
     this.agentLedger = new AgentRunLedger();
     this.detailChrome = new DetailChrome();
+    this.transcriptTimeline = new TranscriptTimeline({
+      getLastSessionCtx: () => this.lastSessionCtx as unknown,
+      getTuiRef: () => this.tuiRef,
+    });
     this.liveBorder = new LiveBorder({
       getEditor: () => this.installedEditor,
       getCtx: () => this.lastSessionCtx as unknown as ExtensionContextLike | null, // SAFETY: pi context seam
@@ -226,7 +207,7 @@ export class SessionOrchestrator {
 
   /** Teardown timers and state. Called on session_shutdown. */
   dispose(): void {
-    this.wallTimeHistory = [];
+    this.transcriptTimeline.clear();
     this.agentStartMs = null;
     this.agentBaselineTotals = null;
     this.agentLedger.setBaseline(null);
@@ -238,7 +219,7 @@ export class SessionOrchestrator {
     };
     this.liveBorder.stopTick();
     this.runActivityTracker.reset();
-    this.installedEditor?.setTopRightText("");
+    this.installedEditor?.setChrome({ topRightText: "" });
     this.lastSessionCtx = null;
     this.headerCleanupInner?.();
     this.headerCleanupInner = null;
@@ -267,6 +248,9 @@ export class SessionOrchestrator {
   }
   getLiveBorder(): LiveBorder {
     return this.liveBorder;
+  }
+  getTranscriptTimeline(): TranscriptTimeline {
+    return this.transcriptTimeline;
   }
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
@@ -318,20 +302,7 @@ export class SessionOrchestrator {
     this.tuiRef?.requestRender();
   }
 
-  // ——— timeline ———
-
-  private injectTimelineDimLine(_ctx: ExtensionUIContextLike, rawLine: string): void {
-    try {
-      // SAFETY: pi custom entry is TUI-only, not sent to LLM
-      (this.extensionPi as unknown as { appendEntry?: (t: string, d: unknown) => void })?.appendEntry?.(
-        "timeline",
-        { text: rawLine },
-      );
-    } catch {
-      // SAFETY: best-effort, ignore recoverable error
-    }
-    this.wallTimeHistory = [...this.wallTimeHistory, rawLine];
-  }
+  // ——— timeline — via TranscriptTimeline single seam ———
 
   // ——— editor ownership ———
 
@@ -339,9 +310,9 @@ export class SessionOrchestrator {
     ctx.setEditorComponent((tui, theme, keybindings) => {
       const editor = new TrackingEditor(tui, theme, keybindings, () => ctx.theme);
       this.installedEditor = editor;
-      editor.setModelInfo(this.currentModelInfo);
-      editor.glowEnabled = this.glowEnabled;
-      editor.setCursorStyle(this.currentConfig.cursorStyle);
+      editor.setChrome({ modelInfo: this.currentModelInfo });
+      editor.setChrome({ glowEnabled: this.glowEnabled });
+      editor.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
       this.refreshContextBar();
       editor.onHighlight = (item) => {
         this.detailChrome.setItem(item);
@@ -379,18 +350,6 @@ export class SessionOrchestrator {
   }
   private refreshLiveTelemetry(): void {
     this.liveBorder.render();
-  }
-  private startLiveTick(): void {
-    this.liveBorder.startTick();
-    if (this.liveTickTimer !== null) return;
-    this.liveTickTimer = null;
-  }
-  private stopLiveTick(): void {
-    this.liveBorder.stopTick();
-    if (this.liveTickTimer !== null) {
-      clearInterval(this.liveTickTimer);
-      this.liveTickTimer = null;
-    }
   }
 
   // ——— footer lifecycle — single path, deduplicated ———
@@ -462,7 +421,7 @@ export class SessionOrchestrator {
         void _e; // SAFETY: best-effort UI, ignore recoverable error
       }
     })();
-    this.installedEditor?.setCursorStyle(this.currentConfig.cursorStyle);
+    this.installedEditor?.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
     this.refreshContextBar();
   }
 
@@ -480,7 +439,7 @@ export class SessionOrchestrator {
       description: "Toggle the model label + glow on the input border",
       handler: async (_args, ctx) => {
         this.glowEnabled = !this.glowEnabled;
-        this.installedEditor?.setGlowEnabled(this.glowEnabled);
+        this.installedEditor?.setChrome({ glowEnabled: this.glowEnabled });
         ctx.ui.notify(`Model info border ${this.glowEnabled ? "shown" : "hidden"}`, "info");
       },
     });
@@ -497,7 +456,7 @@ export class SessionOrchestrator {
             this.ensureFooter(this.lastSessionCtx);
           }
         }
-        this.installedEditor?.setCursorStyle(this.currentConfig.cursorStyle);
+        this.installedEditor?.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
         this.refreshContextBar();
         this.refreshLiveTelemetry();
         this.tuiRef?.requestRender();
@@ -695,43 +654,27 @@ export class SessionOrchestrator {
           const totals = getUsageTotals(
             this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
           );
-          const glyphs = resolveGlyphs(this.currentConfig.icons.mode);
-          const snap = this.runActivityTracker.getSnapshot();
-          const dt = formatDateTimeWithTimezone(new Date());
-          const wallDur = formatDuration(this.footerState.lastDoneIn!);
-          const cacheRate = totals.latestCacheHitRate ?? 0;
-          const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
           const ctxTokens = (
             this.lastSessionCtx as unknown as {
               // SAFETY: pi seam — intentional unsafe cast, validated at runtime
               getContextUsage?: () => { tokens?: number };
             }
           )?.getContextUsage?.()?.tokens;
-          const perAgent = this.agentLedger.getPerAgentTotalsForTimeline(effectiveTel, totals, ctxTokens);
-          const telInput = perAgent.input;
-          const telOutput = perAgent.output;
-          const telCost = perAgent.cost;
-          const line1Parts: string[] = [dt];
-          if (this.currentConfig.timeline.wallTime) line1Parts.push(wallDur);
-          else line1Parts.push(wallDur);
-          if (this.currentConfig.timeline.tokens) {
-            line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
-            line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
-          } else {
-            line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
-            line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
-          }
-          line1Parts.push(cacheStr);
-          if (this.currentConfig.timeline.cost) line1Parts.push(`$${telCost.toFixed(2)}`);
-          else line1Parts.push(`$${telCost.toFixed(2)}`);
-          const line1 = line1Parts.join(" · ");
-          const turnNum = snap.turnNumber ?? 1;
-          const totalTools = snap.completedCount + snap.failedCount + snap.activeTools;
-          const line2 = `${turnNum} turns · ${totalTools} tools · ${snap.failedCount} failed`;
-          const wallText = `${line1}\n${line2}`;
-          this.injectTimelineDimLine(this.lastSessionCtx.ui as unknown as ExtensionUIContextLike, wallText);
-        }
-      } catch {
+          const snap = this.runActivityTracker.getSnapshot();
+          this.transcriptTimeline.handleAgentSettled(
+            this.lastSessionCtx.ui as unknown as ExtensionUIContextLike,
+            this.extensionPi,
+            {
+              effectiveTel,
+              totals,
+              ctxTokens,
+              snap,
+              config: this.currentConfig,
+              lastDoneIn: this.footerState.lastDoneIn!,
+              ledger: this.agentLedger,
+            },
+          );
+        }      } catch {
         // SAFETY: best-effort, ignore recoverable error
       }
       if (effectiveTel && this.installedEditor && this.currentConfig.telemetry.enabled) {
@@ -739,15 +682,15 @@ export class SessionOrchestrator {
           const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam
           const glyphs = resolveGlyphs(this.currentConfig.icons.mode);
           const right = formatTurnTelemetry(effectiveTel, themeArg as never, this.currentConfig.telemetry, glyphs as never);
-          this.installedEditor.setTelemetryText(right);
-          this.installedEditor.setBottomLeftText("");
+          this.installedEditor.setChrome({ telemetryText: right });
+          this.installedEditor.setChrome({ bottomLeftText: "" });
         } catch (_e) {
           void _e; // SAFETY: best-effort UI, ignore recoverable error
         }
       } else if (this.installedEditor && !this.currentConfig.telemetry.enabled) {
         try {
-          this.installedEditor.setTelemetryText("");
-          this.installedEditor.setBottomLeftText("");
+          this.installedEditor.setChrome({ telemetryText: "" });
+          this.installedEditor.setChrome({ bottomLeftText: "" });
         } catch (_e) {
           void _e; // SAFETY: best-effort UI, ignore recoverable error
         }
@@ -760,13 +703,13 @@ export class SessionOrchestrator {
       if (ctx.mode !== "tui") return;
       this.currentModelInfo = modelInfoOf(ctx);
       this.lastSessionCtx = ctx;
-      this.installedEditor?.setModelInfo(this.currentModelInfo);
+      this.installedEditor?.setChrome({ modelInfo: this.currentModelInfo });
     });
     pi.on("thinking_level_select", (_event, ctx) => {
       if (ctx.mode !== "tui") return;
       this.currentModelInfo = modelInfoOf(ctx);
       this.lastSessionCtx = ctx;
-      this.installedEditor?.setModelInfo(this.currentModelInfo);
+      this.installedEditor?.setChrome({ modelInfo: this.currentModelInfo });
     });
   }
 }

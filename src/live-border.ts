@@ -11,15 +11,14 @@
  * AgentRunLedger capping. One coalesced render per tick/event — not per-delta.
  *
  * Glyph/theme derivation (C3) lives in ChromeComposition — LiveBorder no longer calls
- * resolveGlyphs/resolveIconMode or casts the live theme; it queries composition once.
+ * resolveGlyphs/resolveIconMode or casts the live theme; it queries composition once per
+ * render (cached), and each island is a thin lookup.
  */
 
-import { createChromeSnapshot } from "./chrome-state.js";
+import { createChromeSnapshot, type ChromeSnapshot } from "./chrome-state.js";
 import { ChromeComposition } from "./chrome-composition.js";
 import type { RunActivityTracker } from "./run-activity.js";
-import type { UsageTotals } from "./state.js";
 import type { AgentRunLedger } from "./agent-run-ledger.js";
-import type { TurnTelemetry } from "./telemetry.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
 import type { TrackingEditor } from "./tracking-editor.js";
@@ -33,23 +32,19 @@ export interface LiveBorderDeps {
   getConfig: () => ThemeConfig;
   telemetryTracker: TurnTelemetryTracker;
   runActivityTracker: RunActivityTracker;
-  agentLedger?: AgentRunLedger;
+  agentLedger: AgentRunLedger;
 }
 
 export class LiveBorder {
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastRenderMs = 0;
   private pendingRender: ReturnType<typeof setTimeout> | null = null;
-  private agentBaseline: UsageTotals | null = null;
-  private get agentLedger(): AgentRunLedger | undefined {
-    return this.deps.agentLedger;
-  }
 
   constructor(private readonly deps: LiveBorderDeps) {}
 
-  /** Set baseline totals at agent_start for per-agent delta (input/output/cost). */
-  setAgentBaseline(baseline: UsageTotals | null): void {
-    this.agentBaseline = baseline ? { ...baseline } : null;
+  /** Legacy baseline setter — kept for call-site compat; ledger is the source of truth. */
+  setAgentBaseline(_baseline: unknown): void {
+    // no-op: baseline is owned by AgentRunLedger
   }
 
   /** Coalesced render: top (run-activity) + bottom (telemetry) + context bar → editor. */
@@ -74,9 +69,18 @@ export class LiveBorder {
   }
 
   private doRender(): void {
-    this.refreshTopBorder();
-    this.refreshLiveTelemetry();
-    this.refreshContextBar();
+    const editor = this.deps.getEditor();
+    const ctx = this.deps.getCtx();
+    if (!editor || !ctx) return;
+    const comp = this.composition();
+    if (!comp) return;
+    const snapshot = createChromeSnapshot(
+      ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      undefined,
+    );
+    this.refreshTopBorder(comp);
+    this.refreshLiveTelemetry(comp);
+    this.refreshContextBar(comp, snapshot);
   }
 
   /** Alias for render — kept for call-site readability (refreshAllLive migration). */
@@ -88,11 +92,7 @@ export class LiveBorder {
     if (this.timer !== null) return;
     this.timer = setInterval(() => {
       try {
-        if (this.deps.runActivityTracker.isRunning()) {
-          this.render();
-        } else {
-          this.refreshContextBar();
-        }
+        this.render();
       } catch {
         // SAFETY: best-effort, ignore recoverable error
       }
@@ -129,20 +129,18 @@ export class LiveBorder {
     return new ChromeComposition(cfg.icons.mode, ctx.ui.theme);
   }
 
-  private refreshTopBorder(): void {
+  private refreshTopBorder(comp: ChromeComposition): void {
     const editor = this.deps.getEditor();
     const cfg = this.deps.getConfig();
     if (!editor) return;
     try {
-      const comp = this.composition();
-      if (!comp) return;
       const snap = this.deps.runActivityTracker.getSnapshot();
       let text = comp.formatRunActivityTopRight(snap);
       // Relocate stall to the right of tool use with pipe separator — agent-run live (option B), not bottom telemetry
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
         // Deepened via AgentRunLedger — stall is agent-run live, single source
         const tel =
-          this.agentLedger?.getLiveTotals(
+          this.deps.agentLedger.getLiveTotals(
             this.deps.telemetryTracker.peekLive(),
           ) ?? this.deps.telemetryTracker.getLastTelemetry();
         if (tel && tel.stallMs > 0) {
@@ -155,20 +153,19 @@ export class LiveBorder {
           }
         }
       }
-      editor.setTopRightText(text);
+      editor.setChrome({ topRightText: text });
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
-  private refreshLiveTelemetry(): void {
+  private refreshLiveTelemetry(comp: ChromeComposition): void {
     const editor = this.deps.getEditor();
     const cfg = this.deps.getConfig();
     if (!editor) return;
     if (!cfg.telemetry.enabled) {
       try {
-        editor.setTelemetryText("");
-        editor.setBottomLeftText("");
+        editor.setChrome({ telemetryText: "", bottomLeftText: "" });
       } catch {
         // SAFETY: best-effort UI, ignore recoverable error
       }
@@ -180,32 +177,23 @@ export class LiveBorder {
         this.deps.telemetryTracker.peekLive() ??
         this.deps.telemetryTracker.getLastTelemetry();
       if (!live) return;
-      const comp = this.composition();
-      if (!comp) return;
       // Stall relocated to top right of tool use with pipe — suppress in bottom telemetry
       const bottomCfg = { ...cfg.telemetry, stalls: false };
       const right = comp.formatTurnTelemetry(live, bottomCfg);
       if (live.totalMs > 0) {
-        editor.setTelemetryText(right);
-        editor.setBottomLeftText("");
+        editor.setChrome({ telemetryText: right });
+        editor.setChrome({ bottomLeftText: "" });
       }
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
-  private refreshContextBar(): void {
+  private refreshContextBar(comp: ChromeComposition, snapshot: ChromeSnapshot): void {
     const editor = this.deps.getEditor();
-    const ctx = this.deps.getCtx();
     const cfg = this.deps.getConfig();
-    if (!editor || !ctx) return;
+    if (!editor) return;
     try {
-      const comp = this.composition();
-      if (!comp) return;
-      const snapshot = createChromeSnapshot(
-        ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        undefined,
-      );
       let contextText = "";
       if (
         cfg.footerSegments.context &&
@@ -223,98 +211,34 @@ export class LiveBorder {
       if (cfg.telemetry.enabled && cfg.telemetry.tokens) {
         const isRunning = this.deps.runActivityTracker.isRunning();
         const contextTokens = snapshot.contextUsage?.tokens;
-        // Deepened via AgentRunLedger — single source for capped per-agent display.
-        if (this.agentLedger) {
-          if (!isRunning) {
-            const telIdle =
-              this.agentLedger?.getLiveTotals(
-                this.deps.telemetryTracker.peekLive(),
-              ) ?? this.deps.telemetryTracker.getLastTelemetry();
-            const display = this.agentLedger.getIdleDisplayTotals(
-              snapshot.totals,
-              contextTokens,
-              telIdle,
-            );
-            tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
-          } else {
-            const liveTurn = this.deps.telemetryTracker.peekLive();
-            const agentLive =
-              this.agentLedger?.getLiveTotals(liveTurn) ??
-              this.deps.telemetryTracker.getLastTelemetry();
-            const display = this.agentLedger.getLiveDisplayTotals(
-              liveTurn,
-              agentLive,
-              contextTokens,
-            );
-            if (display) {
-              tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
-            }
-          }
-        } else if (!isRunning && this.agentBaseline) {
-          // Fallback when ledger not wired (backward compat)
-          const cur = snapshot.totals;
-          const base = this.agentBaseline;
-          const telIdle = this.deps.telemetryTracker.getLastTelemetry();
-          let displayInput: number;
-          let displayOutput: number;
-          let displayCost: number;
-          if (telIdle) {
-            displayInput = telIdle.inputTokens;
-            displayOutput = telIdle.outputTokens;
-            displayCost = telIdle.costUsd;
-          } else {
-            displayInput = Math.max(0, cur.input - base.input);
-            displayOutput = Math.max(0, cur.output - base.output);
-            displayCost = Math.max(0, cur.cost - base.cost);
-          }
-          if (snapshot.contextUsage?.tokens)
-            displayInput = Math.min(displayInput, snapshot.contextUsage.tokens);
-          if (cur.input > 0) displayInput = Math.min(displayInput, cur.input);
-          const deltaTel: TurnTelemetry = {
-            tps: null,
-            ttftMs: 0,
-            totalMs: 0,
-            inputTokens: displayInput,
-            outputTokens: displayOutput,
-            stallMs: 0,
-            stallCount: 0,
-            rateUsdPerMTokens: null,
-            generationMs: 0,
-            totalTokens: displayInput + displayOutput,
-            costUsd: displayCost,
-            measurementMs: null,
-          };
-          tokensText = comp.formatTelemetryTokens(deltaTel, cfg.telemetry);
-        } else if (isRunning) {
+        if (!isRunning) {
+          const telIdle =
+            this.deps.agentLedger.getLiveTotals(
+              this.deps.telemetryTracker.peekLive(),
+            ) ?? this.deps.telemetryTracker.getLastTelemetry();
+          const display = this.deps.agentLedger.getIdleDisplayTotals(
+            snapshot.totals,
+            contextTokens,
+            telIdle,
+          );
+          tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
+        } else {
           const liveTurn = this.deps.telemetryTracker.peekLive();
-          const agentLive = this.deps.telemetryTracker.getLastTelemetry();
-          let displayLive = agentLive;
-          if (
-            agentLive &&
-            liveTurn &&
-            this.deps.runActivityTracker.isRunning()
-          ) {
-            displayLive = {
-              ...agentLive,
-              inputTokens: liveTurn.inputTokens,
-              totalTokens: liveTurn.inputTokens + agentLive.outputTokens,
-            };
-          }
-          if (displayLive) {
-            let cappedInput = displayLive.inputTokens;
-            if (snapshot.contextUsage?.tokens)
-              cappedInput = Math.min(cappedInput, snapshot.contextUsage.tokens);
-            displayLive = {
-              ...displayLive,
-              inputTokens: cappedInput,
-              totalTokens: cappedInput + displayLive.outputTokens,
-            };
-            tokensText = comp.formatTelemetryTokens(displayLive, cfg.telemetry);
+          const agentLive =
+            this.deps.agentLedger.getLiveTotals(liveTurn) ??
+            this.deps.telemetryTracker.getLastTelemetry();
+          const display = this.deps.agentLedger.getLiveDisplayTotals(
+            liveTurn,
+            agentLive,
+            contextTokens,
+          );
+          if (display) {
+            tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
           }
         }
       }
-      editor.setTopContextText(contextText);
-      editor.setTopTokensText(tokensText);
+      editor.setChrome({ topContextText: contextText });
+      editor.setChrome({ topTokensText: tokensText });
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
