@@ -125,66 +125,86 @@ function deepMerge<T>(base: T, override: unknown): T {
   return result as T;
 }
 
-function isBoolean(v: unknown): v is boolean {
-  return typeof v === "boolean";
+// ---------------------------------------------------------------------------
+// Table-driven schema — single source for defaults + validation
+// Adding a flag = one row here. deepMerge handles missing keys, validate()
+// enforces types. No `as unknown as` scattered per field.
+// ---------------------------------------------------------------------------
+
+type Descriptor =
+  | { path: string; kind: "boolean" }
+  | { path: string; kind: "enum"; values: readonly string[] };
+
+/** Single schema table — adding a config leaf is one row. */
+export const CONFIG_SCHEMA: readonly Descriptor[] = [
+  { path: "enabled", kind: "boolean" },
+  { path: "workspaceDisplay", kind: "enum", values: ["path", "name"] },
+  { path: "cursorStyle", kind: "enum", values: ["block", "bar", "underline"] },
+  { path: "icons.mode", kind: "enum", values: ["auto", "nerd", "ascii"] },
+  { path: "contextIconBar", kind: "boolean" },
+  { path: "footerSegments.cwd", kind: "boolean" },
+  { path: "footerSegments.sessionName", kind: "boolean" },
+  { path: "footerSegments.gitBranch", kind: "boolean" },
+  { path: "footerSegments.gitStatus", kind: "boolean" },
+  { path: "footerSegments.gitCommit", kind: "boolean" },
+  { path: "footerSegments.runtime", kind: "boolean" },
+  { path: "footerSegments.context", kind: "boolean" },
+  { path: "footerSegments.tokens", kind: "boolean" },
+  { path: "footerSegments.cost", kind: "boolean" },
+  { path: "footerSegments.extensionStatuses", kind: "boolean" },
+  { path: "telemetry.enabled", kind: "boolean" },
+  { path: "telemetry.tps", kind: "boolean" },
+  { path: "telemetry.ttft", kind: "boolean" },
+  { path: "telemetry.duration", kind: "boolean" },
+  { path: "telemetry.tokens", kind: "boolean" },
+  { path: "telemetry.stalls", kind: "boolean" },
+  { path: "telemetry.cost", kind: "boolean" },
+  { path: "timeline.enabled", kind: "boolean" },
+  { path: "timeline.wallTime", kind: "boolean" },
+  { path: "timeline.tokens", kind: "boolean" },
+  { path: "timeline.cost", kind: "boolean" },
+] as const;
+
+function getByPath(obj: unknown, path: string): unknown {
+  const parts = path.split(".");
+  let cur: unknown = obj;
+  for (const p of parts) {
+    if (cur === null || typeof cur !== "object") return undefined;
+    // single controlled cast — validation table owns all path access
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
+}
+
+function setByPath(obj: unknown, path: string, value: unknown): void {
+  const parts = path.split(".");
+  let cur = obj as Record<string, unknown>;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i]!;
+    const next = cur[p];
+    if (typeof next !== "object" || next === null || Array.isArray(next)) {
+      cur[p] = {};
+    }
+    cur = cur[p] as Record<string, unknown>;
+  }
+  cur[parts[parts.length - 1]!] = value;
+}
+
+function getDefaultByPath(path: string): unknown {
+  return getByPath(DEFAULT_CONFIG, path);
 }
 
 function validate(config: ThemeConfig): ThemeConfig {
-  if (
-    config.workspaceDisplay !== "path" &&
-    config.workspaceDisplay !== "name"
-  ) {
-    config.workspaceDisplay = DEFAULT_CONFIG.workspaceDisplay;
-  }
-  if (
-    config.cursorStyle !== "block" &&
-    config.cursorStyle !== "bar" &&
-    config.cursorStyle !== "underline"
-  ) {
-    config.cursorStyle = DEFAULT_CONFIG.cursorStyle;
-  }
-  if (
-    config.icons.mode !== "auto" &&
-    config.icons.mode !== "nerd" &&
-    config.icons.mode !== "ascii"
-  ) {
-    config.icons.mode = DEFAULT_CONFIG.icons.mode;
-  }
-  if (!isBoolean(config.enabled)) {
-    config.enabled = DEFAULT_CONFIG.enabled;
-  }
-  // SAFETY: intentional unsafe cast — validated at runtime
-  if (!isBoolean((config as unknown as Record<string, unknown>).contextIconBar)) {
-    // SAFETY: intentional unsafe cast — validated at runtime
-    (config as unknown as Record<string, unknown>).contextIconBar = DEFAULT_CONFIG.contextIconBar;
-  }
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const fs = config.footerSegments as unknown as Record<string, unknown>;
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const dfs = DEFAULT_CONFIG.footerSegments as unknown as Record<
-    string,
-    boolean
-  >;
-  for (const k of Object.keys(dfs)) {
-    if (!isBoolean(fs[k])) fs[k] = dfs[k];
-  }
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const t = config.telemetry as unknown as Record<string, unknown>;
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const dt = DEFAULT_CONFIG.telemetry as unknown as Record<string, boolean>;
-  for (const k of Object.keys(dt)) {
-    if (!isBoolean(t[k])) t[k] = dt[k];
-  }
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const tl = (config as unknown as Record<string, unknown>).timeline as unknown as Record<string, unknown> | undefined;
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const dtl = DEFAULT_CONFIG.timeline as unknown as Record<string, boolean>;
-  if (!tl || typeof tl !== "object") {
-    // SAFETY: intentional unsafe cast — validated at runtime
-    (config as unknown as Record<string, unknown>).timeline = structuredClone(DEFAULT_CONFIG.timeline);
-  } else {
-    for (const k of Object.keys(dtl)) {
-      if (!isBoolean(tl[k])) tl[k] = dtl[k];
+  for (const desc of CONFIG_SCHEMA) {
+    const cur = getByPath(config, desc.path);
+    if (desc.kind === "boolean") {
+      if (typeof cur !== "boolean") {
+        setByPath(config, desc.path, getDefaultByPath(desc.path));
+      }
+    } else if (desc.kind === "enum") {
+      if (!desc.values.includes(cur as string)) {
+        setByPath(config, desc.path, getDefaultByPath(desc.path));
+      }
     }
   }
   return config;

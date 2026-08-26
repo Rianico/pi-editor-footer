@@ -139,13 +139,10 @@ function toggleTimeline<K extends keyof ThemeConfig["timeline"]>(
   config: ThemeConfig,
   key: K,
 ): ThemeConfig {
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const tl = (config as unknown as Record<string, unknown>).timeline as unknown as Record<string, boolean>;
   return {
     ...config,
-    // SAFETY: intentional unsafe cast — validated at runtime
-    timeline: { ...(tl as unknown as ThemeConfig["timeline"]), [key]: !tl[key as string] },
-  } as ThemeConfig;
+    timeline: { ...config.timeline, [key]: !config.timeline[key] },
+  };
 }
 
 function toggleTelemetry<K extends keyof ThemeConfig["telemetry"]>(
@@ -231,8 +228,7 @@ function buildFooterItems(config: ThemeConfig): SettingItem[] {
     {
       id: "contextIconBar",
       label: COPY.labels.contextIconBar,
-      // SAFETY: intentional unsafe cast — validated at runtime
-      currentValue: flag((config as unknown as Record<string, unknown>).contextIconBar as boolean),
+      currentValue: flag(config.contextIconBar),
     },
     {
       id: "tokens",
@@ -248,8 +244,7 @@ function buildFooterItems(config: ThemeConfig): SettingItem[] {
   ];
 }
 function buildTimelineItems(config: ThemeConfig): SettingItem[] {
-  // SAFETY: intentional unsafe cast — validated at runtime
-  const tl = (config as unknown as Record<string, unknown>).timeline as unknown as { enabled: boolean; wallTime: boolean; tokens: boolean; cost: boolean } | undefined ?? { enabled: true, wallTime: true, tokens: true, cost: true };
+  const tl = config.timeline;
   const flag = (v: boolean) => (v ? COPY.values.on : COPY.values.off);
   return [
     { id: "enabled", label: COPY.labels.timelineEnabled, currentValue: flag(tl.enabled) },
