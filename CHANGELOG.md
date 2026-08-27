@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-27
+
+### Added
+
+- Incremental per-agent_run live input accounting — `trigger+Σ(outputs+tools)+liveDelta` per run (`~` during live, authoritative `deltaFromBaseline` after), `AgentRunLedger` owns `triggerTokens/accumOutput/accumTool` reset in `startRun`, `getIncrementalLiveDisplayTotals`/`getIdleAuthoritativeDisplay` (grill Q6→a Q7→b Q8→a Q9→a Q11→a)
+
+### Changed
+
+- `turn_start` input now synthetic `trigger+Σ` (independent per run) instead of `getContextUsage` window; `tool_result`/`tool_execution_end` fold `chars/4` into accumulation; `LiveBorder` top `↑` hybrid (`~` live, no `~` idle), context bar stays real window (Q10); co-coded with `typescript-expert` (`unknown` boundaries, `SAFETY` on pi seams)
+
 ## [0.8.0] - 2026-08-26
 
 ### Added
