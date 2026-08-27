@@ -15,6 +15,13 @@
  * / cap helpers) hides baseline delta, max-vs-sum, predictive vs authoritative capping,
  * and tps derivation. Two adapters (LiveBorder token bar, index timeline) justify the seam.
  * Internal seams (aggregateTurns, capIdle, capLive) stay private.
+ *
+ * Incremental live input (per-agent_run):
+ *   liveInput = triggerTokens + Σ(completed turn outputs) + Σ(toolResult tokens) + liveDelta
+ *   Each agent_run resets independently. triggerTokens = ceil(triggerChars/4) or 0 if
+ *   no user message (Q11 a). Tool results are ceil(chars/4) per tool_result (Q8 a).
+ *   Live input is predictive (estimated=true, "~" prefix) and capped only to contextWindow.
+ *   Settled/idle input snaps to authoritative deltaFromBaseline (hybrid Q7 b, Q6 a).
  */
 
 import type { UsageTotals } from "./state.js";
@@ -23,6 +30,17 @@ import type { TurnTelemetry } from "./telemetry.js";
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
+}
+
+/** Estimate tokens from char length — ~4 chars/token, same as TurnTelemetryTracker live estimate. */
+export function estimateTokensFromChars(chars: number): number {
+  if (!Number.isFinite(chars) || chars <= 0) return 0;
+  return Math.ceil(chars / 4);
+}
+
+export function estimateTokensFromText(text: string): number {
+  if (typeof text !== "string" || text.length === 0) return 0;
+  return estimateTokensFromChars(text.length);
 }
 
 /**
@@ -71,7 +89,7 @@ export function aggregateAgentTurns(
     if (ttftMs === 0) ttftMs = live.ttftMs;
   }
   totalTokens = inputTokens + outputTokens;
-  const totalMs = startMs !== null ? Math.max(0, now - startMs) : 0;
+  const totalMs = startMs === null ? 0 : Math.max(0, now - startMs);
   const measurementMs =
     outputTokens > 0 && generationMs > 0 ? generationMs : null;
   const tps =
@@ -158,6 +176,10 @@ export class AgentRunLedger {
   private turns: TurnTelemetry[] = [];
   private startMs: number | null = null;
   private readonly now: () => number;
+  // Incremental per-agent_run accumulation (Q1/Q6/Q9)
+  private triggerTokens = 0;
+  private accumOutputTokens = 0;
+  private accumToolTokens = 0;
 
   constructor(now: () => number = () => Date.now()) {
     this.now = now;
@@ -175,11 +197,67 @@ export class AgentRunLedger {
   startRun(startMs?: number): void {
     this.startMs = typeof startMs === "number" ? startMs : this.now();
     this.turns = [];
+    this.triggerTokens = 0;
+    this.accumOutputTokens = 0;
+    this.accumToolTokens = 0;
+  }
+
+  /** Set trigger message tokens for this agent_run (chars/4, or 0 per Q11 a). */
+  setTriggerTokens(tokens: number): void {
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0)
+      return;
+    this.triggerTokens = Math.round(tokens);
+  }
+
+  getTriggerTokens(): number {
+    return this.triggerTokens;
+  }
+
+  /** Add tool result tokens (chars/4) to accumulation (Q8 a). */
+  addToolResultTokens(tokens: number): void {
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0)
+      return;
+    this.accumToolTokens += Math.round(tokens);
+  }
+
+  getAccumOutputTokens(): number {
+    return this.accumOutputTokens;
+  }
+
+  getAccumToolTokens(): number {
+    return this.accumToolTokens;
+  }
+
+  /** Synthetic completed input without live delta: trigger + Σ(outputs) + Σ(tools). */
+  getSyntheticCompletedInput(): number {
+    return this.triggerTokens + this.accumOutputTokens + this.accumToolTokens;
+  }
+
+  /** Synthetic live input including live delta: trigger + Σ(outputs+tools) + liveDelta. */
+  getSyntheticLiveInput(liveDeltaTokens: number): number {
+    const d =
+      typeof liveDeltaTokens === "number" && Number.isFinite(liveDeltaTokens)
+        ? liveDeltaTokens
+        : 0;
+    return (
+      this.triggerTokens +
+      this.accumOutputTokens +
+      this.accumToolTokens +
+      Math.max(0, Math.round(d))
+    );
   }
 
   /** Record a completed turn's telemetry (called by telemetryTracker or directly). */
   recordTurn(turn: TurnTelemetry): void {
     this.turns.push({ ...turn });
+    // Accumulate authoritative output for synthetic input (trigger + Σ outputs)
+    if (
+      typeof turn.outputTokens === "number" &&
+      Number.isFinite(turn.outputTokens) &&
+      turn.outputTokens > 0
+    ) {
+      this.accumOutputTokens += Math.round(turn.outputTokens);
+    }
   }
 
   /** Settled totals without live turn — used at agent_settled for timeline. */
@@ -294,8 +372,52 @@ export class AgentRunLedger {
   }
 
   /**
+   * Idle authoritative display (hybrid Q7 b): snapshot delta capped, for use when
+   * not running to show billed total without ~ after agent_end.
+   */
+  getIdleAuthoritativeDisplay(
+    snapshotTotals: UsageTotals,
+    contextTokens: number | undefined,
+  ): TurnTelemetry {
+    let displayInput: number;
+    let displayOutput: number;
+    let displayCost: number;
+    if (this.baseline) {
+      const d = deltaFromBaseline(snapshotTotals, this.baseline);
+      displayInput = d.input;
+      displayOutput = d.output;
+      displayCost = d.cost;
+    } else {
+      displayInput = snapshotTotals.input;
+      displayOutput = snapshotTotals.output;
+      displayCost = snapshotTotals.cost;
+    }
+    const cappedInput = capInputForIdle(
+      displayInput,
+      contextTokens,
+      snapshotTotals.input,
+    );
+    return {
+      tps: null,
+      ttftMs: 0,
+      totalMs: 0,
+      inputTokens: cappedInput,
+      outputTokens: displayOutput,
+      stallMs: 0,
+      stallCount: 0,
+      rateUsdPerMTokens: null,
+      generationMs: 0,
+      totalTokens: cappedInput + displayOutput,
+      costUsd: displayCost,
+      measurementMs: null,
+      estimated: false,
+    };
+  }
+
+  /**
    * Live display totals when running: liveTurn input (current window) replaces
    * agentLive input, output/cost remain per-agent sum, capped to live context only.
+   * @deprecated — retained for backward compat; prefer getIncrementalLiveDisplayTotals for Q1/Q9.
    */
   getLiveDisplayTotals(
     liveTurn: TurnTelemetry | null,
@@ -324,10 +446,64 @@ export class AgentRunLedger {
     };
   }
 
+  /**
+   * Incremental live display (Q1/Q6/Q9): trigger + Σ(outputs+tools) + liveDelta, capped to live.
+   * Replaces max(input) with synthetic accumulation, per-agent_run independent.
+   */
+  getIncrementalLiveDisplayTotals(
+    liveTurn: TurnTelemetry | null,
+    agentLive: TurnTelemetry | null,
+    contextTokens: number | undefined,
+  ): TurnTelemetry | null {
+    if (!agentLive && !liveTurn) return null;
+    const liveDelta = liveTurn?.outputTokens ?? 0;
+    const syntheticInput = this.getSyntheticLiveInput(liveDelta);
+    const cappedInput = capInputForLive(syntheticInput, contextTokens);
+    // Output/cost/stalls come from agentLive (sum) when available, else liveTurn
+    const base: TurnTelemetry | null = agentLive ?? liveTurn;
+    if (!base) return null;
+    // When both exist, agentLive already sums outputs, so use it; else liveTurn
+    const displayOutput = agentLive
+      ? agentLive.outputTokens
+      : liveTurn!.outputTokens;
+    const displayCost = agentLive ? agentLive.costUsd : liveTurn!.costUsd;
+    const displayStallMs = agentLive ? agentLive.stallMs : liveTurn!.stallMs;
+    const displayStallCount = agentLive
+      ? agentLive.stallCount
+      : liveTurn!.stallCount;
+    const displayGenerationMs = agentLive
+      ? agentLive.generationMs
+      : liveTurn!.generationMs;
+    const displayTtft = agentLive ? agentLive.ttftMs : liveTurn!.ttftMs;
+    const displayTps = agentLive ? agentLive.tps : liveTurn!.tps;
+    const displayTotalMs = agentLive ? agentLive.totalMs : liveTurn!.totalMs;
+    const displayMeasurementMs = agentLive
+      ? agentLive.measurementMs
+      : liveTurn!.measurementMs;
+    return {
+      tps: displayTps,
+      ttftMs: displayTtft,
+      totalMs: displayTotalMs,
+      inputTokens: cappedInput,
+      outputTokens: displayOutput,
+      stallMs: displayStallMs,
+      stallCount: displayStallCount,
+      rateUsdPerMTokens: base.rateUsdPerMTokens,
+      generationMs: displayGenerationMs,
+      totalTokens: cappedInput + displayOutput,
+      costUsd: displayCost,
+      measurementMs: displayMeasurementMs,
+      estimated: true,
+    };
+  }
+
   reset(): void {
     this.baseline = null;
     this.turns = [];
     this.startMs = null;
+    this.triggerTokens = 0;
+    this.accumOutputTokens = 0;
+    this.accumToolTokens = 0;
   }
 
   isActive(): boolean {

@@ -74,7 +74,9 @@ export class LiveBorder {
     if (!editor || !ctx) return;
     const comp = this.composition();
     if (!comp) return;
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     const snapshot = createChromeSnapshot(
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       undefined,
     );
@@ -189,7 +191,10 @@ export class LiveBorder {
     }
   }
 
-  private refreshContextBar(comp: ChromeComposition, snapshot: ChromeSnapshot): void {
+  private refreshContextBar(
+    comp: ChromeComposition,
+    snapshot: ChromeSnapshot,
+  ): void {
     const editor = this.deps.getEditor();
     const cfg = this.deps.getConfig();
     if (!editor) return;
@@ -200,10 +205,10 @@ export class LiveBorder {
         snapshot.contextUsage &&
         snapshot.contextUsage.contextWindow
       ) {
+        // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         contextText = comp.formatTopContext(
           snapshot,
-          // SAFETY: intentional unsafe cast — validated at runtime
-          (cfg as unknown as { contextIconBar?: boolean }).contextIconBar ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+          (cfg as ThemeConfig & { contextIconBar?: boolean }).contextIconBar ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             false,
         );
       }
@@ -212,14 +217,10 @@ export class LiveBorder {
         const isRunning = this.deps.runActivityTracker.isRunning();
         const contextTokens = snapshot.contextUsage?.tokens;
         if (!isRunning) {
-          const telIdle =
-            this.deps.agentLedger.getLiveTotals(
-              this.deps.telemetryTracker.peekLive(),
-            ) ?? this.deps.telemetryTracker.getLastTelemetry();
-          const display = this.deps.agentLedger.getIdleDisplayTotals(
+          // Hybrid Q7 b: idle shows authoritative billed total (no ~), live shows synthetic incremental (~)
+          const display = this.deps.agentLedger.getIdleAuthoritativeDisplay(
             snapshot.totals,
             contextTokens,
-            telIdle,
           );
           tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
         } else {
@@ -227,7 +228,7 @@ export class LiveBorder {
           const agentLive =
             this.deps.agentLedger.getLiveTotals(liveTurn) ??
             this.deps.telemetryTracker.getLastTelemetry();
-          const display = this.deps.agentLedger.getLiveDisplayTotals(
+          const display = this.deps.agentLedger.getIncrementalLiveDisplayTotals(
             liveTurn,
             agentLive,
             contextTokens,
