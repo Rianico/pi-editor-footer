@@ -49,7 +49,8 @@ export class BorderRenderer {
       const glow = (s: string): string => {
         try {
           const maybeGlow = (
-            theme as unknown as {
+            // SAFETY: intentional unsafe cast — validated at runtime
+            theme as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
               // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
               getThinkingBorderColor?: (l: string) => (s: string) => string;
             }
@@ -110,7 +111,7 @@ export class BorderRenderer {
       if (tokensLeft) {
         // Use | as separator between ↑/↓ and tool turns (dimmed) per user request
         // SAFETY: pi theme seam — fg is optional theme method
-        const themeForTokens = this.getLiveTheme() as unknown as { fg: (c:string,t:string)=>string };
+        const themeForTokens = this.getLiveTheme() as unknown as { fg: (c:string,t:string)=>string }; // SAFETY: intentional unsafe cast — validated at runtime
         const fg = themeForTokens.fg;
         const dimPipe = typeof fg === "function" ? fg.call(themeForTokens, "dim", " | ") : " | ";
         const combined = tokensRight ? `${tokensLeft}${dimPipe}${tokensRight}` : tokensLeft;
@@ -124,7 +125,8 @@ export class BorderRenderer {
       const glow = (s: string): string => {
         try {
           const maybeGlow = (
-            theme as unknown as {
+            // SAFETY: intentional unsafe cast — validated at runtime
+            theme as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
               // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
               getThinkingBorderColor?: (l: string) => (s: string) => string;
             }

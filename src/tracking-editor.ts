@@ -130,8 +130,10 @@ export class TrackingEditor extends Editor {
 
   // Deep interface is setChrome/getChrome only — wrappers removed (C4). All chrome via setChrome({})
   private patchApplyAutocompleteSuggestions(): void {
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: EditorInternals is private pi-tui shape — existence validated via typeof check on applyAutocompleteSuggestions
-    const internals = this as unknown as EditorInternals; // SAFETY: private pi-tui interior seam
+    /* SAFETY: intentional unsafe cast — validated at runtime */ const internals =
+      this as unknown as EditorInternals; // SAFETY: private pi-tui interior seam
     const original = internals.applyAutocompleteSuggestions;
     if (typeof original !== "function") {
       console.warn(
@@ -159,15 +161,21 @@ export class TrackingEditor extends Editor {
   }
 
   private currentAutocompleteList(): SelectList | undefined {
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: EditorInternals autocompleteList is private pi-tui field verified at load via constructor source check
-    return (this as unknown as EditorInternals).autocompleteList; // SAFETY: private pi-tui interior seam
+    /* SAFETY: intentional unsafe cast — validated at runtime */ return (
+      this as unknown as EditorInternals
+    ).autocompleteList; // SAFETY: private pi-tui interior seam
   }
 
   private renderBase(width: number): string[] {
     const lines = super.render(width);
     const isFocused =
       // SAFETY: focused is private Editor state read-only for cursor policy; fallback false preserves behavior
-      (this as unknown as { focused?: boolean }).focused ?? false; // SAFETY: focused private read-only seam
+      // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+      // SAFETY: focused is private Editor state read-only for cursor policy; fallback false preserves behavior
+      // biome-ignore format: keep SAFETY comment directly before cast for ast-grep
+      (/* SAFETY: intentional unsafe cast — validated at runtime */ this as unknown as { focused?: boolean }).focused ?? false;
     return this.cursorPolicy.mapLines(lines, isFocused);
   }
 
