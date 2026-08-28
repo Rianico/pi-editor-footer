@@ -12,6 +12,10 @@ The five canonical triage roles use their default label names (`needs-triage`, `
 
 Single-context — one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Contribution
+
+Conventional commits & changelog: see CONTRIBUTING.md
+
 ## Pi editor replacement — sync contract
 
 This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tracking-editor.ts`) is the actual editor in the input box. It replicates pi's `CustomEditor` inline and observes the completion popup through two private pi-tui internals (`autocompleteList`, `applyAutocompleteSuggestions`).
