@@ -1,28 +1,55 @@
-name: Release
+name: Verify and Release
 on:
-  push:
-    tags: ["v*"]
+  repository_dispatch:
+    types: [semantic-release]
+  workflow_dispatch:
+
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
+  contents: read # for checkout
+
 jobs:
-  release:
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0, persist-credentials: true }
-      - run: git fetch --prune --tags --force
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
-        with: { node-version: 22 } # zizmor: ignore[cache-poisoning]
-      - run: npm ci
-      - run: npm run build
-      - run: npm publish --provenance --access public
-        continue-on-error: true
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify integrity
+        run: npm audit signatures
+      - name: Run lint, tests, and other verification
+        run: npm test
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC for trusted publishing and npm provenance
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4  # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify the integrity of provenance attestations and registry signatures
+        run: npm audit signatures
+      - name: Release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
-      - run: gh release create ${{ github.ref_name }} --generate-notes --verify-tag || gh release view ${{ github.ref_name }} >/dev/null 2>&1 || echo "release exists or failed"
-        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
-# Alternative continuous: on: push: branches: [main] — document as comment, not default.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
