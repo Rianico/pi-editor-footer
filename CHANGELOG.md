@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-28
+
+### Added
+
+- Detail header shows slash command path dimmed at right of type — workspace-relative/~/ tildified, middle-truncated with ellipsis, hidden when <10 cols remain, auto-resolved for skill items across project and home candidates with fallback to global symlink path
+
+### Fixed
+
+- Resolve pre-existing blocking diagnostics (`require-safety-comment`, `no-unknown-returns`, `zizmor cache-poisoning`) to keep lens clean
+
 ## [0.9.0] - 2026-08-27
 
 ### Added
