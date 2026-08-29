@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-29
+
+### Changed
+
+- Release workflow trigger clarified — tag `v*` remains the release trigger (semantic-release on tag push), reverted tentative `main` trigger
+
 ## [0.10.0] - 2026-08-28
 
 ### Added
