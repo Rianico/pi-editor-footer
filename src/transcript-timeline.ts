@@ -136,9 +136,12 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
     try {
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: require is private Node cache seam — read-only scan for chatContainer
-      /* SAFETY: intentional unsafe cast — validated at runtime */ const req = (/* SAFETY: intentional unsafe cast — validated at runtime */ globalThis as unknown as { require?: unknown }).require as // SAFETY: private seam
-        | { cache?: Record<string, { exports?: unknown }> }
-        | undefined;
+      /* SAFETY: intentional unsafe cast — validated at runtime */ const req =
+        /* SAFETY: intentional unsafe cast — validated at runtime */ (
+          globalThis as unknown as { require?: unknown }
+        ).require as // SAFETY: private seam
+          | { cache?: Record<string, { exports?: unknown }> }
+          | undefined;
       if (req?.cache)
         queue.push(
           ...(Object.values(req.cache)
@@ -220,7 +223,9 @@ export class TranscriptTimeline {
     const theme =
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: intentional unsafe cast — validated at runtime
-      /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx as unknown as { theme?: unknown }).theme ?? // SAFETY: private pi-tui seam read-only, validated at runtime
+      /* SAFETY: intentional unsafe cast — validated at runtime */ (
+        ctx as unknown as { theme?: unknown }
+      ).theme ?? // SAFETY: private pi-tui seam read-only, validated at runtime
       (this.getLastSessionCtx?.() as { ui?: { theme?: unknown } })?.ui?.theme;
     const dimLines = rawLine
       .split("\n")
@@ -291,7 +296,8 @@ export class TranscriptTimeline {
               try {
                 // ast-grep-ignore: require-safety-comment-for-as-unknown-as
                 // SAFETY: intentional unsafe cast — validated at runtime
-                /* SAFETY: intentional unsafe cast — validated at runtime */ const v = (obj as unknown as Record<symbol, unknown>)[s]; // SAFETY: intentional unsafe cast — validated at runtime
+                /* SAFETY: intentional unsafe cast — validated at runtime */ const v =
+                  (obj as unknown as Record<symbol, unknown>)[s]; // SAFETY: intentional unsafe cast — validated at runtime
                 if (
                   v &&
                   typeof v === "object" &&
@@ -316,7 +322,9 @@ export class TranscriptTimeline {
         // SAFETY: __piTimelineIM is our own global fallback seam set in captureInteractiveMode
         // ast-grep-ignore: require-safety-comment-for-as-unknown-as
         // SAFETY: intentional unsafe cast — validated at runtime
-        (/* SAFETY: intentional unsafe cast — validated at runtime */ globalThis as unknown as { __piTimelineIM?: () => unknown }) // SAFETY: private seam
+        /* SAFETY: intentional unsafe cast — validated at runtime */ (
+          globalThis as unknown as { __piTimelineIM?: () => unknown }
+        ) // SAFETY: private seam
           .__piTimelineIM?.() ??
         findChatContainerViaGlobalScan();
       const imAny = im as {
@@ -381,10 +389,12 @@ export class TranscriptTimeline {
             render() {
               const th =
                 // SAFETY: ctx theme is live pi TUI theme read at render time
-                (
-                  // ast-grep-ignore: require-safety-comment-for-as-unknown-as
-                  // SAFETY: intentional unsafe cast — validated at runtime
-                  /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
+
+                // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+                // SAFETY: intentional unsafe cast — validated at runtime
+                /* SAFETY: intentional unsafe cast — validated at runtime */ (
+                  ctx as unknown as {
+                    // SAFETY: intentional unsafe cast — validated at runtime
                     // SAFETY: private seam
                     theme?: { fg(s: string, t: string): string };
                   }
@@ -395,9 +405,10 @@ export class TranscriptTimeline {
                   .map((s) => (th ? th.fg("dim", " " + s) : " " + s)),
               );
             },
-          // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+            // ast-grep-ignore: require-safety-comment-for-as-unknown-as
             // SAFETY: Component shape matches pi-tui validate at runtime via chatContainer.addChild
-          /* SAFETY: intentional unsafe cast — validated at runtime */ } as unknown as import("@earendil-works/pi-tui").Component; // SAFETY: private seam
+            /* SAFETY: intentional unsafe cast — validated at runtime */
+          } as unknown as import("@earendil-works/pi-tui").Component; // SAFETY: private seam
         },
         { placement: "aboveEditor" } as never,
       );
@@ -478,7 +489,9 @@ export class TranscriptTimeline {
           imAny.prototype.addMessageToChat = function (...args: unknown[]) {
             // ast-grep-ignore: require-safety-comment-for-as-unknown-as
             // SAFETY: this is InteractiveMode instance — capture for timeline injection
-            /* SAFETY: intentional unsafe cast — validated at runtime */ (this as unknown as { __captured?: unknown }).__captured = this; // SAFETY: private seam
+            /* SAFETY: intentional unsafe cast — validated at runtime */ (
+              this as unknown as { __captured?: unknown }
+            ).__captured = this; // SAFETY: private seam
             // store on outer instance via closure
             return origAdd.apply(this, args);
           };
@@ -552,11 +565,12 @@ export class TranscriptTimeline {
       // Try sync require first for immediate capture (avoids async race where first agent_settled falls back)
       try {
         // SAFETY: require is private Node CJS seam — synchronous scan is best-effort, validated at runtime
-        const req = (
+        const req =
           // ast-grep-ignore: require-safety-comment-for-as-unknown-as
           // SAFETY: intentional unsafe cast — validated at runtime
-          /* SAFETY: intentional unsafe cast — validated at runtime */ globalThis as unknown as { require?: (id: string) => unknown } // SAFETY: intentional unsafe cast — validated at runtime
-        ).require;
+          /* SAFETY: intentional unsafe cast — validated at runtime */ (
+            globalThis as unknown as { require?: (id: string) => unknown }
+          ).require; // SAFETY: intentional unsafe cast — validated at runtime
         if (typeof req === "function") {
           for (const p of candidates) {
             try {
@@ -587,11 +601,12 @@ export class TranscriptTimeline {
         )
         .catch(() => {});
       // SAFETY: global fallback used by inject when capturedIM not yet set
-      (
-        // ast-grep-ignore: require-safety-comment-for-as-unknown-as
-        // SAFETY: intentional unsafe cast — validated at runtime
-        /* SAFETY: intentional unsafe cast — validated at runtime */ globalThis as unknown as { __piTimelineIM?: () => unknown } // SAFETY: intentional unsafe cast — validated at runtime
-      ).__piTimelineIM = // SAFETY: private pi-tui seam read-only, validated at runtime
+
+      // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+      // SAFETY: intentional unsafe cast — validated at runtime
+      /* SAFETY: intentional unsafe cast — validated at runtime */ (
+        globalThis as unknown as { __piTimelineIM?: () => unknown }
+      ).__piTimelineIM = // SAFETY: intentional unsafe cast — validated at runtime // SAFETY: private pi-tui seam read-only, validated at runtime
         () => this.capturedIM ?? findChatContainerViaGlobalScan();
       this.patched = true;
     } catch {
