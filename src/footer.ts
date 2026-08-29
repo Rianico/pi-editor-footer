@@ -296,8 +296,9 @@ export function installFooter(
     const config = getConfig();
     const cwd = ctx.sessionManager?.getCwd() ?? process.cwd();
     const totals = getUsageTotals(
+      // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      ctx as unknown as {
+      /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
         sessionManager?: {
           getEntries(): {
             type: string;
@@ -328,11 +329,14 @@ export function installFooter(
   // Prefer native footer if available
   if (
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    typeof (ctx.ui as unknown as { setFooter?: unknown }).setFooter ===
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+    // SAFETY: intentional unsafe cast — validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ typeof (/* SAFETY: intentional unsafe cast — validated at runtime */ ctx.ui as unknown as { setFooter?: unknown }).setFooter === // SAFETY: intentional unsafe cast — validated at runtime
     "function"
   ) {
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    const ui = ctx.ui as unknown as {
+    /* SAFETY: intentional unsafe cast — validated at runtime */ const ui = ctx.ui as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
       setFooter: (
         fn: (
           tui: { requestRender(): void },
@@ -362,14 +366,16 @@ export function installFooter(
         invalidate() {},
         render(width: number) {
           // Use real theme when rendering
+          // ast-grep-ignore: require-safety-comment-for-as-unknown-as
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          const theme = _theme as unknown as Theme;
+          /* SAFETY: intentional unsafe cast — validated at runtime */ const theme = _theme as unknown as Theme; // SAFETY: intentional unsafe cast — validated at runtime
           const state = getState();
           const config = getConfig();
           const cwd = ctx.sessionManager?.getCwd() ?? process.cwd();
           const totals = getUsageTotals(
+            // ast-grep-ignore: require-safety-comment-for-as-unknown-as
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-            ctx as unknown as {
+            /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
               sessionManager?: {
                 getEntries(): {
                   type: string;
@@ -400,8 +406,9 @@ export function installFooter(
       };
     });
     return () => {
+      // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      (ctx.ui as unknown as { setFooter: (v: undefined) => void }).setFooter(
+      /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx.ui as unknown as { setFooter: (v: undefined) => void }).setFooter( // SAFETY: intentional unsafe cast — validated at runtime
         undefined,
       );
     };

@@ -6,10 +6,13 @@
  * No pi imports — this is the single testable seam of the extension.
  */
 
+import * as os from "node:os";
+
 export interface DetailItem {
 	label: string;
 	kind: string;
 	description: string;
+	path?: string;
 }
 
 /**
@@ -53,15 +56,37 @@ export function renderDetail(
 		visibleLines[visibleLines.length - 1] = "...";
 	}
 	const overflows = contentLines.length > capacity;
-	const namePart = `${item.label} · ${item.kind}`;
+	const base = `${item.label} · ${item.kind}`;
+	const marker = overflows ? ` ${offset + 1}/${contentLines.length}` : "";
+	const markerLen = marker.length;
 	let header: string;
-	if (overflows) {
-		// Reserve room for the scroll marker so it always survives truncation.
-		const marker = ` ${offset + 1}/${contentLines.length}`;
-		const nameWidth = Math.max(0, wrapWidth - marker.length);
-		header = truncateToWidth(namePart, nameWidth) + marker;
+	const rawPath = item.path?.trim() ?? "";
+	if (rawPath !== "") {
+		const normalized = normalizePath(rawPath);
+		const availableForPath = Math.max(0, wrapWidth - base.length - markerLen - 2);
+		let pathSeg = "";
+		if (availableForPath >= 10) {
+			const truncated =
+				normalized.length <= availableForPath
+					? normalized
+					: truncateMiddle(normalized, availableForPath);
+			pathSeg = `  ${truncated}`;
+		}
+		const totalLen = base.length + pathSeg.length + markerLen;
+		if (totalLen <= wrapWidth) {
+			header = base + pathSeg + marker;
+		} else if (pathSeg !== "") {
+			const baseWidth = Math.max(0, wrapWidth - pathSeg.length - markerLen);
+			header = truncateToWidth(base, baseWidth) + pathSeg + marker;
+		} else {
+			const nameWidth = Math.max(0, wrapWidth - markerLen);
+			header = truncateToWidth(base, nameWidth) + marker;
+		}
+	} else if (overflows) {
+		const nameWidth = Math.max(0, wrapWidth - markerLen);
+		header = truncateToWidth(base, nameWidth) + marker;
 	} else {
-		header = truncateToWidth(namePart, wrapWidth);
+		header = truncateToWidth(base, wrapWidth);
 	}
 
 	return [header, ...visibleLines];
@@ -72,14 +97,15 @@ export function renderDetail(
  * (excluding the header). Single source of wrapping truth for both render
  * and scroll clamping — avoids re-parsing the rendered header marker.
  */
-export function contentLineCount(item: DetailItem | null, width: number): number {
+export function contentLineCount(
+	item: DetailItem | null,
+	width: number,
+): number {
 	if (!item || item.description.trim() === "") {
 		return 0;
 	}
-	return wrapDescription(
-		item.description,
-		Math.max(1, Math.floor(width)),
-	).length;
+	return wrapDescription(item.description, Math.max(1, Math.floor(width)))
+		.length;
 }
 
 /**
@@ -127,6 +153,37 @@ function wrapDescription(description: string, width: number): string[] {
 
 function truncateToWidth(text: string, width: number): string {
 	return text.length <= width ? text : text.slice(0, width);
+}
+
+export function normalizePath(raw: string): string {
+	if (!raw) return raw;
+	let p = raw.replace(/\\/g, "/");
+	try {
+		const cwd = process.cwd().replace(/\\/g, "/");
+		if (p === cwd) p = ".";
+		else if (p.startsWith(`${cwd}/`)) p = p.slice(cwd.length + 1);
+		else {
+			const home = os.homedir();
+			if (home) {
+				const homePosix = home.replace(/\\/g, "/");
+				if (p === homePosix) p = "~";
+				else if (p.startsWith(`${homePosix}/`)) p = `~${p.slice(homePosix.length)}`;
+			}
+		}
+	} catch {
+		// ignore homedir/cwd failures
+	}
+	return p;
+}
+
+export function truncateMiddle(text: string, maxWidth: number): string {
+	if (text.length <= maxWidth) return text;
+	if (maxWidth <= 1) return text.slice(0, maxWidth);
+	if (maxWidth === 2) return `${text.slice(0, 1)}…`;
+	const keep = maxWidth - 1;
+	const left = Math.ceil(keep / 2);
+	const right = Math.floor(keep / 2);
+	return `${text.slice(0, left)}…${text.slice(text.length - right)}`;
 }
 
 function clamp(value: number, min: number, max: number): number {

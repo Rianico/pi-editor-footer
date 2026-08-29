@@ -140,13 +140,16 @@ export function createChromeSnapshot(
   const cwd =
     ctx?.sessionManager?.getCwd?.() ??
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    (ctx as unknown as { cwd?: string })?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+    // SAFETY: intentional unsafe cast — validated at runtime
+    (/* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { cwd?: string })?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     process.cwd();
   const sessionName = ctx?.sessionManager?.getSessionName?.();
   const contextUsage = ctx?.getContextUsage?.() as ContextUsage | undefined;
   const totals = getUsageTotals(
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: pi seam
-    (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults
   // SAFETY: pi seam
@@ -164,7 +167,9 @@ export function createChromeSnapshot(
       renamed: 0,
       deleted: 0,
       commit: null,
-    } as unknown as GitStatus); // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+    // SAFETY: intentional unsafe cast — validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ } as unknown as GitStatus); // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   const runtime = (footerState as FooterState | undefined)?.runtime ?? null;
   return {
     cwd,

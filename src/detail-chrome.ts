@@ -13,6 +13,9 @@
  * detail-render + window-presentation are INTERNAL seams, not part of the
  * interface. One place to learn — one place to test, no TUI needed.
  */
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { SelectItem } from "@earendil-works/pi-tui";
 import {
   contentLineCount,
@@ -30,12 +33,88 @@ function kindOf(value: string): string {
   return value.startsWith("skill:") ? "skill" : "command";
 }
 
-function detailItemOf(item: SelectItem): DetailItem {
-  return {
+function resolveSkillPath(skillName: string): string | undefined {
+  const name = skillName.trim();
+  if (!name) return undefined;
+  const candidates: string[] = [];
+  const cwd = process.cwd();
+  const home = (() => {
+    try {
+      return os.homedir();
+    } catch {
+      return "";
+    }
+  })();
+  // project-local candidates
+  candidates.push(path.join(cwd, ".pi", "agent", "skills", name, "SKILL.md"));
+  candidates.push(path.join(cwd, ".agents", "skills", name, "SKILL.md"));
+  candidates.push(path.join(cwd, ".pi", "skills", name, "SKILL.md"));
+  candidates.push(path.join(cwd, "skills", name, "SKILL.md"));
+  // user-global candidates
+  if (home) {
+    candidates.push(
+      path.join(home, ".pi", "agent", "skills", name, "SKILL.md"),
+    );
+    candidates.push(path.join(home, ".agents", "skills", name, "SKILL.md"));
+    candidates.push(
+      path.join(home, ".pi", ".agents", "skills", name, "SKILL.md"),
+    );
+    candidates.push(path.join(home, ".pi", "skills", name, "SKILL.md"));
+    candidates.push(
+      path.join(
+        home,
+        "stowfiles",
+        "dotfiles",
+        ".pi",
+        "agent",
+        "skills",
+        name,
+        "SKILL.md",
+      ),
+    );
+    candidates.push(
+      path.join(
+        home,
+        "stowfiles",
+        "dotfiles",
+        ".pi",
+        "agent",
+        ".agents",
+        "skills",
+        name,
+        "SKILL.md",
+      ),
+    );
+  }
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      // ignore
+    }
+  }
+  // fallback to global symlink path so header always shows a path for skills
+  if (home) return path.join(home, ".pi", "agent", "skills", name, "SKILL.md");
+  return path.join(cwd, ".pi", "agent", "skills", name, "SKILL.md");
+}
+
+type SelectItemWithPath = SelectItem & { path?: string };
+
+function detailItemOf(item: SelectItemWithPath): DetailItem {
+  const detail: DetailItem = {
     label: item.label,
     kind: kindOf(item.value),
     description: item.description ?? "",
   };
+  const rawPath = item.path?.trim() ?? "";
+  if (rawPath !== "") {
+    detail.path = rawPath;
+  } else if (item.value.startsWith("skill:")) {
+    const skillName = item.value.slice("skill:".length);
+    const resolved = resolveSkillPath(skillName);
+    if (resolved !== undefined) detail.path = resolved;
+  }
+  return detail;
 }
 
 /** Structural subset of pi's Theme used to build the window theme at render time. */

@@ -47,9 +47,21 @@ export function decorateWindow(
 	const body = lines.slice(1);
 
 	const borderRun = theme.border("─".repeat(Math.max(0, width - 2)));
+	const match = header.match(/ · (skill|command)/);
+	let styledHeader: string;
+	if (match?.index === undefined) {
+		styledHeader = theme.highlight(header);
+	} else {
+		const split = match.index + match[0].length;
+		const basePart = header.slice(0, split);
+		const suffix = header.slice(split);
+		styledHeader = suffix
+			? theme.highlight(basePart) + theme.dim(suffix)
+			: theme.highlight(basePart);
+	}
 	return [
 		`┌${borderRun}┐`,
-		`│ ${padTo(theme.highlight(header))} │`,
+		`│ ${padTo(styledHeader)} │`,
 		...body.map((line) => `│ ${padTo(theme.dim(line))} │`),
 		`└${borderRun}┘`,
 	];

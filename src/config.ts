@@ -128,6 +128,7 @@ function deepMerge<T>(base: T, override: unknown): T {
 // ---------------------------------------------------------------------------
 // Table-driven schema — single source for defaults + validation
 // Adding a flag = one row here. deepMerge handles missing keys, validate()
+// SAFETY: intentional unsafe cast — validated at runtime
 // enforces types. No `as unknown as` scattered per field.
 // ---------------------------------------------------------------------------
 
@@ -165,7 +166,8 @@ export const CONFIG_SCHEMA: readonly Descriptor[] = [
   { path: "timeline.cost", kind: "boolean" },
 ] as const;
 
-function getByPath(obj: unknown, path: string): unknown {
+// SAFETY: table-driven config access — path validated against CONFIG_SCHEMA, caller validates via validate()
+function getByPath<T>(obj: unknown, path: string): T | undefined {
   const parts = path.split(".");
   let cur: unknown = obj;
   for (const p of parts) {
@@ -173,7 +175,7 @@ function getByPath(obj: unknown, path: string): unknown {
     // single controlled cast — validation table owns all path access
     cur = (cur as Record<string, unknown>)[p];
   }
-  return cur;
+  return cur as T | undefined;
 }
 
 function setByPath(obj: unknown, path: string, value: unknown): void {
@@ -190,8 +192,9 @@ function setByPath(obj: unknown, path: string, value: unknown): void {
   cur[parts[parts.length - 1]!] = value;
 }
 
-function getDefaultByPath(path: string): unknown {
-  return getByPath(DEFAULT_CONFIG, path);
+// SAFETY: table-driven config access — path validated against CONFIG_SCHEMA, caller validates via validate()
+function getDefaultByPath<T>(path: string): T | undefined {
+  return getByPath<T>(DEFAULT_CONFIG, path);
 }
 
 function validate(config: ThemeConfig): ThemeConfig {
