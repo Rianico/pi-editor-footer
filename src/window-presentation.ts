@@ -23,6 +23,10 @@ export interface WindowThemeLike {
   highlight(s: string): string;
   /** Description style — the theme's dim. */
   dim(s: string): string;
+  /** Model badge — success/accent, distinct from human. */
+  model(s: string): string;
+  /** Human badge — warning/dim, distinct from model. */
+  human(s: string): string;
 }
 
 /**
@@ -50,9 +54,23 @@ export function decorateWindow(lines: string[], width: number, theme: WindowThem
     const split = match.index + match[0].length;
     const basePart = header.slice(0, split);
     const suffix = header.slice(split);
-    styledHeader = suffix
-      ? theme.highlight(basePart) + theme.dim(suffix)
-      : theme.highlight(basePart);
+    if (!suffix) {
+      styledHeader = theme.highlight(basePart);
+    } else {
+      const badgeMatch = suffix.match(/ · (model|human)(?=(\s+\d+\/\d+)?$)/);
+      if (badgeMatch?.index !== undefined) {
+        const beforeBadge = suffix.slice(0, badgeMatch.index);
+        const badgeText = badgeMatch[1] as "model" | "human";
+        const badgeStr = ` · ${badgeText}`;
+        const afterBadge = suffix.slice(badgeMatch.index + badgeStr.length);
+        const beforeStyled = beforeBadge ? theme.dim(beforeBadge) : "";
+        const badgeStyled = badgeText === "model" ? theme.model(badgeStr) : theme.human(badgeStr);
+        const afterStyled = afterBadge ? theme.dim(afterBadge) : "";
+        styledHeader = theme.highlight(basePart) + beforeStyled + badgeStyled + afterStyled;
+      } else {
+        styledHeader = theme.highlight(basePart) + theme.dim(suffix);
+      }
+    }
   }
   return [
     `┌${borderRun}┐`,

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- **detail:** use distinct highlight for human vs model badge
 - **detail:** show model invocation badge to the right of skill path
 
 ### Bug Fixes

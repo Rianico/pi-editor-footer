@@ -12,6 +12,8 @@ function makeTheme(): WindowThemeLike {
     border: (s) => `${RED}${s}${RESET}`,
     highlight: (s) => `${RED}${s}${RESET}`,
     dim: (s) => `${RED}${s}${RESET}`,
+    model: (s) => `\x1b[32m${s}${RESET}`,
+    human: (s) => `\x1b[33m${s}${RESET}`,
   };
 }
 

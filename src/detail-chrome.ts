@@ -212,6 +212,8 @@ export class DetailChrome {
       border: (s) => t.fg("border", s),
       highlight: (s) => t.fg("accent", t.bold(s)),
       dim: (s) => t.fg("dim", s),
+      model: (s) => t.fg("success", s),
+      human: (s) => t.fg("warning", s),
     };
     const innerWidth = Math.max(1, width - 4);
     const lines = renderDetail(detailItemOf(item), innerWidth, this.maxLines, this.scrollOffset);
