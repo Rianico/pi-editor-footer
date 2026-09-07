@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Bug Fixes
+
+- add .npmrc and clean allowScripts for npm install-scripts
+
 ## [0.12.0](https://github.com/Rianico/pi-editor-footer/compare/v0.11.0...v0.12.0) (2026-09-07)
 
 ### Features
