@@ -1,18 +1,18 @@
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-## [Unreleased]
+## [0.12.0](https://github.com/Rianico/pi-editor-footer/compare/v0.11.0...v0.12.0) (2026-09-07)
 
 ### Features
 
-- **detail:** use distinct highlight for human vs model badge
-- **detail:** show model invocation badge to the right of skill path
+* **detail:** show model invocation badge to the right of skill path ([0f03593](https://github.com/Rianico/pi-editor-footer/commit/0f0359347d7ae3de740400c587c5b0ff4a6fb57e))
+* **detail:** use distinct highlight for human vs model badge ([e242df1](https://github.com/Rianico/pi-editor-footer/commit/e242df14975e10b6bfd32f8a48e5f943d7579864))
 
 ### Bug Fixes
 
-- allow pnpm builds for esbuild and genai
-- make prepare tolerant to missing husky for pi install
+* allow pnpm builds for esbuild and genai ([36e139e](https://github.com/Rianico/pi-editor-footer/commit/36e139e9443ef928a4366c3d7c8afe494b6e0850))
+* make prepare tolerant to missing husky for pi install ([23ebb62](https://github.com/Rianico/pi-editor-footer/commit/23ebb62cd8d732656fd113da27c807ffa34579fc))
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
 
 ## [0.11.0] - 2026-08-29
 
