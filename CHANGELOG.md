@@ -1,8 +1,8 @@
-## [Unreleased]
+## [0.12.1](https://github.com/Rianico/pi-editor-footer/compare/v0.12.0...v0.12.1) (2026-09-07)
 
 ### Bug Fixes
 
-- add .npmrc and clean allowScripts for npm install-scripts
+* add .npmrc and clean allowScripts for npm install-scripts ([fc362cb](https://github.com/Rianico/pi-editor-footer/commit/fc362cbb654dbf886f92f774e2a5e87aa4ec5914))
 
 ## [0.12.0](https://github.com/Rianico/pi-editor-footer/compare/v0.11.0...v0.12.0) (2026-09-07)
 
