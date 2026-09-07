@@ -13,6 +13,7 @@ export interface DetailItem {
   kind: string;
   description: string;
   path?: string;
+  invocation?: "model" | "human";
 }
 
 /**
@@ -60,9 +61,11 @@ export function renderDetail(
   const markerLen = marker.length;
   let header: string;
   const rawPath = item.path?.trim() ?? "";
+  const invocationSeg = item.invocation ? ` · ${item.invocation}` : "";
+  const invocationLen = invocationSeg.length;
   if (rawPath !== "") {
     const normalized = normalizePath(rawPath);
-    const availableForPath = Math.max(0, wrapWidth - base.length - markerLen - 2);
+    const availableForPath = Math.max(0, wrapWidth - base.length - markerLen - invocationLen - 2);
     let pathSeg = "";
     if (availableForPath >= 10) {
       const truncated =
@@ -71,15 +74,24 @@ export function renderDetail(
           : truncateMiddle(normalized, availableForPath);
       pathSeg = `  ${truncated}`;
     }
-    const totalLen = base.length + pathSeg.length + markerLen;
+    const totalLen = base.length + pathSeg.length + invocationLen + markerLen;
     if (totalLen <= wrapWidth) {
-      header = base + pathSeg + marker;
-    } else if (pathSeg !== "") {
-      const baseWidth = Math.max(0, wrapWidth - pathSeg.length - markerLen);
-      header = truncateToWidth(base, baseWidth) + pathSeg + marker;
+      header = base + pathSeg + invocationSeg + marker;
+    } else if (pathSeg !== "" || invocationSeg !== "") {
+      const suffixLen = pathSeg.length + invocationLen + markerLen;
+      const baseWidth = Math.max(0, wrapWidth - suffixLen);
+      header = truncateToWidth(base, baseWidth) + pathSeg + invocationSeg + marker;
     } else {
       const nameWidth = Math.max(0, wrapWidth - markerLen);
       header = truncateToWidth(base, nameWidth) + marker;
+    }
+  } else if (invocationSeg !== "") {
+    const totalLen = base.length + invocationLen + markerLen;
+    if (totalLen <= wrapWidth) {
+      header = base + invocationSeg + marker;
+    } else {
+      const baseWidth = Math.max(0, wrapWidth - invocationLen - markerLen);
+      header = truncateToWidth(base, baseWidth) + invocationSeg + marker;
     }
   } else if (overflows) {
     const nameWidth = Math.max(0, wrapWidth - markerLen);

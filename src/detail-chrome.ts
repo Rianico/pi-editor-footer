@@ -68,6 +68,30 @@ function resolveSkillPath(skillName: string): string | undefined {
       ),
     );
   }
+  // subskill candidates (any parent skill -> subskills/<name>)
+  const bases = [
+    path.join(cwd, ".agents", "skills"),
+    path.join(cwd, ".pi", "agent", "skills"),
+    path.join(cwd, ".pi", "skills"),
+    path.join(cwd, "skills"),
+  ];
+  if (home) {
+    bases.push(
+      path.join(home, ".agents", "skills"),
+      path.join(home, ".pi", "agent", "skills"),
+      path.join(home, ".pi", "skills"),
+    );
+  }
+  for (const base of bases) {
+    try {
+      const entries = fs.readdirSync(base, { withFileTypes: true });
+      for (const e of entries) {
+        const isDir = e.isDirectory() || e.isSymbolicLink();
+        if (!isDir) continue;
+        candidates.push(path.join(base, e.name, "subskills", name, "SKILL.md"));
+      }
+    } catch {}
+  }
   for (const p of candidates) {
     try {
       if (fs.existsSync(p)) return p;
@@ -82,6 +106,19 @@ function resolveSkillPath(skillName: string): string | undefined {
 
 type SelectItemWithPath = SelectItem & { path?: string };
 
+function parseInvocation(skillPath: string): "model" | "human" | undefined {
+  try {
+    const content = fs.readFileSync(skillPath, "utf-8");
+    const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (!fmMatch) return "model";
+    const fm = fmMatch[1] ?? "";
+    if (/^\s*disable-model-invocation\s*:\s*true\b/m.test(fm)) return "human";
+    return "model";
+  } catch {
+    return undefined;
+  }
+}
+
 function detailItemOf(item: SelectItemWithPath): DetailItem {
   const detail: DetailItem = {
     label: item.label,
@@ -95,6 +132,10 @@ function detailItemOf(item: SelectItemWithPath): DetailItem {
     const skillName = item.value.slice("skill:".length);
     const resolved = resolveSkillPath(skillName);
     if (resolved !== undefined) detail.path = resolved;
+  }
+  if (detail.kind === "skill" && detail.path) {
+    const inv = parseInvocation(detail.path);
+    if (inv) detail.invocation = inv;
   }
   return detail;
 }

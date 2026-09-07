@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- **detail:** show model invocation badge to the right of skill path
+
 ## [0.11.0] - 2026-08-29
 
 ### Changed
