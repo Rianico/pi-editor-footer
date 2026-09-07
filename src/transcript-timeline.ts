@@ -47,8 +47,7 @@ export function formatDateTimeWithTimezone(d: Date = new Date()): string {
       timeZoneName: "short",
     });
     const parts = fmt.formatToParts(d);
-    const get = (type: string) =>
-      parts.find((p) => p.type === type)?.value ?? "";
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
     const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
     return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${tz}`.trim();
   } catch {
@@ -76,26 +75,13 @@ export interface BuildTimelineParams {
  * Testable without TUI — no global scan.
  */
 export function buildTimelineText(params: BuildTimelineParams): string {
-  const {
-    effectiveTel,
-    totals,
-    ctxTokens,
-    snap,
-    config,
-    lastDoneIn,
-    now,
-    ledger,
-  } = params;
+  const { effectiveTel, totals, ctxTokens, snap, config, lastDoneIn, now, ledger } = params;
   const glyphs = resolveGlyphs(config.icons.mode);
   const dt = formatDateTimeWithTimezone(now ?? new Date());
   const wallDur = formatDuration(lastDoneIn);
   const cacheRate = totals.latestCacheHitRate ?? 0;
   const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
-  const perAgent = ledger.getPerAgentTotalsForTimeline(
-    effectiveTel,
-    totals,
-    ctxTokens,
-  );
+  const perAgent = ledger.getPerAgentTotalsForTimeline(effectiveTel, totals, ctxTokens);
   const telInput = perAgent.input;
   const telOutput = perAgent.output;
   const telCost = perAgent.cost;
@@ -128,20 +114,14 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
   try {
     // SAFETY: globalThis scan is intentional — pi exposes no public chatContainer seam
     const seen = new Set<unknown>();
-    const queue: unknown[] = [
-      globalThis as unknown,
-      global as unknown,
-      process as unknown,
-    ];
+    const queue: unknown[] = [globalThis as unknown, global as unknown, process as unknown];
     try {
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: require is private Node cache seam — read-only scan for chatContainer
       /* SAFETY: intentional unsafe cast — validated at runtime */ const req =
         /* SAFETY: intentional unsafe cast — validated at runtime */ (
           globalThis as unknown as { require?: unknown }
-        ).require as // SAFETY: private seam
-          | { cache?: Record<string, { exports?: unknown }> }
-          | undefined;
+        ).require as { cache?: Record<string, { exports?: unknown }> } | undefined; // SAFETY: private seam
       if (req?.cache)
         queue.push(
           ...(Object.values(req.cache)
@@ -158,8 +138,7 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
       try {
         if (
           obj.chatContainer &&
-          typeof (obj as { addMessageToChat?: unknown }).addMessageToChat ===
-            "function"
+          typeof (obj as { addMessageToChat?: unknown }).addMessageToChat === "function"
         )
           return obj;
         if (obj.chatContainer && obj.ui) return obj;
@@ -173,8 +152,7 @@ function findChatContainerViaGlobalScan(): ChatContainerLike | null {
             if (v && typeof v === "object" && !seen.has(v)) {
               if (
                 (v as Record<string, unknown>).chatContainer &&
-                typeof (v as { addMessageToChat?: unknown })
-                  .addMessageToChat === "function"
+                typeof (v as { addMessageToChat?: unknown }).addMessageToChat === "function"
               )
                 return v;
               if (queue.length < 500) queue.push(v);
@@ -230,9 +208,7 @@ export class TranscriptTimeline {
     const dimLines = rawLine
       .split("\n")
       .map((l) =>
-        theme
-          ? (theme as { fg(s: string, t: string): string }).fg("dim", " " + l)
-          : " " + l,
+        theme ? (theme as { fg(s: string, t: string): string }).fg("dim", " " + l) : " " + l,
       );
     let injected = false;
     try {
@@ -262,8 +238,7 @@ export class TranscriptTimeline {
           try {
             if (
               (obj as Record<string, unknown>).chatContainer &&
-              typeof (obj as { addMessageToChat?: unknown })
-                .addMessageToChat === "function"
+              typeof (obj as { addMessageToChat?: unknown }).addMessageToChat === "function"
             )
               return obj;
             if (
@@ -279,13 +254,7 @@ export class TranscriptTimeline {
             for (const k of Object.getOwnPropertyNames(obj)) {
               try {
                 const v = (obj as Record<string, unknown>)[k];
-                if (
-                  v &&
-                  typeof v === "object" &&
-                  !seen.has(v) &&
-                  queue.length < 800
-                )
-                  queue.push(v);
+                if (v && typeof v === "object" && !seen.has(v) && queue.length < 800) queue.push(v);
               } catch {
                 // SAFETY: best-effort, ignore recoverable error
                 // SAFETY: best-effort, ignore recoverable error
@@ -296,15 +265,10 @@ export class TranscriptTimeline {
               try {
                 // ast-grep-ignore: require-safety-comment-for-as-unknown-as
                 // SAFETY: intentional unsafe cast — validated at runtime
-                /* SAFETY: intentional unsafe cast — validated at runtime */ const v =
-                  (obj as unknown as Record<symbol, unknown>)[s]; // SAFETY: intentional unsafe cast — validated at runtime
-                if (
-                  v &&
-                  typeof v === "object" &&
-                  !seen.has(v) &&
-                  queue.length < 800
-                )
-                  queue.push(v);
+                /* SAFETY: intentional unsafe cast — validated at runtime */ const v = (
+                  obj as unknown as Record<symbol, unknown>
+                )[s]; // SAFETY: intentional unsafe cast — validated at runtime
+                if (v && typeof v === "object" && !seen.has(v) && queue.length < 800) queue.push(v);
               } catch {
                 // SAFETY: best-effort, ignore recoverable error
               }
@@ -400,9 +364,7 @@ export class TranscriptTimeline {
                   }
                 ).theme;
               return snapshot.flatMap((l) =>
-                l
-                  .split("\n")
-                  .map((s) => (th ? th.fg("dim", " " + s) : " " + s)),
+                l.split("\n").map((s) => (th ? th.fg("dim", " " + s) : " " + s)),
               );
             },
             // ast-grep-ignore: require-safety-comment-for-as-unknown-as
@@ -438,8 +400,7 @@ export class TranscriptTimeline {
     params: BuildTimelineParams,
   ): string | null {
     if (!params.config.timeline.enabled) return null;
-    if (params.lastDoneIn === undefined || params.lastDoneIn === null)
-      return null;
+    if (params.lastDoneIn === undefined || params.lastDoneIn === null) return null;
     const wallText = buildTimelineText(params);
     // Prefer public seam: pi.appendEntry("timeline", {text}) + registerEntryRenderer
     try {
@@ -506,26 +467,19 @@ export class TranscriptTimeline {
         const origRebuild = imAny.prototype.rebuildChatFromMessages;
         if (origRebuild) {
           const self = this;
-          imAny.prototype.rebuildChatFromMessages = function (
-            this: unknown,
-            ...args: unknown[]
-          ) {
+          imAny.prototype.rebuildChatFromMessages = function (this: unknown, ...args: unknown[]) {
             self.capturedIM = this;
             const res = origRebuild.apply(this, args);
             try {
               for (const line of self.history) {
                 const theme =
                   (this as { ui?: { theme?: unknown } }).ui?.theme ??
-                  (self.getLastSessionCtx?.() as { ui?: { theme?: unknown } })
-                    ?.ui?.theme;
+                  (self.getLastSessionCtx?.() as { ui?: { theme?: unknown } })?.ui?.theme;
                 if (!theme) continue;
                 const dimLines = line
                   .split("\n")
                   .map((s: string) =>
-                    (theme as { fg(s: string, t: string): string }).fg(
-                      "dim",
-                      " " + s,
-                    ),
+                    (theme as { fg(s: string, t: string): string }).fg("dim", " " + s),
                   );
                 const spacerComp = {
                   invalidate() {},
@@ -546,9 +500,7 @@ export class TranscriptTimeline {
                   this as { chatContainer?: { addChild(c: unknown): void } }
                 ).chatContainer?.addChild(textComp);
               }
-              (
-                this as { ui?: { requestRender?: () => void } }
-              ).ui?.requestRender?.();
+              (this as { ui?: { requestRender?: () => void } }).ui?.requestRender?.();
             } catch {
               // SAFETY: best-effort UI, ignore recoverable error
             }
@@ -588,17 +540,11 @@ export class TranscriptTimeline {
       }
       for (const p of candidates) {
         import(p)
-          .then((mod: unknown) =>
-            tryPatch((mod as { InteractiveMode?: unknown }).InteractiveMode),
-          )
+          .then((mod: unknown) => tryPatch((mod as { InteractiveMode?: unknown }).InteractiveMode))
           .catch(() => {});
       }
-      import(
-        "@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js" as never
-      )
-        .then((mod: unknown) =>
-          tryPatch((mod as { InteractiveMode?: unknown }).InteractiveMode),
-        )
+      import("@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js" as never)
+        .then((mod: unknown) => tryPatch((mod as { InteractiveMode?: unknown }).InteractiveMode))
         .catch(() => {});
       // SAFETY: global fallback used by inject when capturedIM not yet set
 

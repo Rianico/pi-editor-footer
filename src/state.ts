@@ -23,13 +23,9 @@ export interface UsageTotals {
 
 let usageCache: { key: string; totals: UsageTotals } | undefined;
 
-function entriesKey(ctx: {
-  sessionManager?: { getEntries(): unknown[] };
-}): string {
+function entriesKey(ctx: { sessionManager?: { getEntries(): unknown[] } }): string {
   const entries = ctx.sessionManager?.getEntries() ?? [];
-  const last = entries.at(-1) as
-    | { id?: string; timestamp?: string }
-    | undefined;
+  const last = entries.at(-1) as { id?: string; timestamp?: string } | undefined;
   return `${entries.length}:${String(last?.id ?? "")}:${String(last?.timestamp ?? "")}`;
 }
 
@@ -65,8 +61,8 @@ export function getUsageTotals(ctx: {
     latestCacheHitRate: undefined,
   };
   const entries =
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     (
-      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       ctx as unknown as {
         sessionManager?: {
           getEntries(): {
@@ -94,8 +90,7 @@ export function getUsageTotals(ctx: {
       totals.cacheRead += u.cacheRead ?? 0;
       totals.cacheWrite += u.cacheWrite ?? 0;
       totals.cost += u.cost?.total ?? 0;
-      const promptTokens =
-        (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+      const promptTokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
       if (promptTokens > 0) {
         totals.latestCacheHitRate = ((u.cacheRead ?? 0) / promptTokens) * 100;
       }

@@ -17,12 +17,12 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 
 /** Styling functions injected from the live theme. */
 export interface WindowThemeLike {
-	/** Border color function (theme "border"). */
-	border(s: string): string;
-	/** Header style — the theme's highlight (accent + bold). */
-	highlight(s: string): string;
-	/** Description style — the theme's dim. */
-	dim(s: string): string;
+  /** Border color function (theme "border"). */
+  border(s: string): string;
+  /** Header style — the theme's highlight (accent + bold). */
+  highlight(s: string): string;
+  /** Description style — the theme's dim. */
+  dim(s: string): string;
 }
 
 /**
@@ -31,38 +31,33 @@ export interface WindowThemeLike {
  * row, the dim body rows, and a `└─…─┘` border row. Every row is exactly
  * `width` columns (ANSI-aware padding).
  */
-export function decorateWindow(
-	lines: string[],
-	width: number,
-	theme: WindowThemeLike,
-): string[] {
-	if (lines.length === 0) {
-		return [];
-	}
-	const innerWidth = Math.max(1, width - 4);
-	const padTo = (s: string): string =>
-		s + " ".repeat(Math.max(0, innerWidth - visibleWidth(s)));
+export function decorateWindow(lines: string[], width: number, theme: WindowThemeLike): string[] {
+  if (lines.length === 0) {
+    return [];
+  }
+  const innerWidth = Math.max(1, width - 4);
+  const padTo = (s: string): string => s + " ".repeat(Math.max(0, innerWidth - visibleWidth(s)));
 
-	const header = lines[0] ?? "";
-	const body = lines.slice(1);
+  const header = lines[0] ?? "";
+  const body = lines.slice(1);
 
-	const borderRun = theme.border("─".repeat(Math.max(0, width - 2)));
-	const match = header.match(/ · (skill|command)/);
-	let styledHeader: string;
-	if (match?.index === undefined) {
-		styledHeader = theme.highlight(header);
-	} else {
-		const split = match.index + match[0].length;
-		const basePart = header.slice(0, split);
-		const suffix = header.slice(split);
-		styledHeader = suffix
-			? theme.highlight(basePart) + theme.dim(suffix)
-			: theme.highlight(basePart);
-	}
-	return [
-		`┌${borderRun}┐`,
-		`│ ${padTo(styledHeader)} │`,
-		...body.map((line) => `│ ${padTo(theme.dim(line))} │`),
-		`└${borderRun}┘`,
-	];
+  const borderRun = theme.border("─".repeat(Math.max(0, width - 2)));
+  const match = header.match(/ · (skill|command)/);
+  let styledHeader: string;
+  if (match?.index === undefined) {
+    styledHeader = theme.highlight(header);
+  } else {
+    const split = match.index + match[0].length;
+    const basePart = header.slice(0, split);
+    const suffix = header.slice(split);
+    styledHeader = suffix
+      ? theme.highlight(basePart) + theme.dim(suffix)
+      : theme.highlight(basePart);
+  }
+  return [
+    `┌${borderRun}┐`,
+    `│ ${padTo(styledHeader)} │`,
+    ...body.map((line) => `│ ${padTo(theme.dim(line))} │`),
+    `└${borderRun}┘`,
+  ];
 }

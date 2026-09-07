@@ -56,11 +56,7 @@ export interface ExtensionWidgetOptionsLike {
 }
 export interface ExtensionUIContextLike {
   setEditorComponent(
-    factory: (
-      tui: TUI,
-      theme: EditorTheme,
-      keybindings: KeybindingsManager,
-    ) => EditorComponent,
+    factory: (tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) => EditorComponent,
   ): void;
   setWidget(
     key: string,
@@ -80,38 +76,20 @@ export interface ExtensionContextLike {
   thinkingLevel?: string;
 }
 export interface ExtensionAPILike {
-  on(
-    event: "session_start",
-    handler: (event: unknown, ctx: ExtensionContextLike) => void,
-  ): void;
-  on(
-    event: "model_select",
-    handler: (event: unknown, ctx: ExtensionContextLike) => void,
-  ): void;
+  on(event: "session_start", handler: (event: unknown, ctx: ExtensionContextLike) => void): void;
+  on(event: "model_select", handler: (event: unknown, ctx: ExtensionContextLike) => void): void;
   on(
     event: "thinking_level_select",
     handler: (event: unknown, ctx: ExtensionContextLike) => void,
   ): void;
-  on(
-    event: "session_shutdown",
-    handler: (event: unknown, ctx: ExtensionContextLike) => void,
-  ): void;
-  on(
-    event: string,
-    handler: (event: unknown, ctx: ExtensionContextLike) => void,
-  ): void;
-  registerShortcut(
-    shortcut: string,
-    options: { description?: string; handler: () => void },
-  ): void;
+  on(event: "session_shutdown", handler: (event: unknown, ctx: ExtensionContextLike) => void): void;
+  on(event: string, handler: (event: unknown, ctx: ExtensionContextLike) => void): void;
+  registerShortcut(shortcut: string, options: { description?: string; handler: () => void }): void;
   registerCommand(
     name: string,
     options: {
       description?: string;
-      handler: (
-        args: string,
-        ctx: ExtensionContextLike,
-      ) => void | Promise<void>;
+      handler: (args: string, ctx: ExtensionContextLike) => void | Promise<void>;
     },
   ): void;
 }
@@ -223,9 +201,7 @@ function assertInternals(): void {
 
 export interface SessionOrchestratorDeps {
   loadConfig?: () => ThemeConfig;
-  saveConfig?: (
-    patch: Partial<ThemeConfig> & Record<string, unknown>,
-  ) => ThemeConfig;
+  saveConfig?: (patch: Partial<ThemeConfig> & Record<string, unknown>) => ThemeConfig;
   createInitialState?: () => FooterState;
 }
 
@@ -399,12 +375,7 @@ export class SessionOrchestrator {
 
   private installEditor(ctx: ExtensionUIContextLike): void {
     ctx.setEditorComponent((tui, theme, keybindings) => {
-      const editor = new TrackingEditor(
-        tui,
-        theme,
-        keybindings,
-        () => ctx.theme,
-      );
+      const editor = new TrackingEditor(tui, theme, keybindings, () => ctx.theme);
       this.installedEditor = editor;
       editor.setChrome({ modelInfo: this.currentModelInfo });
       editor.setChrome({ glowEnabled: this.glowEnabled });
@@ -430,8 +401,7 @@ export class SessionOrchestrator {
       actionHandlers?: unknown;
     };
     const isInputEditor =
-      typeof maybeEditor.handleInput === "function" &&
-      maybeEditor.actionHandlers instanceof Map;
+      typeof maybeEditor.handleInput === "function" && maybeEditor.actionHandlers instanceof Map;
     if (isInputEditor && focused !== this.installedEditor) {
       this.installEditor(ctx);
     }
@@ -471,9 +441,8 @@ export class SessionOrchestrator {
         {
           setRequestRender: (fn) => {
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-            (
-              globalThis as unknown as { __footerRender?: () => void }
-            ).__footerRender = fn ?? undefined; // SAFETY: pi seam
+            (globalThis as unknown as { __footerRender?: () => void }).__footerRender =
+              fn ?? undefined; // SAFETY: pi seam
           },
           scheduleGitRefresh: () => {
             void (async () => {
@@ -494,18 +463,14 @@ export class SessionOrchestrator {
                 this.footerState = { ...this.footerState, git } as FooterState;
                 this.refreshContextBar();
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                (
-                  globalThis as unknown as { __footerRender?: () => void }
-                ).__footerRender?.();
+                (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
                 const runtime = await readRuntimeInfo(cwd);
                 this.footerState = {
                   ...this.footerState,
                   runtime,
                 } as FooterState;
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                (
-                  globalThis as unknown as { __footerRender?: () => void }
-                ).__footerRender?.();
+                (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
               } catch (_e) {
                 void _e; // SAFETY: best-effort UI, ignore recoverable error
               }
@@ -521,9 +486,7 @@ export class SessionOrchestrator {
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         const cwd =
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          (
-            ctx as unknown as { sessionManager?: { getCwd: () => string } }
-          ).sessionManager // SAFETY: pi seam
+          (ctx as unknown as { sessionManager?: { getCwd: () => string } }).sessionManager // SAFETY: pi seam
             ?.getCwd?.() ??
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
           (ctx as unknown as { cwd?: string }).cwd ??
@@ -532,15 +495,11 @@ export class SessionOrchestrator {
         this.footerState = { ...this.footerState, git } as FooterState;
         this.refreshContextBar();
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        (
-          globalThis as unknown as { __footerRender?: () => void }
-        ).__footerRender?.();
+        (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
         const runtime = await readRuntimeInfo(cwd);
         this.footerState = { ...this.footerState, runtime } as FooterState;
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        (
-          globalThis as unknown as { __footerRender?: () => void }
-        ).__footerRender?.();
+        (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
       } catch (_e) {
         void _e; // SAFETY: best-effort UI, ignore recoverable error
       }
@@ -555,8 +514,7 @@ export class SessionOrchestrator {
     this.footerCleanup?.();
     this.footerCleanup = null;
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    (globalThis as unknown as { __footerRender?: () => void }).__footerRender =
-      undefined;
+    (globalThis as unknown as { __footerRender?: () => void }).__footerRender = undefined;
   }
 
   // ——— commands ———
@@ -567,10 +525,7 @@ export class SessionOrchestrator {
       handler: async (_args, ctx) => {
         this.glowEnabled = !this.glowEnabled;
         this.installedEditor?.setChrome({ glowEnabled: this.glowEnabled });
-        ctx.ui.notify(
-          `Model info border ${this.glowEnabled ? "shown" : "hidden"}`,
-          "info",
-        );
+        ctx.ui.notify(`Model info border ${this.glowEnabled ? "shown" : "hidden"}`, "info");
       },
     });
 
@@ -610,26 +565,20 @@ export class SessionOrchestrator {
         pi as unknown as {
           registerEntryRenderer?: (t: string, r: unknown) => void;
         }
-      ).registerEntryRenderer?.(
-        "timeline",
-        (entry: unknown, _opts: unknown, theme: unknown) => {
-          const data = (entry as { data?: { text?: string } }).data;
-          const text = data?.text ?? "";
-          const lines = text.split("\n").map((l: string) => {
-            try {
-              return (theme as { fg: (c: string, s: string) => string }).fg(
-                "dim",
-                " " + l,
-              );
-            } catch {
-              // SAFETY: best-effort, ignore recoverable error
-              return " " + l;
-            }
-          });
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          return new Text(lines.join("\n")) as unknown as Component;
-        },
-      );
+      ).registerEntryRenderer?.("timeline", (entry: unknown, _opts: unknown, theme: unknown) => {
+        const data = (entry as { data?: { text?: string } }).data;
+        const text = data?.text ?? "";
+        const lines = text.split("\n").map((l: string) => {
+          try {
+            return (theme as { fg: (c: string, s: string) => string }).fg("dim", " " + l);
+          } catch {
+            // SAFETY: best-effort, ignore recoverable error
+            return " " + l;
+          }
+        });
+        // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+        return new Text(lines.join("\n")) as unknown as Component;
+      });
     } catch {
       // SAFETY: best-effort, ignore recoverable error
     }
@@ -665,16 +614,10 @@ export class SessionOrchestrator {
       this.agentLedger.setBaseline(null);
       this.agentLedger.reset();
       this.liveBorder.setAgentBaseline(null);
-      this.deferredInstallTimer = setTimeout(
-        () => this.installEditor(ctx.ui),
-        0,
-      );
+      this.deferredInstallTimer = setTimeout(() => this.installEditor(ctx.ui), 0);
       this.ensureFooter(ctx);
       if (this.watchTimer !== null) clearInterval(this.watchTimer);
-      this.watchTimer = setInterval(
-        () => this.ensureEditorOwnership(ctx.ui),
-        REFRESH_MS,
-      );
+      this.watchTimer = setInterval(() => this.ensureEditorOwnership(ctx.ui), REFRESH_MS);
     });
 
     pi.on("session_shutdown", () => {
@@ -709,9 +652,7 @@ export class SessionOrchestrator {
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         const baselineCtx = (ctx ??
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          this.lastSessionCtx) as unknown as Parameters<
-          typeof getUsageTotals
-        >[0];
+          this.lastSessionCtx) as unknown as Parameters<typeof getUsageTotals>[0];
         if (baselineCtx?.sessionManager?.getEntries) {
           this.agentBaselineTotals = getUsageTotals(baselineCtx);
           this.agentLedger.setBaseline(this.agentBaselineTotals);
@@ -744,8 +685,7 @@ export class SessionOrchestrator {
       // Per-agent_run incremental: trigger + Σ(outputs+tools) — each agent_run independent (Q1/Q9)
       const syntheticInput = this.agentLedger.getSyntheticCompletedInput();
       if (syntheticInput > 0) {
-        (e as { inputTokens?: number }).inputTokens =
-          Math.round(syntheticInput); // SAFETY: turn_start input estimate seam
+        (e as { inputTokens?: number }).inputTokens = Math.round(syntheticInput); // SAFETY: turn_start input estimate seam
       } else if (syntheticInput === 0) {
         (e as { inputTokens?: number }).inputTokens = 0; // SAFETY: turn_start input estimate seam — Q11 a fallback 0
       }
@@ -780,15 +720,13 @@ export class SessionOrchestrator {
     });
     pi.on("tool_execution_end", (e) => {
       const text = extractToolResultText(e);
-      if (text.length > 0)
-        this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
+      if (text.length > 0) this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
       this.runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
       refreshAllLive();
     });
     pi.on("tool_result", (e) => {
       const text = extractToolResultText(e);
-      if (text.length > 0)
-        this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
+      if (text.length > 0) this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
       this.runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
       refreshAllLive();
     });
@@ -804,10 +742,8 @@ export class SessionOrchestrator {
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       const effectiveTel =
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        (tel as unknown as
-          | import("./telemetry.js").TurnTelemetry
-          | null
-          | undefined) ?? settledFromLedger;
+        (tel as unknown as import("./telemetry.js").TurnTelemetry | null | undefined) ??
+        settledFromLedger;
       this.runActivityTracker.settle();
       this.liveBorder.stopTick();
       if (this.agentStartMs === null) {
@@ -829,16 +765,14 @@ export class SessionOrchestrator {
         ) {
           const totals = getUsageTotals(
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-            this.lastSessionCtx as unknown as Parameters<
-              typeof getUsageTotals
-            >[0], // SAFETY: pi seam
+            this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
           );
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          const ctxTokens =
-            (this.lastSessionCtx as ExtensionContextLike & {
-                getContextUsage?: () => { tokens?: number };
-              }
-            )?.getContextUsage?.()?.tokens;
+          const ctxTokens = (
+            this.lastSessionCtx as ExtensionContextLike & {
+              getContextUsage?: () => { tokens?: number };
+            }
+          )?.getContextUsage?.()?.tokens;
           const snap = this.runActivityTracker.getSnapshot();
           this.transcriptTimeline.handleAgentSettled(
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
@@ -858,15 +792,10 @@ export class SessionOrchestrator {
       } catch {
         // SAFETY: best-effort, ignore recoverable error
       }
-      if (
-        effectiveTel &&
-        this.installedEditor &&
-        this.currentConfig.telemetry.enabled
-      ) {
+      if (effectiveTel && this.installedEditor && this.currentConfig.telemetry.enabled) {
         try {
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui
-            ?.theme; // SAFETY: pi seam
+          const themeArg = (c as unknown as { ui?: { theme?: unknown } })?.ui?.theme; // SAFETY: pi seam
           const glyphs = resolveGlyphs(this.currentConfig.icons.mode);
           const right = formatTurnTelemetry(
             effectiveTel,
@@ -879,10 +808,7 @@ export class SessionOrchestrator {
         } catch (_e) {
           void _e; // SAFETY: best-effort UI, ignore recoverable error
         }
-      } else if (
-        this.installedEditor &&
-        !this.currentConfig.telemetry.enabled
-      ) {
+      } else if (this.installedEditor && !this.currentConfig.telemetry.enabled) {
         try {
           this.installedEditor.setChrome({ telemetryText: "" });
           this.installedEditor.setChrome({ bottomLeftText: "" });

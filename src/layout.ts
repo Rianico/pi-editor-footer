@@ -15,12 +15,7 @@ export type PrioritizedSegment = {
   truncate?: (text: string, maxWidth: number, ellipsis: string) => string;
 };
 
-export function alignRight(
-  left: string,
-  right: string,
-  width: number,
-  theme: Theme,
-): string {
+export function alignRight(left: string, right: string, width: number, theme: Theme): string {
   const rightW = visibleWidth(right);
   if (rightW > width) {
     right = truncateToWidth(right, width, theme.fg("dim", "..."));
@@ -33,9 +28,7 @@ export function alignRight(
   }
   const availableForLeft = Math.max(0, width - rightW2 - 1);
   const truncatedLeft =
-    availableForLeft > 0
-      ? truncateToWidth(left, availableForLeft, theme.fg("dim", "..."))
-      : "";
+    availableForLeft > 0 ? truncateToWidth(left, availableForLeft, theme.fg("dim", "...")) : "";
   return truncatedLeft ? truncatedLeft + " " + right : right;
 }
 
@@ -53,14 +46,11 @@ export function fitSegmentsByPriority(
   }));
   const totalW = () => {
     const active = items.filter((it) => it.text !== "");
-    return (
-      active.reduce((a, it) => a + it.w, 0) + Math.max(0, active.length - 1)
-    );
+    return active.reduce((a, it) => a + it.w, 0) + Math.max(0, active.length - 1);
   };
   if (totalW() > maxW) {
     for (const item of items) {
-      if (!item.compactText || visibleWidth(item.compactText) >= item.w)
-        continue;
+      if (!item.compactText || visibleWidth(item.compactText) >= item.w) continue;
       item.text = item.compactText;
       item.w = visibleWidth(item.text);
       if (totalW() <= maxW) break;
@@ -77,11 +67,8 @@ export function fitSegmentsByPriority(
       }
     }
     if (target === -1) break;
-    const others = items.filter(
-      (_, i) => i !== target && items[i]!.text !== "",
-    );
-    const otherW =
-      others.reduce((a, it) => a + it.w, 0) + Math.max(0, others.length - 1);
+    const others = items.filter((_, i) => i !== target && items[i]!.text !== "");
+    const otherW = others.reduce((a, it) => a + it.w, 0) + Math.max(0, others.length - 1);
     const avail = maxW - otherW - (others.length > 0 ? 1 : 0);
     if (avail <= visibleWidth(ellipsis)) {
       items[target]!.text = "";
@@ -145,10 +132,7 @@ export function headerColumnWidths(
     return { leftWidth: innerWidth, rightWidth: 0, useTips: false };
   }
 
-  let rightWidth = Math.min(
-    maxTipsWidth,
-    Math.max(minTipsWidth, Math.round(innerWidth * 0.28)),
-  );
+  let rightWidth = Math.min(maxTipsWidth, Math.max(minTipsWidth, Math.round(innerWidth * 0.28)));
   let leftWidth = innerWidth - gap - rightWidth;
 
   if (leftWidth < minLeftWidth) {

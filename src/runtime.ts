@@ -50,13 +50,7 @@ const RUNTIMES: readonly RuntimeDef[] = [
   },
   {
     name: "python",
-    files: [
-      "pyproject.toml",
-      "requirements.txt",
-      "setup.py",
-      "Pipfile",
-      ".python-version",
-    ],
+    files: ["pyproject.toml", "requirements.txt", "setup.py", "Pipfile", ".python-version"],
     versionCommand: {
       cmd: "python3",
       args: ["--version"],
@@ -249,8 +243,7 @@ function matchesDef(cwd: string, def: RuntimeDef): boolean {
   if (def.extensions) {
     try {
       const entries = readdirSync(cwd);
-      if (entries.some((e) => def.extensions!.some((ext) => e.endsWith(ext))))
-        return true;
+      if (entries.some((e) => def.extensions!.some((ext) => e.endsWith(ext)))) return true;
     } catch {
       // SAFETY: best-effort, ignore recoverable error
       // SAFETY: best-effort, ignore recoverable error
@@ -259,21 +252,14 @@ function matchesDef(cwd: string, def: RuntimeDef): boolean {
   return false;
 }
 
-async function fetchVersion(
-  def: RuntimeDef,
-  cwd: string,
-): Promise<string | undefined> {
+async function fetchVersion(def: RuntimeDef, cwd: string): Promise<string | undefined> {
   if (!def.versionCommand) return undefined;
   try {
-    const { stdout } = await execFileAsync(
-      def.versionCommand.cmd,
-      def.versionCommand.args ?? [],
-      {
-        cwd,
-        timeout: VERSION_TIMEOUT_MS,
-        maxBuffer: 64 * 1024,
-      },
-    );
+    const { stdout } = await execFileAsync(def.versionCommand.cmd, def.versionCommand.args ?? [], {
+      cwd,
+      timeout: VERSION_TIMEOUT_MS,
+      maxBuffer: 64 * 1024,
+    });
     if (def.versionCommand.pattern) {
       const match = stdout.match(def.versionCommand.pattern);
       return match?.[1];
@@ -285,9 +271,7 @@ async function fetchVersion(
   }
 }
 
-export async function readRuntimeInfo(
-  cwd: string,
-): Promise<RuntimeInfo | null> {
+export async function readRuntimeInfo(cwd: string): Promise<RuntimeInfo | null> {
   for (const def of RUNTIMES) {
     if (!matchesDef(cwd, def)) continue;
     const fp = fingerprint(cwd, def);

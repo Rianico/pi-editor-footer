@@ -25,11 +25,7 @@ import { formatTopContextFromSnapshot } from "./chrome-state.js";
 import type { RunActivitySnapshot } from "./run-activity.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
 import type { TelemetryConfig, TurnTelemetry } from "./telemetry.js";
-import {
-  formatTelemetryTokens,
-  formatTurnDuration,
-  formatTurnTelemetry,
-} from "./telemetry.js";
+import { formatTelemetryTokens, formatTurnDuration, formatTurnTelemetry } from "./telemetry.js";
 
 /** Typed fg surface — the only theme capability the chrome needs. */
 export interface ChromeThemeLike {
@@ -48,9 +44,7 @@ export function adaptTheme(rawTheme: unknown): ChromeThemeLike {
 }
 
 /** Optional thinking-border glow (pi theme extension). Falls back to identity. */
-export function resolveGlow(
-  rawTheme: unknown,
-): ((level: string, s: string) => string) | undefined {
+export function resolveGlow(rawTheme: unknown): ((level: string, s: string) => string) | undefined {
   const t = rawTheme as {
     // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
     getThinkingBorderColor?: (level: string) => (s: string) => string;

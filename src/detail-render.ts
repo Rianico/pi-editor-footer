@@ -9,10 +9,10 @@
 import * as os from "node:os";
 
 export interface DetailItem {
-	label: string;
-	kind: string;
-	description: string;
-	path?: string;
+  label: string;
+  kind: string;
+  description: string;
+  path?: string;
 }
 
 /**
@@ -28,68 +28,67 @@ export interface DetailItem {
  * - `scrollOffset` is clamped into `[0, max(0, contentLines - (maxLines - 1))]`.
  */
 export function renderDetail(
-	item: DetailItem | null,
-	width: number,
-	maxLines: number,
-	scrollOffset: number,
+  item: DetailItem | null,
+  width: number,
+  maxLines: number,
+  scrollOffset: number,
 ): string[] {
-	if (!item || item.description.trim() === "") {
-		return [];
-	}
+  if (!item || item.description.trim() === "") {
+    return [];
+  }
 
-	const wrapWidth = Math.max(1, Math.floor(width));
-	const safeMax = Math.max(1, Math.floor(maxLines));
+  const wrapWidth = Math.max(1, Math.floor(width));
+  const safeMax = Math.max(1, Math.floor(maxLines));
 
-	const contentLines = wrapDescription(item.description, wrapWidth);
-	const capacity = Math.max(0, safeMax - 1);
-	const maxOffset =
-		capacity === 0 ? 0 : Math.max(0, contentLines.length - capacity);
-	const offset = clamp(Math.floor(scrollOffset) || 0, 0, maxOffset);
+  const contentLines = wrapDescription(item.description, wrapWidth);
+  const capacity = Math.max(0, safeMax - 1);
+  const maxOffset = capacity === 0 ? 0 : Math.max(0, contentLines.length - capacity);
+  const offset = clamp(Math.floor(scrollOffset) || 0, 0, maxOffset);
 
-	const visibleLines = contentLines.slice(offset, offset + capacity);
+  const visibleLines = contentLines.slice(offset, offset + capacity);
 
-	// "More content" marker: `...` replaces the last visible content line when
-	// there is content remaining BELOW the window (not yet scrolled to the
-	// bottom). The header's ` offset/total` marker still carries the totals.
-	const hasMoreBelow = offset + visibleLines.length < contentLines.length;
-	if (hasMoreBelow && visibleLines.length > 0) {
-		visibleLines[visibleLines.length - 1] = "...";
-	}
-	const overflows = contentLines.length > capacity;
-	const base = `${item.label} · ${item.kind}`;
-	const marker = overflows ? ` ${offset + 1}/${contentLines.length}` : "";
-	const markerLen = marker.length;
-	let header: string;
-	const rawPath = item.path?.trim() ?? "";
-	if (rawPath !== "") {
-		const normalized = normalizePath(rawPath);
-		const availableForPath = Math.max(0, wrapWidth - base.length - markerLen - 2);
-		let pathSeg = "";
-		if (availableForPath >= 10) {
-			const truncated =
-				normalized.length <= availableForPath
-					? normalized
-					: truncateMiddle(normalized, availableForPath);
-			pathSeg = `  ${truncated}`;
-		}
-		const totalLen = base.length + pathSeg.length + markerLen;
-		if (totalLen <= wrapWidth) {
-			header = base + pathSeg + marker;
-		} else if (pathSeg !== "") {
-			const baseWidth = Math.max(0, wrapWidth - pathSeg.length - markerLen);
-			header = truncateToWidth(base, baseWidth) + pathSeg + marker;
-		} else {
-			const nameWidth = Math.max(0, wrapWidth - markerLen);
-			header = truncateToWidth(base, nameWidth) + marker;
-		}
-	} else if (overflows) {
-		const nameWidth = Math.max(0, wrapWidth - markerLen);
-		header = truncateToWidth(base, nameWidth) + marker;
-	} else {
-		header = truncateToWidth(base, wrapWidth);
-	}
+  // "More content" marker: `...` replaces the last visible content line when
+  // there is content remaining BELOW the window (not yet scrolled to the
+  // bottom). The header's ` offset/total` marker still carries the totals.
+  const hasMoreBelow = offset + visibleLines.length < contentLines.length;
+  if (hasMoreBelow && visibleLines.length > 0) {
+    visibleLines[visibleLines.length - 1] = "...";
+  }
+  const overflows = contentLines.length > capacity;
+  const base = `${item.label} · ${item.kind}`;
+  const marker = overflows ? ` ${offset + 1}/${contentLines.length}` : "";
+  const markerLen = marker.length;
+  let header: string;
+  const rawPath = item.path?.trim() ?? "";
+  if (rawPath !== "") {
+    const normalized = normalizePath(rawPath);
+    const availableForPath = Math.max(0, wrapWidth - base.length - markerLen - 2);
+    let pathSeg = "";
+    if (availableForPath >= 10) {
+      const truncated =
+        normalized.length <= availableForPath
+          ? normalized
+          : truncateMiddle(normalized, availableForPath);
+      pathSeg = `  ${truncated}`;
+    }
+    const totalLen = base.length + pathSeg.length + markerLen;
+    if (totalLen <= wrapWidth) {
+      header = base + pathSeg + marker;
+    } else if (pathSeg !== "") {
+      const baseWidth = Math.max(0, wrapWidth - pathSeg.length - markerLen);
+      header = truncateToWidth(base, baseWidth) + pathSeg + marker;
+    } else {
+      const nameWidth = Math.max(0, wrapWidth - markerLen);
+      header = truncateToWidth(base, nameWidth) + marker;
+    }
+  } else if (overflows) {
+    const nameWidth = Math.max(0, wrapWidth - markerLen);
+    header = truncateToWidth(base, nameWidth) + marker;
+  } else {
+    header = truncateToWidth(base, wrapWidth);
+  }
 
-	return [header, ...visibleLines];
+  return [header, ...visibleLines];
 }
 
 /**
@@ -97,15 +96,11 @@ export function renderDetail(
  * (excluding the header). Single source of wrapping truth for both render
  * and scroll clamping — avoids re-parsing the rendered header marker.
  */
-export function contentLineCount(
-	item: DetailItem | null,
-	width: number,
-): number {
-	if (!item || item.description.trim() === "") {
-		return 0;
-	}
-	return wrapDescription(item.description, Math.max(1, Math.floor(width)))
-		.length;
+export function contentLineCount(item: DetailItem | null, width: number): number {
+  if (!item || item.description.trim() === "") {
+    return 0;
+  }
+  return wrapDescription(item.description, Math.max(1, Math.floor(width))).length;
 }
 
 /**
@@ -116,76 +111,76 @@ export function contentLineCount(
  *   `[0, contentLines - (maxLines - 1)]`.
  */
 export function scroll(
-	offset: number,
-	delta: -1 | 1,
-	contentLines: number,
-	maxLines: number,
+  offset: number,
+  delta: -1 | 1,
+  contentLines: number,
+  maxLines: number,
 ): number {
-	const capacity = Math.max(0, maxLines - 1);
-	if (capacity === 0) {
-		return 0;
-	}
-	const maxOffset = Math.max(0, contentLines - capacity);
-	if (maxOffset === 0) {
-		return 0;
-	}
-	return clamp(Math.floor(offset) + delta, 0, maxOffset);
+  const capacity = Math.max(0, maxLines - 1);
+  if (capacity === 0) {
+    return 0;
+  }
+  const maxOffset = Math.max(0, contentLines - capacity);
+  if (maxOffset === 0) {
+    return 0;
+  }
+  return clamp(Math.floor(offset) + delta, 0, maxOffset);
 }
 
 function wrapDescription(description: string, width: number): string[] {
-	const lines: string[] = [];
-	for (const rawLine of description.split("\n")) {
-		const trimmed = rawLine.replace(/\s+$/g, "");
-		if (trimmed === "") {
-			// Preserve explicit paragraph breaks (empty lines in the description).
-			lines.push("");
-			continue;
-		}
-		for (let i = 0; i < trimmed.length; i += width) {
-			const segment = trimmed.slice(i, i + width).replace(/\s+$/g, "");
-			if (segment !== "") {
-				lines.push(segment);
-			}
-		}
-	}
-	return lines;
+  const lines: string[] = [];
+  for (const rawLine of description.split("\n")) {
+    const trimmed = rawLine.replace(/\s+$/g, "");
+    if (trimmed === "") {
+      // Preserve explicit paragraph breaks (empty lines in the description).
+      lines.push("");
+      continue;
+    }
+    for (let i = 0; i < trimmed.length; i += width) {
+      const segment = trimmed.slice(i, i + width).replace(/\s+$/g, "");
+      if (segment !== "") {
+        lines.push(segment);
+      }
+    }
+  }
+  return lines;
 }
 
 function truncateToWidth(text: string, width: number): string {
-	return text.length <= width ? text : text.slice(0, width);
+  return text.length <= width ? text : text.slice(0, width);
 }
 
 export function normalizePath(raw: string): string {
-	if (!raw) return raw;
-	let p = raw.replace(/\\/g, "/");
-	try {
-		const cwd = process.cwd().replace(/\\/g, "/");
-		if (p === cwd) p = ".";
-		else if (p.startsWith(`${cwd}/`)) p = p.slice(cwd.length + 1);
-		else {
-			const home = os.homedir();
-			if (home) {
-				const homePosix = home.replace(/\\/g, "/");
-				if (p === homePosix) p = "~";
-				else if (p.startsWith(`${homePosix}/`)) p = `~${p.slice(homePosix.length)}`;
-			}
-		}
-	} catch {
-		// ignore homedir/cwd failures
-	}
-	return p;
+  if (!raw) return raw;
+  let p = raw.replace(/\\/g, "/");
+  try {
+    const cwd = process.cwd().replace(/\\/g, "/");
+    if (p === cwd) p = ".";
+    else if (p.startsWith(`${cwd}/`)) p = p.slice(cwd.length + 1);
+    else {
+      const home = os.homedir();
+      if (home) {
+        const homePosix = home.replace(/\\/g, "/");
+        if (p === homePosix) p = "~";
+        else if (p.startsWith(`${homePosix}/`)) p = `~${p.slice(homePosix.length)}`;
+      }
+    }
+  } catch {
+    // ignore homedir/cwd failures
+  }
+  return p;
 }
 
 export function truncateMiddle(text: string, maxWidth: number): string {
-	if (text.length <= maxWidth) return text;
-	if (maxWidth <= 1) return text.slice(0, maxWidth);
-	if (maxWidth === 2) return `${text.slice(0, 1)}…`;
-	const keep = maxWidth - 1;
-	const left = Math.ceil(keep / 2);
-	const right = Math.floor(keep / 2);
-	return `${text.slice(0, left)}…${text.slice(text.length - right)}`;
+  if (text.length <= maxWidth) return text;
+  if (maxWidth <= 1) return text.slice(0, maxWidth);
+  if (maxWidth === 2) return `${text.slice(0, 1)}…`;
+  const keep = maxWidth - 1;
+  const left = Math.ceil(keep / 2);
+  const right = Math.floor(keep / 2);
+  return `${text.slice(0, left)}…${text.slice(text.length - right)}`;
 }
 
 function clamp(value: number, min: number, max: number): number {
-	return Math.max(min, Math.min(max, value));
+  return Math.max(min, Math.min(max, value));
 }

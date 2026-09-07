@@ -8,8 +8,7 @@ export function formatCwd(cwd: string): string {
   const resolvedHome = resolve(home);
   const rel = relative(resolvedHome, resolvedCwd);
   const insideHome =
-    rel === "" ||
-    (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+    rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
   if (!insideHome) return cwd;
   return rel === "" ? "~" : `~${sep}${rel}`;
 }

@@ -90,12 +90,8 @@ export function aggregateAgentTurns(
   }
   totalTokens = inputTokens + outputTokens;
   const totalMs = startMs === null ? 0 : Math.max(0, now - startMs);
-  const measurementMs =
-    outputTokens > 0 && generationMs > 0 ? generationMs : null;
-  const tps =
-    measurementMs === null
-      ? null
-      : round(outputTokens / (measurementMs / 1000), 1);
+  const measurementMs = outputTokens > 0 && generationMs > 0 ? generationMs : null;
+  const tps = measurementMs === null ? null : round(outputTokens / (measurementMs / 1000), 1);
   const validCost = Number.isFinite(costUsd) && costUsd > 0;
   const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
   return {
@@ -107,9 +103,7 @@ export function aggregateAgentTurns(
     stallMs,
     stallCount,
     rateUsdPerMTokens:
-      validCost && validTokens
-        ? round(costUsd / (totalTokens / 1_000_000), 2)
-        : null,
+      validCost && validTokens ? round(costUsd / (totalTokens / 1_000_000), 2) : null,
     generationMs,
     totalTokens,
     costUsd: validCost ? costUsd : 0,
@@ -131,11 +125,7 @@ export function capInputForIdle(
   sessionTotalInput: number,
 ): number {
   let capped = input;
-  if (
-    typeof contextTokens === "number" &&
-    Number.isFinite(contextTokens) &&
-    contextTokens > 0
-  ) {
+  if (typeof contextTokens === "number" && Number.isFinite(contextTokens) && contextTokens > 0) {
     capped = Math.min(capped, contextTokens);
   }
   if (sessionTotalInput > 0) {
@@ -144,16 +134,9 @@ export function capInputForIdle(
   return Math.max(0, capped);
 }
 
-export function capInputForLive(
-  input: number,
-  contextTokens: number | undefined,
-): number {
+export function capInputForLive(input: number, contextTokens: number | undefined): number {
   let capped = input;
-  if (
-    typeof contextTokens === "number" &&
-    Number.isFinite(contextTokens) &&
-    contextTokens > 0
-  ) {
+  if (typeof contextTokens === "number" && Number.isFinite(contextTokens) && contextTokens > 0) {
     capped = Math.min(capped, contextTokens);
   }
   return Math.max(0, capped);
@@ -204,8 +187,7 @@ export class AgentRunLedger {
 
   /** Set trigger message tokens for this agent_run (chars/4, or 0 per Q11 a). */
   setTriggerTokens(tokens: number): void {
-    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0)
-      return;
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return;
     this.triggerTokens = Math.round(tokens);
   }
 
@@ -215,8 +197,7 @@ export class AgentRunLedger {
 
   /** Add tool result tokens (chars/4) to accumulation (Q8 a). */
   addToolResultTokens(tokens: number): void {
-    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0)
-      return;
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return;
     this.accumToolTokens += Math.round(tokens);
   }
 
@@ -236,9 +217,7 @@ export class AgentRunLedger {
   /** Synthetic live input including live delta: trigger + Σ(outputs+tools) + liveDelta. */
   getSyntheticLiveInput(liveDeltaTokens: number): number {
     const d =
-      typeof liveDeltaTokens === "number" && Number.isFinite(liveDeltaTokens)
-        ? liveDeltaTokens
-        : 0;
+      typeof liveDeltaTokens === "number" && Number.isFinite(liveDeltaTokens) ? liveDeltaTokens : 0;
     return (
       this.triggerTokens +
       this.accumOutputTokens +
@@ -267,10 +246,7 @@ export class AgentRunLedger {
   }
 
   /** Live totals including optional running turn. */
-  getLiveTotals(
-    liveTurn: TurnTelemetry | null,
-    now?: number,
-  ): TurnTelemetry | null {
+  getLiveTotals(liveTurn: TurnTelemetry | null, now?: number): TurnTelemetry | null {
     const n = typeof now === "number" ? now : this.now();
     const result = aggregateAgentTurns(this.turns, liveTurn, this.startMs, n);
     // If no agent active (startMs null) but we have turns/live, aggregateTurns handles it;
@@ -290,11 +266,7 @@ export class AgentRunLedger {
     contextTokens: number | undefined,
   ): { input: number; output: number; cost: number } {
     if (tel) {
-      const cappedInput = capInputForIdle(
-        tel.inputTokens,
-        contextTokens,
-        snapshotTotals.input,
-      );
+      const cappedInput = capInputForIdle(tel.inputTokens, contextTokens, snapshotTotals.input);
       return {
         input: cappedInput,
         output: tel.outputTokens,
@@ -303,19 +275,11 @@ export class AgentRunLedger {
     }
     if (this.baseline) {
       const d = deltaFromBaseline(snapshotTotals, this.baseline);
-      const cappedInput = capInputForIdle(
-        d.input,
-        contextTokens,
-        snapshotTotals.input,
-      );
+      const cappedInput = capInputForIdle(d.input, contextTokens, snapshotTotals.input);
       return { input: cappedInput, output: d.output, cost: d.cost };
     }
     // No baseline — best effort session totals capped for input
-    const cappedInput = capInputForIdle(
-      snapshotTotals.input,
-      contextTokens,
-      snapshotTotals.input,
-    );
+    const cappedInput = capInputForIdle(snapshotTotals.input, contextTokens, snapshotTotals.input);
     return {
       input: cappedInput,
       output: snapshotTotals.output,
@@ -349,11 +313,7 @@ export class AgentRunLedger {
       displayOutput = snapshotTotals.output;
       displayCost = snapshotTotals.cost;
     }
-    const cappedInput = capInputForIdle(
-      displayInput,
-      contextTokens,
-      snapshotTotals.input,
-    );
+    const cappedInput = capInputForIdle(displayInput, contextTokens, snapshotTotals.input);
     return {
       tps: null,
       ttftMs: 0,
@@ -392,11 +352,7 @@ export class AgentRunLedger {
       displayOutput = snapshotTotals.output;
       displayCost = snapshotTotals.cost;
     }
-    const cappedInput = capInputForIdle(
-      displayInput,
-      contextTokens,
-      snapshotTotals.input,
-    );
+    const cappedInput = capInputForIdle(displayInput, contextTokens, snapshotTotals.input);
     return {
       tps: null,
       ttftMs: 0,
@@ -463,23 +419,15 @@ export class AgentRunLedger {
     const base: TurnTelemetry | null = agentLive ?? liveTurn;
     if (!base) return null;
     // When both exist, agentLive already sums outputs, so use it; else liveTurn
-    const displayOutput = agentLive
-      ? agentLive.outputTokens
-      : liveTurn!.outputTokens;
+    const displayOutput = agentLive ? agentLive.outputTokens : liveTurn!.outputTokens;
     const displayCost = agentLive ? agentLive.costUsd : liveTurn!.costUsd;
     const displayStallMs = agentLive ? agentLive.stallMs : liveTurn!.stallMs;
-    const displayStallCount = agentLive
-      ? agentLive.stallCount
-      : liveTurn!.stallCount;
-    const displayGenerationMs = agentLive
-      ? agentLive.generationMs
-      : liveTurn!.generationMs;
+    const displayStallCount = agentLive ? agentLive.stallCount : liveTurn!.stallCount;
+    const displayGenerationMs = agentLive ? agentLive.generationMs : liveTurn!.generationMs;
     const displayTtft = agentLive ? agentLive.ttftMs : liveTurn!.ttftMs;
     const displayTps = agentLive ? agentLive.tps : liveTurn!.tps;
     const displayTotalMs = agentLive ? agentLive.totalMs : liveTurn!.totalMs;
-    const displayMeasurementMs = agentLive
-      ? agentLive.measurementMs
-      : liveTurn!.measurementMs;
+    const displayMeasurementMs = agentLive ? agentLive.measurementMs : liveTurn!.measurementMs;
     return {
       tps: displayTps,
       ttftMs: displayTtft,

@@ -16,6 +16,9 @@ Single-context — one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/
 
 Conventional commits & changelog: see CONTRIBUTING.md
 
+### Runtime
+TypeScript: pnpm v12 + .nvmrc (24) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json
+
 ## Pi editor replacement — sync contract
 
 This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tracking-editor.ts`) is the actual editor in the input box. It replicates pi's `CustomEditor` inline and observes the completion popup through two private pi-tui internals (`autocompleteList`, `applyAutocompleteSuggestions`).

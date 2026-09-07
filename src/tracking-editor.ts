@@ -87,10 +87,7 @@ export class TrackingEditor extends Editor {
     super(tui, theme, options);
     this.keybindings = keybindings;
     this.cursorPolicy = new CursorPolicy(tui);
-    this.borderRenderer = new BorderRenderer(
-      getLiveTheme,
-      () => this._chrome.modelInfo,
-    );
+    this.borderRenderer = new BorderRenderer(getLiveTheme, () => this._chrome.modelInfo);
     this.patchApplyAutocompleteSuggestions();
   }
 
@@ -104,18 +101,12 @@ export class TrackingEditor extends Editor {
     let cursorChanged = false;
     const prevCursor = this._chrome.cursorStyle;
     if (patch.modelInfo !== undefined) this._chrome.modelInfo = patch.modelInfo;
-    if (patch.glowEnabled !== undefined)
-      this._chrome.glowEnabled = patch.glowEnabled;
-    if (patch.topRightText !== undefined)
-      this._chrome.topRightText = patch.topRightText;
-    if (patch.topContextText !== undefined)
-      this._chrome.topContextText = patch.topContextText;
-    if (patch.topTokensText !== undefined)
-      this._chrome.topTokensText = patch.topTokensText;
-    if (patch.telemetryText !== undefined)
-      this._chrome.telemetryText = patch.telemetryText;
-    if (patch.bottomLeftText !== undefined)
-      this._chrome.bottomLeftText = patch.bottomLeftText;
+    if (patch.glowEnabled !== undefined) this._chrome.glowEnabled = patch.glowEnabled;
+    if (patch.topRightText !== undefined) this._chrome.topRightText = patch.topRightText;
+    if (patch.topContextText !== undefined) this._chrome.topContextText = patch.topContextText;
+    if (patch.topTokensText !== undefined) this._chrome.topTokensText = patch.topTokensText;
+    if (patch.telemetryText !== undefined) this._chrome.telemetryText = patch.telemetryText;
+    if (patch.bottomLeftText !== undefined) this._chrome.bottomLeftText = patch.bottomLeftText;
     if (patch.cursorStyle !== undefined) {
       this._chrome.cursorStyle = patch.cursorStyle;
       cursorChanged = prevCursor !== patch.cursorStyle;
@@ -175,7 +166,9 @@ export class TrackingEditor extends Editor {
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: focused is private Editor state read-only for cursor policy; fallback false preserves behavior
       // biome-ignore format: keep SAFETY comment directly before cast for ast-grep
-      (/* SAFETY: intentional unsafe cast — validated at runtime */ this as unknown as { focused?: boolean }).focused ?? false;
+      /* SAFETY: intentional unsafe cast — validated at runtime */ (
+        this as unknown as { focused?: boolean }
+      ).focused ?? false;
     return this.cursorPolicy.mapLines(lines, isFocused);
   }
 
@@ -203,8 +196,7 @@ export class TrackingEditor extends Editor {
     }
     if (this.keybindings.matches(data, "app.interrupt")) {
       if (!this.isShowingAutocomplete()) {
-        const handler =
-          this.onEscape ?? this.actionHandlers.get("app.interrupt");
+        const handler = this.onEscape ?? this.actionHandlers.get("app.interrupt");
         if (handler) {
           handler();
           return;

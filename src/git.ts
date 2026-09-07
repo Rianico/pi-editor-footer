@@ -1,6 +1,4 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -64,14 +62,7 @@ export async function readGitStatus(
     readCounts?: boolean;
   } = {},
 ): Promise<GitStatus> {
-  if (!existsSync(join(cwd, ".git"))) {
-    return emptyGitStatus();
-  }
-
-  const stdout = await gitExec(
-    ["status", "--porcelain=v1", "--branch", "--show-stash"],
-    cwd,
-  );
+  const stdout = await gitExec(["status", "--porcelain=v1", "--branch", "--show-stash"], cwd);
   if (stdout === null) {
     return emptyGitStatus();
   }
@@ -86,16 +77,17 @@ export async function readGitStatus(
       if (detached) {
         status.branch = undefined;
         status.commit = { oid: null, detached: true, tag: null };
+      } else if (branchPart.startsWith("No commits yet on ")) {
+        const m = branchPart.match(/^No commits yet on (\S+)/);
+        if (m?.[1]) status.branch = m[1];
       } else {
         const branchMatch = branchPart.match(
           /^(\S+?)(?:\.\.\.(\S+))?(?:\s+\[(ahead|behind) (\d+)\])?$/,
         );
         if (branchMatch) {
           status.branch = branchMatch[1];
-          if (branchMatch[3] === "ahead")
-            status.ahead = parseInt(branchMatch[4]!, 10);
-          if (branchMatch[3] === "behind")
-            status.behind = parseInt(branchMatch[4]!, 10);
+          if (branchMatch[3] === "ahead") status.ahead = parseInt(branchMatch[4]!, 10);
+          if (branchMatch[3] === "behind") status.behind = parseInt(branchMatch[4]!, 10);
         }
       }
       continue;
@@ -124,16 +116,10 @@ export async function readGitStatus(
     }
   }
 
-  if (
-    options.readCounts !== false &&
-    status.stashed === 0 &&
-    !stdout.includes("# stash")
-  ) {
+  if (options.readCounts !== false && status.stashed === 0 && !stdout.includes("# stash")) {
     const stashOut = await gitExec(["stash", "list"], cwd);
     if (stashOut !== null) {
-      const count = stashOut
-        .split("\n")
-        .filter((l) => l.trim().length > 0).length;
+      const count = stashOut.split("\n").filter((l) => l.trim().length > 0).length;
       if (!Number.isNaN(count)) status.stashed = count;
     }
   }
@@ -144,10 +130,7 @@ export async function readGitStatus(
       status.commit.oid = oid.trim();
     }
     if (options.readTag) {
-      const tag = await gitExec(
-        ["describe", "--tags", "--exact-match", "HEAD"],
-        cwd,
-      );
+      const tag = await gitExec(["describe", "--tags", "--exact-match", "HEAD"], cwd);
       if (tag) {
         status.commit.tag = tag.trim();
       }

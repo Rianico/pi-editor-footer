@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import {
-  adaptTheme,
-  ChromeComposition,
-  resolveGlow,
-} from "../src/chrome-composition.js";
+import { adaptTheme, ChromeComposition, resolveGlow } from "../src/chrome-composition.js";
 import { createChromeSnapshot } from "../src/chrome-state.js";
 import type { TurnTelemetry } from "../src/telemetry.js";
 

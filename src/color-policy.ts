@@ -54,9 +54,7 @@ export function providerColor(provider: string): ThemeColor {
   }
 }
 
-export function effortColor(
-  level: ThinkingLevel | string | undefined,
-): ThemeColor {
+export function effortColor(level: ThinkingLevel | string | undefined): ThemeColor {
   switch (level) {
     case "minimal":
       return "thinkingMinimal";

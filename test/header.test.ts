@@ -109,22 +109,14 @@ describe("renderHeader", () => {
 
   it("returns empty for missing cwd", () => {
     assert.deepEqual(
-      renderHeader(
-        80,
-        { cwd: "", workspaceDisplay: "path", tipCommands: ["theme"] },
-        theme,
-      ),
+      renderHeader(80, { cwd: "", workspaceDisplay: "path", tipCommands: ["theme"] }, theme),
       [],
     );
   });
 
   it("returns empty for zero width", () => {
     assert.deepEqual(
-      renderHeader(
-        0,
-        { cwd: "/tmp/x", workspaceDisplay: "path", tipCommands: ["x"] },
-        theme,
-      ),
+      renderHeader(0, { cwd: "/tmp/x", workspaceDisplay: "path", tipCommands: ["x"] }, theme),
       [],
     );
   });

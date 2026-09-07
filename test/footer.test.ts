@@ -9,9 +9,7 @@ const theme = {
   fg: (_style: string, text: string) => text,
 };
 
-function makeState(
-  overrides: Partial<ReturnType<typeof createInitialState>> = {},
-) {
+function makeState(overrides: Partial<ReturnType<typeof createInitialState>> = {}) {
   return { ...createInitialState(), ...overrides };
 }
 
@@ -55,7 +53,10 @@ describe("footer", () => {
     const linesName = renderFooter(80, state, configName, theme as never, {
       cwd: "/Users/test/long/path/to/project",
     });
-    assert.ok(linesPath[0]!.includes("/Users/test/long/path/to/project") || linesPath[0]!.includes("long/path/to/project"));
+    assert.ok(
+      linesPath[0]!.includes("/Users/test/long/path/to/project") ||
+        linesPath[0]!.includes("long/path/to/project"),
+    );
     assert.ok(linesName[0]!.includes("project"));
     assert.ok(!linesName[0]!.includes("/Users/test/long/path/to/project"));
   });

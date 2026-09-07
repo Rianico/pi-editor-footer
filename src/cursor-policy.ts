@@ -14,27 +14,21 @@ function stripAnsi(s: string): string {
 }
 
 function removeSoftwareCursor(line: string, cursorMarker = ""): string {
-  return line.replace(
-    /\x1b\[7m([\s\S]*?)\x1b\[0m/g,
-    (_match, cursor: string) => {
-      const replacement = `${cursorMarker}${cursor}`;
-      cursorMarker = "";
-      return replacement;
-    },
-  );
+  return line.replace(/\x1b\[7m([\s\S]*?)\x1b\[0m/g, (_match, cursor: string) => {
+    const replacement = `${cursorMarker}${cursor}`;
+    cursorMarker = "";
+    return replacement;
+  });
 }
 
 function configureCursor(tui: TUI, cursorStyle: CursorStyle): void {
   if (cursorStyle === "block") return;
-  const setShow = (
-    // SAFETY: intentional unsafe cast — validated at runtime
-    tui as unknown as { setShowHardwareCursor?: (v: boolean) => void }
-  ).setShowHardwareCursor;
+  const setShow = // SAFETY: intentional unsafe cast — validated at runtime
+    (tui as unknown as { setShowHardwareCursor?: (v: boolean) => void }).setShowHardwareCursor;
   if (typeof setShow === "function") setShow.call(tui, true);
   const seq = CURSOR_STYLE_SEQUENCES[cursorStyle];
   // SAFETY: intentional unsafe cast — validated at runtime
-  const term = (tui as unknown as { terminal?: { write: (s: string) => void } })
-    .terminal;
+  const term = (tui as unknown as { terminal?: { write: (s: string) => void } }).terminal;
   if (seq && term && typeof term.write === "function") term.write(seq);
 }
 
@@ -64,10 +58,8 @@ export class CursorPolicy {
         terminal?: { write: (s: string) => void };
       };
       if (style === "block") {
-        if (tuiAny.terminal)
-          tuiAny.terminal.write(DEFAULT_CURSOR_STYLE_SEQUENCE);
-        if (typeof tuiAny.setShowHardwareCursor === "function")
-          tuiAny.setShowHardwareCursor(false);
+        if (tuiAny.terminal) tuiAny.terminal.write(DEFAULT_CURSOR_STYLE_SEQUENCE);
+        if (typeof tuiAny.setShowHardwareCursor === "function") tuiAny.setShowHardwareCursor(false);
       } else {
         configureCursor(this.tui, style);
       }
@@ -77,8 +69,7 @@ export class CursorPolicy {
   // Called by TrackingEditor.renderBase — removes software cursor and injects hardware marker when needed
   mapLines(lines: string[], isFocused: boolean): string[] {
     if (this.style === "block") return lines;
-    let cursorMarker =
-      this.previewHardwareCursor && !isFocused ? CURSOR_MARKER : "";
+    let cursorMarker = this.previewHardwareCursor && !isFocused ? CURSOR_MARKER : "";
     if (isFocused) this.previewHardwareCursor = false;
     return lines.map((line) => {
       const rendered = removeSoftwareCursor(line, cursorMarker);

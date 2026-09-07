@@ -44,16 +44,8 @@ export interface ChromeSnapshot {
 // Re-exported from footer.ts for backward compatibility.
 // ---------------------------------------------------------------------------
 
-function renderBar(
-  theme: Theme,
-  pct: number,
-  barWidth: number,
-  ascii: boolean,
-): string {
-  const filled = Math.max(
-    0,
-    Math.min(barWidth, Math.round((pct / 100) * barWidth)),
-  );
+function renderBar(theme: Theme, pct: number, barWidth: number, ascii: boolean): string {
+  const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
   const empty = barWidth - filled;
   const color = contextUsageColor(pct);
   const filledCell = ascii ? "#" : "█";
@@ -86,10 +78,7 @@ export function formatContextBar(
   const base = showIconBar
     ? `${theme.fg(contextColor, glyphs.context)} ${renderBar(theme, contextPct, barWidth, isAscii)} ${baseCore}`
     : baseCore;
-  const rate =
-    cacheHitRate !== undefined && Number.isFinite(cacheHitRate)
-      ? cacheHitRate
-      : 0;
+  const rate = cacheHitRate !== undefined && Number.isFinite(cacheHitRate) ? cacheHitRate : 0;
   const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;
   return `${theme.fg(cacheHitColor(rate), cacheText)} ${theme.fg("dim", "|")} ${base}`;
 }
@@ -142,14 +131,17 @@ export function createChromeSnapshot(
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: intentional unsafe cast — validated at runtime
-    (/* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { cwd?: string })?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ (
+      ctx as unknown as { cwd?: string }
+    )?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     process.cwd();
   const sessionName = ctx?.sessionManager?.getSessionName?.();
   const contextUsage = ctx?.getContextUsage?.() as ContextUsage | undefined;
   const totals = getUsageTotals(
     // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: pi seam
-    /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx ??
+      {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults
   // SAFETY: pi seam
@@ -167,9 +159,10 @@ export function createChromeSnapshot(
       renamed: 0,
       deleted: 0,
       commit: null,
-    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
-    // SAFETY: intentional unsafe cast — validated at runtime
-    /* SAFETY: intentional unsafe cast — validated at runtime */ } as unknown as GitStatus); // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      // ast-grep-ignore: require-safety-comment-for-as-unknown-as
+      // SAFETY: intentional unsafe cast — validated at runtime
+      /* SAFETY: intentional unsafe cast — validated at runtime */
+    } as unknown as GitStatus); // SAFETY: pi seam — intentional unsafe cast, validated at runtime
   const runtime = (footerState as FooterState | undefined)?.runtime ?? null;
   return {
     cwd,
@@ -205,12 +198,6 @@ export class ChromeState {
     isAscii: boolean,
     showIconBar = false,
   ): string {
-    return formatTopContextFromSnapshot(
-      this.snapshot(),
-      theme,
-      glyphs,
-      isAscii,
-      showIconBar,
-    );
+    return formatTopContextFromSnapshot(this.snapshot(), theme, glyphs, isAscii, showIconBar);
   }
 }

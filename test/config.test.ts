@@ -43,7 +43,9 @@ describe("loadConfig / saveConfig with temp HOME", () => {
     else process.env.HOME = origHome;
     if (origUserProfile === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = origUserProfile;
-    try { rmSync(tmpHome, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(tmpHome, { recursive: true, force: true });
+    } catch {}
   });
 
   test("loadConfig returns defaults when no file exists", () => {
@@ -71,7 +73,11 @@ describe("loadConfig / saveConfig with temp HOME", () => {
   test("invalid enum values fallback to defaults", () => {
     const cfgPath = getConfigPath();
     mkdirSync(join(cfgPath, ".."), { recursive: true });
-    writeFileSync(cfgPath, JSON.stringify({ workspaceDisplay: "invalid", cursorStyle: "bad", icons: { mode: "nope" } }), "utf8");
+    writeFileSync(
+      cfgPath,
+      JSON.stringify({ workspaceDisplay: "invalid", cursorStyle: "bad", icons: { mode: "nope" } }),
+      "utf8",
+    );
     const cfg = loadConfig();
     assert.equal(cfg.workspaceDisplay, DEFAULT_CONFIG.workspaceDisplay);
     assert.equal(cfg.cursorStyle, DEFAULT_CONFIG.cursorStyle);

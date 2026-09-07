@@ -63,9 +63,7 @@ export function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 export function mean(values: number[]): number {
@@ -78,11 +76,7 @@ export function mean(values: number[]): number {
  * Deliberately uses whole-turn duration so gateway batching does not inflate it.
  * Mirrors pi-core-tps-stats tps() exactly.
  */
-export function tps(
-  outputTokens: number,
-  turnStartMs: number,
-  endMs: number,
-): number | undefined {
+export function tps(outputTokens: number, turnStartMs: number, endMs: number): number | undefined {
   const durationMs = endMs - turnStartMs;
   if (outputTokens <= 0 || durationMs <= 0) return undefined;
   return outputTokens / (durationMs / 1000);
@@ -97,18 +91,10 @@ export function fmtDur(ms: number): string {
 }
 
 /** first streamed token — any content kind counts as generated tokens. */
-const CONTENT_START_EVENTS = new Set([
-  "text_start",
-  "thinking_start",
-  "toolcall_start",
-]);
+const CONTENT_START_EVENTS = new Set(["text_start", "thinking_start", "toolcall_start"]);
 
 /** streaming delta variants — where live output estimation happens. */
-const CONTENT_DELTA_EVENTS = new Set([
-  "text_delta",
-  "thinking_delta",
-  "toolcall_delta",
-]);
+const CONTENT_DELTA_EVENTS = new Set(["text_delta", "thinking_delta", "toolcall_delta"]);
 
 export interface TurnTelemetry {
   tps: number | null;
@@ -299,8 +285,7 @@ export class TurnTelemetryTracker {
           decayedTps = null;
         } else {
           // exponential decay, half-life ~5s (exp(-elapsed/7200) => half at ~5s ln2*7200≈5000)
-          const decayed =
-            this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
+          const decayed = this.decayBaseTps * Math.exp(-elapsedSinceDecay / 7200);
           if (decayed >= 0.05) decayedTps = round(decayed, 1);
         }
       }
@@ -332,11 +317,7 @@ export class TurnTelemetryTracker {
       costUsd += m.usage.cost.total;
     }
     // Input is known at turn_start — use live estimate before authoritative usage arrives
-    if (
-      inputTokens === 0 &&
-      turn.liveInputTokens !== null &&
-      turn.liveInputTokens > 0
-    ) {
+    if (inputTokens === 0 && turn.liveInputTokens !== null && turn.liveInputTokens > 0) {
       inputTokens = turn.liveInputTokens;
       totalTokens = Math.max(totalTokens, inputTokens + outputTokens);
     }
@@ -352,10 +333,7 @@ export class TurnTelemetryTracker {
     }
     // Whole-turn TPS — stable, includes TTFT/prefill/queue (see header). Guard tiny elapsed to avoid spike.
     const measurementMs = elapsed >= 500 && outputTokens > 0 ? elapsed : null;
-    const tpsVal =
-      measurementMs === null
-        ? null
-        : round(outputTokens / (measurementMs / 1000), 1);
+    const tpsVal = measurementMs === null ? null : round(outputTokens / (measurementMs / 1000), 1);
     // Also expose pure tps() parity check (unused here, tested separately): tps(outputTokens, turn.startMs, now)
     void tps;
     const validCost = Number.isFinite(costUsd) && costUsd > 0;
@@ -369,9 +347,7 @@ export class TurnTelemetryTracker {
       stallMs: turn.stallMs,
       stallCount: turn.stallCount,
       rateUsdPerMTokens:
-        validCost && validTokens
-          ? round(costUsd / (totalTokens / 1_000_000), 2)
-          : null,
+        validCost && validTokens ? round(costUsd / (totalTokens / 1_000_000), 2) : null,
       generationMs: elapsed,
       totalTokens,
       costUsd: validCost ? costUsd : 0,
@@ -428,16 +404,13 @@ export class TurnTelemetryTracker {
       liveEstimatedTokens: 0,
       liveDeltaChars: 0,
       liveInputTokens:
-        typeof inputTokens === "number" && Number.isFinite(inputTokens)
-          ? inputTokens
-          : null,
+        typeof inputTokens === "number" && Number.isFinite(inputTokens) ? inputTokens : null,
     };
   }
   /** Set/override the live input estimate for the current turn (known at turn_start via getContextUsage). */
   setTurnInputEstimate(tokens: number): void {
     if (!this.turn) return;
-    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0)
-      return;
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return;
     this.turn.liveInputTokens = Math.round(tokens);
   }
 
@@ -533,8 +506,7 @@ export class TurnTelemetryTracker {
   private endTurn(): TurnTelemetry | undefined {
     const turn = this.turn;
     this.turn = undefined;
-    if (!turn || turn.firstTokenMs === null || turn.messages.length === 0)
-      return;
+    if (!turn || turn.firstTokenMs === null || turn.messages.length === 0) return;
 
     const endMs = this.now();
     let inputTokens = 0;
@@ -547,18 +519,14 @@ export class TurnTelemetryTracker {
       totalTokens += message.usage.totalTokens;
       costUsd += message.usage.cost.total;
     }
-    if (
-      ![inputTokens, outputTokens, totalTokens, costUsd].every(Number.isFinite)
-    ) {
+    if (![inputTokens, outputTokens, totalTokens, costUsd].every(Number.isFinite)) {
       throw new Error("Invalid assistant usage in turn telemetry");
     }
 
-    const measurementMs =
-      outputTokens > 0 && turn.generationMs > 0 ? turn.generationMs : null;
+    const measurementMs = outputTokens > 0 && turn.generationMs > 0 ? turn.generationMs : null;
     // Final TPS uses whole-turn (turn.generationMs = end - start), same denominator as live.
     const raw = tps(outputTokens, endMs - turn.generationMs, endMs);
-    const tpsVal =
-      measurementMs === null || raw === undefined ? null : round(raw, 1);
+    const tpsVal = measurementMs === null || raw === undefined ? null : round(raw, 1);
     const validCost = Number.isFinite(costUsd) && costUsd > 0;
     const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
     return {
@@ -570,9 +538,7 @@ export class TurnTelemetryTracker {
       stallMs: turn.stallMs,
       stallCount: turn.stallCount,
       rateUsdPerMTokens:
-        validCost && validTokens
-          ? round(costUsd / (totalTokens / 1_000_000), 2)
-          : null,
+        validCost && validTokens ? round(costUsd / (totalTokens / 1_000_000), 2) : null,
       generationMs: turn.generationMs,
       totalTokens,
       costUsd: validCost ? costUsd : 0,
@@ -626,12 +592,7 @@ export function formatTurnTelemetry(
     if (telemetry.tps === null) raw = "—";
     else raw = `${isEst ? "~" : ""}${telemetry.tps.toFixed(1)}`;
     const padded = raw.padStart(6, " ");
-    parts.push(
-      theme.fg(
-        telemetry.tps === null ? "muted" : "accent",
-        `${padded} tok/s TPS`,
-      ),
-    );
+    parts.push(theme.fg(telemetry.tps === null ? "muted" : "accent", `${padded} tok/s TPS`));
   }
   if (config.ttft) {
     const sec = (telemetry.ttftMs / 1000).toFixed(1);
@@ -667,21 +628,14 @@ export function formatTelemetryTokens(
     input: "↑",
     output: "↓",
   };
-  const joiner =
-    (g as { dimSep?: string }).dimSep ?? ` ${theme.fg("dim", "·")} `;
+  const joiner = (g as { dimSep?: string }).dimSep ?? ` ${theme.fg("dim", "·")} `;
   const isEst = telemetry.estimated === true;
   // ~ prefix marks live estimate (chars/4, context window) vs authoritative usage
   const inPref = isEst ? "~" : "";
   const outPref = isEst ? "~" : "";
   const parts: string[] = [
-    theme.fg(
-      "accent",
-      `${g.input} ${inPref}${fmtTokens(telemetry.inputTokens)}`,
-    ),
-    theme.fg(
-      "success",
-      `${g.output} ${outPref}${fmtTokens(telemetry.outputTokens)}`,
-    ),
+    theme.fg("accent", `${g.input} ${inPref}${fmtTokens(telemetry.inputTokens)}`),
+    theme.fg("success", `${g.output} ${outPref}${fmtTokens(telemetry.outputTokens)}`),
   ];
   return parts.join(joiner);
 }

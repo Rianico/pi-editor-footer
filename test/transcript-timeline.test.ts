@@ -4,7 +4,11 @@ import { AgentRunLedger } from "../src/agent-run-ledger.js";
 import type { UsageTotals } from "../src/state.js";
 import type { TurnTelemetry } from "../src/telemetry.js";
 import type { RunActivitySnapshot } from "../src/run-activity.js";
-import { buildTimelineText, formatDateTimeWithTimezone, TranscriptTimeline } from "../src/transcript-timeline.js";
+import {
+  buildTimelineText,
+  formatDateTimeWithTimezone,
+  TranscriptTimeline,
+} from "../src/transcript-timeline.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 
 function mkTel(over: Partial<TurnTelemetry> = {}): TurnTelemetry {
@@ -111,7 +115,10 @@ describe("buildTimelineText — pure, TUI-free seam", () => {
     });
     // input should be capped to 50000 (context), not 61000
     // fmtTokens for 50000 is 50k
-    assert.ok(text.includes("50k") || text.includes("50000") || text.includes("50"), `capped input in ${text}`);
+    assert.ok(
+      text.includes("50k") || text.includes("50000") || text.includes("50"),
+      `capped input in ${text}`,
+    );
   });
 });
 
@@ -171,19 +178,15 @@ describe("TranscriptTimeline — deep module seam (two adapters)", () => {
     const ledger = new AgentRunLedger();
     const cfg = structuredClone(DEFAULT_CONFIG);
     cfg.timeline.enabled = false;
-    const res = timeline.handleAgentSettled(
-      { setWidget: () => {} } as never,
-      {} as never,
-      {
-        effectiveTel: mkTel(),
-        totals: mkTotals(),
-        ctxTokens: undefined,
-        snap: mkSnap(),
-        config: cfg,
-        lastDoneIn: 1000,
-        ledger,
-      },
-    );
+    const res = timeline.handleAgentSettled({ setWidget: () => {} } as never, {} as never, {
+      effectiveTel: mkTel(),
+      totals: mkTotals(),
+      ctxTokens: undefined,
+      snap: mkSnap(),
+      config: cfg,
+      lastDoneIn: 1000,
+      ledger,
+    });
     assert.equal(res, null);
     assert.equal(timeline.getHistory().length, 0);
   });

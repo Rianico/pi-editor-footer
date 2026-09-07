@@ -17,12 +17,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { SelectItem } from "@earendil-works/pi-tui";
-import {
-  contentLineCount,
-  type DetailItem,
-  renderDetail,
-  scroll,
-} from "./detail-render.js";
+import { contentLineCount, type DetailItem, renderDetail, scroll } from "./detail-render.js";
 import { decorateWindow, type WindowThemeLike } from "./window-presentation.js";
 
 /** Height cap of the detail window (the user's spec: up to 5 lines). */
@@ -52,25 +47,12 @@ function resolveSkillPath(skillName: string): string | undefined {
   candidates.push(path.join(cwd, "skills", name, "SKILL.md"));
   // user-global candidates
   if (home) {
-    candidates.push(
-      path.join(home, ".pi", "agent", "skills", name, "SKILL.md"),
-    );
+    candidates.push(path.join(home, ".pi", "agent", "skills", name, "SKILL.md"));
     candidates.push(path.join(home, ".agents", "skills", name, "SKILL.md"));
-    candidates.push(
-      path.join(home, ".pi", ".agents", "skills", name, "SKILL.md"),
-    );
+    candidates.push(path.join(home, ".pi", ".agents", "skills", name, "SKILL.md"));
     candidates.push(path.join(home, ".pi", "skills", name, "SKILL.md"));
     candidates.push(
-      path.join(
-        home,
-        "stowfiles",
-        "dotfiles",
-        ".pi",
-        "agent",
-        "skills",
-        name,
-        "SKILL.md",
-      ),
+      path.join(home, "stowfiles", "dotfiles", ".pi", "agent", "skills", name, "SKILL.md"),
     );
     candidates.push(
       path.join(
@@ -191,12 +173,7 @@ export class DetailChrome {
       dim: (s) => t.fg("dim", s),
     };
     const innerWidth = Math.max(1, width - 4);
-    const lines = renderDetail(
-      detailItemOf(item),
-      innerWidth,
-      this.maxLines,
-      this.scrollOffset,
-    );
+    const lines = renderDetail(detailItemOf(item), innerWidth, this.maxLines, this.scrollOffset);
     return decorateWindow(lines, width, windowTheme);
   }
 }

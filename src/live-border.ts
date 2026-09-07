@@ -142,9 +142,8 @@ export class LiveBorder {
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
         // Deepened via AgentRunLedger — stall is agent-run live, single source
         const tel =
-          this.deps.agentLedger.getLiveTotals(
-            this.deps.telemetryTracker.peekLive(),
-          ) ?? this.deps.telemetryTracker.getLastTelemetry();
+          this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive()) ??
+          this.deps.telemetryTracker.getLastTelemetry();
         if (tel && tel.stallMs > 0) {
           const stallText = comp.formatStall(tel);
           if (text) {
@@ -176,8 +175,7 @@ export class LiveBorder {
     try {
       // peekLive ?? getLastTelemetry preserves cost after toggle (AGENTS.md gotcha)
       const live =
-        this.deps.telemetryTracker.peekLive() ??
-        this.deps.telemetryTracker.getLastTelemetry();
+        this.deps.telemetryTracker.peekLive() ?? this.deps.telemetryTracker.getLastTelemetry();
       if (!live) return;
       // Stall relocated to top right of tool use with pipe — suppress in bottom telemetry
       const bottomCfg = { ...cfg.telemetry, stalls: false };
@@ -191,10 +189,7 @@ export class LiveBorder {
     }
   }
 
-  private refreshContextBar(
-    comp: ChromeComposition,
-    snapshot: ChromeSnapshot,
-  ): void {
+  private refreshContextBar(comp: ChromeComposition, snapshot: ChromeSnapshot): void {
     const editor = this.deps.getEditor();
     const cfg = this.deps.getConfig();
     if (!editor) return;

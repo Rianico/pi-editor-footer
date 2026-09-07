@@ -27,9 +27,7 @@ function normalizeTimestamp(v: number): number {
   return Math.max(0, Math.trunc(v));
 }
 
-export function createRunActivityTracker(
-  opts: RunActivityTrackerOptions = {},
-): RunActivityTracker {
+export function createRunActivityTracker(opts: RunActivityTrackerOptions = {}): RunActivityTracker {
   return new DefaultRunActivityTracker(opts);
 }
 
@@ -72,15 +70,13 @@ class DefaultRunActivityTracker implements RunActivityTracker {
   }
 
   startTurn(turnIndex: number, now?: number): void {
-    const nextTurn =
-      Math.max(0, Number.isFinite(turnIndex) ? Math.trunc(turnIndex) : 0) + 1;
+    const nextTurn = Math.max(0, Number.isFinite(turnIndex) ? Math.trunc(turnIndex) : 0) + 1;
     // avoid double-fire for same turn
     if (this.turnNumber === nextTurn && this.phase === "running") return;
     this.phase = "running";
     this.turnNumber = nextTurn;
     // if no startedAt yet (no agent_start), start now
-    if (this.startedAt === undefined)
-      this.startedAt = normalizeTimestamp(now ?? this.now());
+    if (this.startedAt === undefined) this.startedAt = normalizeTimestamp(now ?? this.now());
     this.durationMs = undefined;
     this.notify();
   }
@@ -88,8 +84,7 @@ class DefaultRunActivityTracker implements RunActivityTracker {
   startTool(toolCallId: string, now?: number): void {
     if (!toolCallId) return;
     this.phase = "running";
-    if (this.startedAt === undefined)
-      this.startedAt = normalizeTimestamp(now ?? this.now());
+    if (this.startedAt === undefined) this.startedAt = normalizeTimestamp(now ?? this.now());
     this.durationMs = undefined;
     this.activeTools.set(toolCallId, normalizeTimestamp(now ?? this.now()));
     this.notify();
@@ -151,11 +146,7 @@ class DefaultRunActivityTracker implements RunActivityTracker {
   getSnapshot(now?: number): RunActivitySnapshot {
     const cur = normalizeTimestamp(now ?? this.now());
     let duration: number | undefined = this.durationMs;
-    if (
-      duration === undefined &&
-      this.startedAt !== undefined &&
-      this.phase === "running"
-    ) {
+    if (duration === undefined && this.startedAt !== undefined && this.phase === "running") {
       duration = Math.max(0, cur - this.startedAt);
     }
     return Object.freeze({
@@ -194,9 +185,7 @@ export function formatRunActivityTopRight(
   // duration
   const dur =
     snap.durationMs ??
-    (snap.startedAt === undefined
-      ? undefined
-      : Math.max(0, (now ?? Date.now()) - snap.startedAt));
+    (snap.startedAt === undefined ? undefined : Math.max(0, (now ?? Date.now()) - snap.startedAt));
   if (dur !== undefined) {
     parts.push(theme.fg("text", formatDurationShort(dur)));
   }
@@ -231,14 +220,8 @@ function formatDurationShort(ms: number): string {
   return `${h}h ${String(rm).padStart(2, "0")}m`;
 }
 
-export function formatRunActivityPlain(
-  snap: RunActivitySnapshot,
-  now?: number,
-): string {
+export function formatRunActivityPlain(snap: RunActivitySnapshot, now?: number): string {
   // plain (no ANSI) for tests
   const dummy = { fg: (_: string, s: string) => s };
-  return formatRunActivityTopRight(snap, dummy as never, now).replace(
-    /\x1b\[[0-9;]*m/g,
-    "",
-  );
+  return formatRunActivityTopRight(snap, dummy as never, now).replace(/\x1b\[[0-9;]*m/g, "");
 }

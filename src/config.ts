@@ -97,11 +97,7 @@ function deepMerge<T>(base: T, override: unknown): T {
   if (typeof base !== "object" || base === null || Array.isArray(base)) {
     return (override as T) ?? base;
   }
-  if (
-    typeof override !== "object" ||
-    override === null ||
-    Array.isArray(override)
-  ) {
+  if (typeof override !== "object" || override === null || Array.isArray(override)) {
     return base;
   }
   const result = { ...(base as Record<string, unknown>) };
@@ -229,16 +225,9 @@ type Listener = (cfg: ThemeConfig, prev: ThemeConfig) => void;
 
 export class ConfigStore {
   private readonly readFile: (path: string, encoding: string) => string;
-  private readonly writeFile: (
-    path: string,
-    data: string,
-    encoding: string,
-  ) => void;
+  private readonly writeFile: (path: string, data: string, encoding: string) => void;
   private readonly exists: (path: string) => boolean;
-  private readonly mkdirSyncFn: (
-    path: string,
-    opts: { recursive: boolean },
-  ) => void;
+  private readonly mkdirSyncFn: (path: string, opts: { recursive: boolean }) => void;
   private readonly explicitPath: string | undefined;
   private listeners = new Set<Listener>();
 
@@ -250,8 +239,7 @@ export class ConfigStore {
         readFileSync(p, enc as BufferEncoding) as unknown as string);
     this.writeFile =
       deps.writeFile ??
-      ((p: string, d: string, enc: string) =>
-        writeFileSync(p, d, enc as BufferEncoding));
+      ((p: string, d: string, enc: string) => writeFileSync(p, d, enc as BufferEncoding));
     this.exists = deps.exists ?? existsSync;
     this.mkdirSyncFn = deps.mkdirSync ?? mkdirSync;
     this.explicitPath = deps.path;
@@ -267,11 +255,7 @@ export class ConfigStore {
       try {
         const dir = join(p, "..");
         if (!this.exists(dir)) this.mkdirSyncFn(dir, { recursive: true });
-        this.writeFile(
-          p,
-          JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n",
-          "utf8",
-        );
+        this.writeFile(p, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", "utf8");
       } catch {
         // SAFETY: best-effort, ignore recoverable error
       }
@@ -330,8 +314,6 @@ export function loadConfig(): ThemeConfig {
   return defaultStore.get();
 }
 
-export function saveConfig(
-  patch: Partial<ThemeConfig> & Record<string, unknown>,
-): ThemeConfig {
+export function saveConfig(patch: Partial<ThemeConfig> & Record<string, unknown>): ThemeConfig {
   return defaultStore.patch(patch);
 }

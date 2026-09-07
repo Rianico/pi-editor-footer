@@ -1,8 +1,4 @@
-import {
-  truncateToWidth,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { ThemeConfig } from "./config.js";
 import type { GitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
@@ -17,15 +13,10 @@ import {
   type PrioritizedSegment,
   type Theme,
 } from "./layout.js";
-import {
-  basenamePath,
-  formatCwd,
-  truncatePath,
-} from "./path-format.js";
+import { basenamePath, formatCwd, truncatePath } from "./path-format.js";
 import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
 // ChromeState owns context bar formatting — re-export for backward compat.
 export { formatContextBar } from "./chrome-state.js";
-
 
 function renderGitSegment(
   theme: Theme,
@@ -45,6 +36,8 @@ function renderGitSegment(
         const tag = git.commit.tag ? ` ${git.commit.tag}` : "";
         parts.push(theme.fg("dim", `${shortHash}${tag}`));
       }
+    } else {
+      parts.push(theme.fg("dim", "(no git)"));
     }
   }
 
@@ -62,9 +55,7 @@ function renderGitSegment(
     addStatus(git.stashed, glyphs.stashed, "muted");
 
     if (git.ahead > 0 && git.behind > 0) {
-      statusIcons.push(
-        theme.fg("warning", `${glyphs.diverged}${git.ahead}/${git.behind}`),
-      );
+      statusIcons.push(theme.fg("warning", `${glyphs.diverged}${git.ahead}/${git.behind}`));
     } else if (git.ahead > 0) {
       statusIcons.push(theme.fg("success", `${glyphs.ahead}${git.ahead}`));
     } else if (git.behind > 0) {
@@ -73,9 +64,7 @@ function renderGitSegment(
 
     const statusBlock = statusIcons.join(" ");
     if (statusBlock) {
-      parts.push(
-        `${theme.fg("dim", "[")}${statusBlock}${theme.fg("dim", "]")}`,
-      );
+      parts.push(`${theme.fg("dim", "[")}${statusBlock}${theme.fg("dim", "]")}`);
     }
   }
 
@@ -151,8 +140,7 @@ export function renderFooter(
   if (segments.cwd) {
     const maxCwd = Math.min(30, Math.max(10, Math.floor(width * 0.4)));
     const rawCwd = formatCwd(ctx.cwd);
-    const displayCwd =
-      config.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
+    const displayCwd = config.workspaceDisplay === "name" ? basenamePath(rawCwd) : rawCwd;
     const cwdPrefix = `${theme.fg("mdLink", glyphs.cwd)} `;
     const accent = (text: string) => theme.fg("accent", text);
     leftParts.push({
@@ -189,11 +177,7 @@ export function renderFooter(
     leftParts.push({ text: `${sep}${gitSeg}`, priority: 6 });
   }
   if (segments.runtime) {
-    const runtimeSeg = renderRuntimeSegment(
-      theme,
-      state.runtime,
-      config.icons.mode,
-    );
+    const runtimeSeg = renderRuntimeSegment(theme, state.runtime, config.icons.mode);
     if (runtimeSeg) {
       const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
       leftParts.push({ text: `${sep}${runtimeSeg}`, priority: 4 });
@@ -207,18 +191,13 @@ export function renderFooter(
 
   const stats: string[] = [];
   if (segments.tokens) {
-    stats.push(
-      theme.fg("accent", `${glyphs.input} ${fmtTokens(totals.input)}`),
-    );
-    stats.push(
-      theme.fg("success", `${glyphs.output} ${fmtTokens(totals.output)}`),
-    );
+    stats.push(theme.fg("accent", `${glyphs.input} ${fmtTokens(totals.input)}`));
+    stats.push(theme.fg("success", `${glyphs.output} ${fmtTokens(totals.output)}`));
   }
   if (segments.cost) {
     const costValue = totals.cost.toFixed(2);
     // Avoid "$ $0.00" when the cost glyph itself is "$" (ascii mode) — glyph already is the currency symbol
-    const costText =
-      `$${costValue}`;
+    const costText = `$${costValue}`;
     stats.push(theme.fg("warning", costText));
   }
   // cache to the right of input/output omitted per user request — cache stays in top context bar only
@@ -239,9 +218,7 @@ export function renderFooter(
   const fittedContext = rightBlock ? (fitted.pop() ?? "") : "";
   const line1 = alignRight(fitted.join(" "), fittedContext, width, theme);
 
-  const mainLines = [line1].map((line) =>
-    truncateToWidth(line, width, theme.fg("dim", "...")),
-  );
+  const mainLines = [line1].map((line) => truncateToWidth(line, width, theme.fg("dim", "...")));
   if (segments.extensionStatuses && ctx.extensionStatuses) {
     const statuses = Array.from(ctx.extensionStatuses.entries())
       .sort(([a], [b]) => a.localeCompare(b))
@@ -249,9 +226,7 @@ export function renderFooter(
       .filter((text) => text.length > 0);
     if (statuses.length > 0) {
       const separator = ` ${theme.fg("dim", "|")} `;
-      const statusText = statuses
-        .map((status) => theme.fg("muted", status))
-        .join(separator);
+      const statusText = statuses.map((status) => theme.fg("muted", status)).join(separator);
       const line = `${theme.fg("mdLink", glyphs.extensions)} ${statusText}`;
       return [...mainLines, ...wrapTextWithAnsi(line, width)];
     }
@@ -298,7 +273,8 @@ export function installFooter(
     const totals = getUsageTotals(
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
+      /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as {
+        // SAFETY: intentional unsafe cast — validated at runtime
         sessionManager?: {
           getEntries(): {
             type: string;
@@ -331,12 +307,17 @@ export function installFooter(
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: intentional unsafe cast — validated at runtime
-    /* SAFETY: intentional unsafe cast — validated at runtime */ typeof (/* SAFETY: intentional unsafe cast — validated at runtime */ ctx.ui as unknown as { setFooter?: unknown }).setFooter === // SAFETY: intentional unsafe cast — validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ typeof (
+      /* SAFETY: intentional unsafe cast — validated at runtime */ (
+        ctx.ui as unknown as { setFooter?: unknown }
+      ).setFooter
+    ) === // SAFETY: intentional unsafe cast — validated at runtime
     "function"
   ) {
     // ast-grep-ignore: require-safety-comment-for-as-unknown-as
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    /* SAFETY: intentional unsafe cast — validated at runtime */ const ui = ctx.ui as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
+    /* SAFETY: intentional unsafe cast — validated at runtime */ const ui = ctx.ui as unknown as {
+      // SAFETY: intentional unsafe cast — validated at runtime
       setFooter: (
         fn: (
           tui: { requestRender(): void },
@@ -368,14 +349,16 @@ export function installFooter(
           // Use real theme when rendering
           // ast-grep-ignore: require-safety-comment-for-as-unknown-as
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          /* SAFETY: intentional unsafe cast — validated at runtime */ const theme = _theme as unknown as Theme; // SAFETY: intentional unsafe cast — validated at runtime
+          /* SAFETY: intentional unsafe cast — validated at runtime */ const theme =
+            _theme as unknown as Theme; // SAFETY: intentional unsafe cast — validated at runtime
           const state = getState();
           const config = getConfig();
           const cwd = ctx.sessionManager?.getCwd() ?? process.cwd();
           const totals = getUsageTotals(
             // ast-grep-ignore: require-safety-comment-for-as-unknown-as
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-            /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
+            /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as {
+              // SAFETY: intentional unsafe cast — validated at runtime
               sessionManager?: {
                 getEntries(): {
                   type: string;
@@ -408,7 +391,10 @@ export function installFooter(
     return () => {
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx.ui as unknown as { setFooter: (v: undefined) => void }).setFooter( // SAFETY: intentional unsafe cast — validated at runtime
+      /* SAFETY: intentional unsafe cast — validated at runtime */ (
+        ctx.ui as unknown as { setFooter: (v: undefined) => void }
+      ).setFooter(
+        // SAFETY: intentional unsafe cast — validated at runtime
         undefined,
       );
     };

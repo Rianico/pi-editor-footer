@@ -62,11 +62,7 @@ function update(
   };
 }
 
-function startTurn(
-  tracker: TurnTelemetryTracker,
-  message: AssistantMessage,
-  turnIndex = 0,
-): void {
+function startTurn(tracker: TurnTelemetryTracker, message: AssistantMessage, turnIndex = 0): void {
   tracker.handle({ type: "turn_start", turnIndex, timestamp: Date.now() });
   tracker.handle({
     type: "message_start",
@@ -74,11 +70,7 @@ function startTurn(
   });
 }
 
-function endTurn(
-  tracker: TurnTelemetryTracker,
-  message: AssistantMessage,
-  turnIndex = 0,
-) {
+function endTurn(tracker: TurnTelemetryTracker, message: AssistantMessage, turnIndex = 0) {
   tracker.handle({
     type: "message_end",
     message: message as unknown as AssistantMessage & { role: string },
@@ -196,10 +188,7 @@ describe("TurnTelemetryTracker", () => {
     assert.ok(stalled.tps! < uninterrupted.tps!);
     assert.equal(stalled.stallMs, 3300);
     assert.equal(stalled.stallCount, 2);
-    assert.match(
-      formatTurnTelemetry(stalled, theme, fullConfig),
-      /!2×\s*3\.3s/,
-    );
+    assert.match(formatTurnTelemetry(stalled, theme, fullConfig), /!2×\s*3\.3s/);
   });
 
   test("getLastTelemetry returns last turn", () => {

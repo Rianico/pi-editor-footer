@@ -23,9 +23,7 @@ export const PI_BUILTIN_SLASH_COMMAND_NAMES = [
   "quit",
 ] as const;
 
-export function collectPiCommandNames(
-  sessionCommands: readonly { name: string }[],
-): string[] {
+export function collectPiCommandNames(sessionCommands: readonly { name: string }[]): string[] {
   const names = new Set<string>(PI_BUILTIN_SLASH_COMMAND_NAMES);
   for (const command of sessionCommands) {
     if (command.name) names.add(command.name);
@@ -47,9 +45,9 @@ export function pickSlashCommandTips(
   const exclude = new Set<string>([...(options.exclude ?? []), ...fixed]);
   const random = options.random ?? Math.random;
 
-  const pool = [
-    ...new Set(availableNames.map((n) => n.trim()).filter(Boolean)),
-  ].filter((name) => !exclude.has(name));
+  const pool = [...new Set(availableNames.map((n) => n.trim()).filter(Boolean))].filter(
+    (name) => !exclude.has(name),
+  );
 
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
@@ -59,7 +57,5 @@ export function pickSlashCommandTips(
   }
 
   const picked = pool.slice(0, Math.max(0, count));
-  return [...fixed, ...picked].map((name) =>
-    name.startsWith("/") ? name : `/${name}`,
-  );
+  return [...fixed, ...picked].map((name) => (name.startsWith("/") ? name : `/${name}`));
 }

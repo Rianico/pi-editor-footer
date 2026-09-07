@@ -1,11 +1,4 @@
-import {
-  Box,
-  Key,
-  matchesKey,
-  SelectList,
-  Text,
-  type TUI,
-} from "@earendil-works/pi-tui";
+import { Box, Key, matchesKey, SelectList, Text, type TUI } from "@earendil-works/pi-tui";
 
 type Theme = {
   bg(style: string, s: string): string;
@@ -27,22 +20,12 @@ interface ExtensionContext {
   hasUI?: boolean;
   ui: {
     custom<T>(
-      fn: (
-        tui: TUI,
-        theme: Theme,
-        kb: unknown,
-        done: (v: T) => void,
-      ) => unknown,
+      fn: (tui: TUI, theme: Theme, kb: unknown, done: (v: T) => void) => unknown,
       opts?: unknown,
     ): Promise<T>;
   };
 }
-import type {
-  ThemeConfig,
-  CursorStyle,
-  IconMode,
-  WorkspaceDisplay,
-} from "./config.ts";
+import type { ThemeConfig, CursorStyle, IconMode, WorkspaceDisplay } from "./config.ts";
 
 const TABS = ["general", "appearance", "footer", "telemetry", "timeline"] as const;
 type Tab = (typeof TABS)[number];
@@ -90,19 +73,13 @@ const COPY = {
   values: {
     on: "On",
     off: "Off",
-    workspaceDisplays: { path: "Full path", name: "Name only" } as Record<
-      WorkspaceDisplay,
-      string
-    >,
+    workspaceDisplays: { path: "Full path", name: "Name only" } as Record<WorkspaceDisplay, string>,
     cursorStyles: {
       block: "Block",
       bar: "Bar",
       underline: "Underline",
     } as Record<CursorStyle, string>,
-    icons: { auto: "Auto", nerd: "Nerd", ascii: "ASCII" } as Record<
-      IconMode,
-      string
-    >,
+    icons: { auto: "Auto", nerd: "Nerd", ascii: "ASCII" } as Record<IconMode, string>,
   },
 };
 
@@ -113,8 +90,7 @@ function cycleCursor(config: ThemeConfig): ThemeConfig {
   return { ...config, cursorStyle: next };
 }
 function cycleWorkspaceDisplay(config: ThemeConfig): ThemeConfig {
-  const next: WorkspaceDisplay =
-    config.workspaceDisplay === "path" ? "name" : "path";
+  const next: WorkspaceDisplay = config.workspaceDisplay === "path" ? "name" : "path";
   return { ...config, workspaceDisplay: next };
 }
 function cycleIconMode(config: ThemeConfig): ThemeConfig {
@@ -294,11 +270,7 @@ function buildItems(tab: Tab, config: ThemeConfig): SettingItem[] {
   }
 }
 
-function handleSettingChange(
-  tab: Tab,
-  itemId: string,
-  config: ThemeConfig,
-): ThemeConfig {
+function handleSettingChange(tab: Tab, itemId: string, config: ThemeConfig): ThemeConfig {
   if (tab === "general") {
     if (itemId === "enabled") return { ...config, enabled: !config.enabled };
     if (itemId === "workspaceDisplay") return cycleWorkspaceDisplay(config);
@@ -345,9 +317,7 @@ class SettingsUi {
     this.config = config;
     this.onChange = onChange;
     this.onClose = onClose;
-    this.container = new Box(1, 1, (s: string) =>
-      theme.bg("customMessageBg", s),
-    );
+    this.container = new Box(1, 1, (s: string) => theme.bg("customMessageBg", s));
     this.selectList = new SelectList([], 12, {
       selectedPrefix: (t) => theme.fg("accent", t),
       selectedText: (t) => theme.fg("accent", t),
@@ -373,15 +343,11 @@ class SettingsUi {
 
   private rebuild(preferredItemId = this.selectedItemByTab[this.tab]): void {
     this.container.clear();
-    this.container.addChild(
-      new Text(this.theme.bold(this.theme.fg("accent", COPY.title)), 1, 0),
-    );
+    this.container.addChild(new Text(this.theme.bold(this.theme.fg("accent", COPY.title)), 1, 0));
     const tabBar = TABS.map((tab) => {
       const active = tab === this.tab;
       const label = active ? `[${COPY.tabs[tab]}]` : ` ${COPY.tabs[tab]} `;
-      return active
-        ? this.theme.fg("accent", label)
-        : this.theme.fg("dim", label);
+      return active ? this.theme.fg("accent", label) : this.theme.fg("dim", label);
     }).join(" ");
     this.container.addChild(new Text(tabBar, 1, 0));
     this.container.addChild(new Text(this.theme.fg("dim", COPY.hint), 1, 0));
@@ -391,27 +357,20 @@ class SettingsUi {
       label: this.compact ? `${item.label}: ${item.currentValue}` : item.label,
       description: this.compact ? undefined : item.currentValue,
     }));
-    this.selectList = new SelectList(
-      items as never,
-      Math.min(items.length, 10),
-      {
-        selectedPrefix: (t) => this.theme.fg("accent", t),
-        selectedText: (t) => this.theme.fg("accent", t),
-        description: (t) => this.theme.fg("muted", t),
-        scrollInfo: (t) => this.theme.fg("dim", t),
-        noMatch: (t) => this.theme.fg("warning", t),
-      },
-    );
-    const selectedIndex = items.findIndex(
-      (item) => item.value === preferredItemId,
-    );
+    this.selectList = new SelectList(items as never, Math.min(items.length, 10), {
+      selectedPrefix: (t) => this.theme.fg("accent", t),
+      selectedText: (t) => this.theme.fg("accent", t),
+      description: (t) => this.theme.fg("muted", t),
+      scrollInfo: (t) => this.theme.fg("dim", t),
+      noMatch: (t) => this.theme.fg("warning", t),
+    });
+    const selectedIndex = items.findIndex((item) => item.value === preferredItemId);
     if (selectedIndex >= 0) this.selectList.setSelectedIndex(selectedIndex);
     this.selectedItemByTab[this.tab] = this.selectList.getSelectedItem()?.value;
     this.selectList.onSelectionChange = (item) => {
       this.selectedItemByTab[this.tab] = (item as { value: string }).value;
     };
-    this.selectList.onSelect = (item) =>
-      this.applySetting((item as { value: string }).value);
+    this.selectList.onSelect = (item) => this.applySetting((item as { value: string }).value);
     this.selectList.onCancel = () => this.onClose();
     this.container.addChild(this.selectList as never);
     this.cachedWidth = undefined;
@@ -470,8 +429,7 @@ export function registerThemeSettingsCommand(
   },
 ): void {
   pi.registerCommand("pi-editor-footer", {
-    description:
-      "Open pi-editor-footer settings (workspace, cursor, footer, telemetry)",
+    description: "Open pi-editor-footer settings (workspace, cursor, footer, telemetry)",
     handler: async (_args: string, ctx: ExtensionContext) => {
       if (!ctx.hasUI) return;
       await ctx.ui.custom<void>(

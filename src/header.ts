@@ -25,8 +25,7 @@ export function formatCwd(cwd: string): string {
   const resolvedHome = resolve(home);
   const rel = relative(resolvedHome, resolvedCwd);
   const insideHome =
-    rel === "" ||
-    (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+    rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
   if (!insideHome) return cwd;
   return rel === "" ? "~" : `~${sep}${rel}`;
 }
@@ -62,22 +61,15 @@ function displayCwd(rawCwd: string, _mode: WorkspaceDisplay): string {
 // Simple: at narrow widths, tips are dropped.
 const GAP = 3;
 
-export function renderHeader(
-  width: number,
-  deps: HeaderDeps,
-  theme: HeaderThemeLike,
-): string[] {
+export function renderHeader(width: number, deps: HeaderDeps, theme: HeaderThemeLike): string[] {
   if (width <= 0) return [];
   if (!deps.cwd) return [];
 
   const icon = deps.iconCwd ?? "@";
   const cwdText = displayCwd(deps.cwd, deps.workspaceDisplay);
   // Single-line content: "icon cwd  |  tip0  tip1  tip2"
-  const tips = (deps.tipCommands ?? [])
-    .slice(0, 3)
-    .map((t) => (t.startsWith("/") ? t : `/${t}`));
-  const tipsText =
-    tips.length > 0 ? tips.map((t) => theme.fg("dim", t)).join("  ") : "";
+  const tips = (deps.tipCommands ?? []).slice(0, 3).map((t) => (t.startsWith("/") ? t : `/${t}`));
+  const tipsText = tips.length > 0 ? tips.map((t) => theme.fg("dim", t)).join("  ") : "";
 
   // At very narrow widths, just show cwd with icon, truncated.
   if (width < 24 || tipsText === "") {
@@ -121,11 +113,7 @@ export type GetTips = () => string[];
 export function installHeader(
   ctx: {
     ui: {
-      setWidget(
-        key: string,
-        content: unknown,
-        options?: { placement?: string },
-      ): void;
+      setWidget(key: string, content: unknown, options?: { placement?: string }): void;
     };
     mode?: string;
   },
@@ -169,12 +157,7 @@ export function installHeader(
   const ui = ctx.ui as unknown as {
     setWidget: (
       key: string,
-      content:
-        | ((
-            tui: unknown,
-            theme: unknown,
-          ) => { render(width: number): string[] })
-        | undefined,
+      content: ((tui: unknown, theme: unknown) => { render(width: number): string[] }) | undefined,
       options?: { placement?: string },
     ) => void;
   };

@@ -1,10 +1,5 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import {
-  applyModelInfo,
-  buildLabel,
-  type ModelInfo,
-  type ThemeLike,
-} from "./model-info.js";
+import { applyModelInfo, buildLabel, type ModelInfo, type ThemeLike } from "./model-info.js";
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -42,21 +37,22 @@ export class BorderRenderer {
     if (out.length === 0) return out;
 
     // Top: model info left, context bar right of it, run-activity far right
-    const hasTop = opts.glowEnabled || opts.topContextText || (!opts.topTokensText && opts.topRightText);
+    const hasTop =
+      opts.glowEnabled || opts.topContextText || (!opts.topTokensText && opts.topRightText);
     if (hasTop) {
       const theme = this.getLiveTheme();
       const info = this.getModelInfo();
       const glow = (s: string): string => {
         try {
-          const maybeGlow = (
-            // SAFETY: intentional unsafe cast — validated at runtime
-            theme as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
-              // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
-              getThinkingBorderColor?: (l: string) => (s: string) => string;
-            }
-          ).getThinkingBorderColor;
-          if (typeof maybeGlow === "function")
-            return maybeGlow.call(theme, info.level)(s);
+          const maybeGlow = // SAFETY: intentional unsafe cast — validated at runtime
+            (
+              theme as unknown as {
+                // SAFETY: intentional unsafe cast — validated at runtime
+                // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
+                getThinkingBorderColor?: (l: string) => (s: string) => string;
+              }
+            ).getThinkingBorderColor;
+          if (typeof maybeGlow === "function") return maybeGlow.call(theme, info.level)(s);
         } catch {
           // SAFETY: best-effort UI, ignore recoverable error
         }
@@ -78,13 +74,7 @@ export class BorderRenderer {
         }
         // Embed left (model+context) and optional right (run activity) in one pass to avoid double-truncate
         if (topRightForTop) {
-          out = embedTopWithLeftAndRight(
-            out,
-            width,
-            leftLabel,
-            topRightForTop,
-            glow,
-          );
+          out = embedTopWithLeftAndRight(out, width, leftLabel, topRightForTop, glow);
         } else {
           // Only left (model+context), no right — use applyModelInfo replacement but with combined left
           // Reuse embedTopWithLeftAndRight with empty right
@@ -111,7 +101,9 @@ export class BorderRenderer {
       if (tokensLeft) {
         // Use | as separator between ↑/↓ and tool turns (dimmed) per user request
         // SAFETY: pi theme seam — fg is optional theme method
-        const themeForTokens = this.getLiveTheme() as unknown as { fg: (c:string,t:string)=>string }; // SAFETY: intentional unsafe cast — validated at runtime
+        const themeForTokens = this.getLiveTheme() as unknown as {
+          fg: (c: string, t: string) => string;
+        }; // SAFETY: intentional unsafe cast — validated at runtime
         const fg = themeForTokens.fg;
         const dimPipe = typeof fg === "function" ? fg.call(themeForTokens, "dim", " | ") : " | ";
         const combined = tokensRight ? `${tokensLeft}${dimPipe}${tokensRight}` : tokensLeft;
@@ -124,13 +116,14 @@ export class BorderRenderer {
       const theme = this.getLiveTheme();
       const glow = (s: string): string => {
         try {
-          const maybeGlow = (
-            // SAFETY: intentional unsafe cast — validated at runtime
-            theme as unknown as { // SAFETY: intentional unsafe cast — validated at runtime
-              // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
-              getThinkingBorderColor?: (l: string) => (s: string) => string;
-            }
-          ).getThinkingBorderColor;
+          const maybeGlow = // SAFETY: intentional unsafe cast — validated at runtime
+            (
+              theme as unknown as {
+                // SAFETY: intentional unsafe cast — validated at runtime
+                // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
+                getThinkingBorderColor?: (l: string) => (s: string) => string;
+              }
+            ).getThinkingBorderColor;
           if (typeof maybeGlow === "function")
             return maybeGlow.call(theme, this.getModelInfo().level)(s);
         } catch {
@@ -150,11 +143,7 @@ export class BorderRenderer {
   }
 }
 
-function embedTokensAbove(
-  lines: string[],
-  width: number,
-  tokensText: string,
-): string[] {
+function embedTokensAbove(lines: string[], width: number, tokensText: string): string[] {
   if (!tokensText || lines.length === 0) return lines;
   // Left aligned, no border; one leading padding as before
   const raw = ` ${tokensText}`;
@@ -182,14 +171,9 @@ function embedTopWithLeftAndRight(
   let displayLeft = leftText;
   let displayRight = rightText;
   if (leftW > maxLeft) displayLeft = truncateToWidth(leftText, maxLeft, "");
-  if (rightW > maxRight)
-    displayRight = truncateToWidth(rightText, maxRight, "");
-  const leftSegment = displayLeft
-    ? `${getGlow("─")} ${displayLeft} `
-    : getGlow("─");
-  const rightSegment = displayRight
-    ? ` ${displayRight} ${getGlow("─")}`
-    : getGlow("─");
+  if (rightW > maxRight) displayRight = truncateToWidth(rightText, maxRight, "");
+  const leftSegment = displayLeft ? `${getGlow("─")} ${displayLeft} ` : getGlow("─");
+  const rightSegment = displayRight ? ` ${displayRight} ${getGlow("─")}` : getGlow("─");
   const used = visibleWidth(leftSegment) + visibleWidth(rightSegment);
   const middleWidth = Math.max(0, width - used);
   const middle = getGlow("─".repeat(middleWidth));
@@ -223,14 +207,9 @@ function embedBottomBorder(
   let displayLeft = leftText;
   let displayRight = rightText;
   if (leftW > maxLeft) displayLeft = truncateToWidth(leftText, maxLeft, "");
-  if (rightW > maxRight)
-    displayRight = truncateToWidth(rightText, maxRight, "");
-  const leftSegment = displayLeft
-    ? `${getGlow("─")} ${displayLeft} `
-    : getGlow("─");
-  const rightSegment = displayRight
-    ? ` ${displayRight} ${getGlow("─")}`
-    : getGlow("─");
+  if (rightW > maxRight) displayRight = truncateToWidth(rightText, maxRight, "");
+  const leftSegment = displayLeft ? `${getGlow("─")} ${displayLeft} ` : getGlow("─");
+  const rightSegment = displayRight ? ` ${displayRight} ${getGlow("─")}` : getGlow("─");
   const used = visibleWidth(leftSegment) + visibleWidth(rightSegment);
   const middleWidth = Math.max(0, width - used);
   const middle = getGlow("─".repeat(middleWidth));
@@ -258,8 +237,7 @@ function embedTopRightBorder(
   // We need to truncate right if too wide, preserving at least 10 chars for left
   const maxRight = Math.max(0, width - 12);
   let displayRight = rightText;
-  if (rightW > maxRight)
-    displayRight = truncateToWidth(rightText, maxRight, "");
+  if (rightW > maxRight) displayRight = truncateToWidth(rightText, maxRight, "");
   const displayW = visibleWidth(displayRight);
   // Rebuild top: keep existing left-embedded line, replace its right tail
   const existing = lines[0] ?? "";
