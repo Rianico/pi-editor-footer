@@ -6,7 +6,7 @@
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc --project tsconfig.build.json",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "lint": "oxlint src test",
     "format": "oxfmt --check src test --ignore-path .gitignore",
     "format:fix": "oxfmt src test"

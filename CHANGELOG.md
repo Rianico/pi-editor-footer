@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - **detail:** show model invocation badge to the right of skill path
 
+### Bug Fixes
+
+- make prepare tolerant to missing husky for pi install
+
 ## [0.11.0] - 2026-08-29
 
 ### Changed
