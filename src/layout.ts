@@ -6,6 +6,12 @@ export { stripAnsi } from "./format.js";
 
 export interface Theme {
   fg(style: string, s: string): string;
+  /**
+   * Optional raw-hex foreground. The pi theme resolves named tokens only and
+   * throws on unknown names, so exact-hex callers (context tiers) need this
+   * escape hatch; adapters that cannot provide it fall back to semantic tokens.
+   */
+  fgHex?(hex: string, s: string): string;
 }
 
 export type PrioritizedSegment = {
