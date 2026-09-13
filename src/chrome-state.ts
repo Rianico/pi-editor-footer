@@ -21,7 +21,13 @@ import type { FooterState, UsageTotals } from "./state.js";
 import { getUsageTotals } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
 import type { Theme } from "./layout.js";
-import { cacheHitColor, contextUsageColor } from "./color-policy.js";
+import {
+  cacheHitColor,
+  CONTEXT_TIER_HEX,
+  CONTEXT_TIER_THEME_COLOR,
+  contextUsageTier,
+  type ContextTier,
+} from "./color-policy.js";
 import { fmtTokens } from "./format.js";
 
 export interface ContextUsage {
@@ -44,15 +50,31 @@ export interface ChromeSnapshot {
 // Re-exported from footer.ts for backward compatibility.
 // ---------------------------------------------------------------------------
 
-function renderBar(theme: Theme, pct: number, barWidth: number, ascii: boolean): string {
+/**
+ * Painter for one context tier: exact hex when the live theme can emit raw hex,
+ * else the nearest semantic token (tests/mocks, themes without color mode).
+ */
+function contextPainter(theme: Theme, tier: ContextTier): (s: string) => string {
+  const hex = CONTEXT_TIER_HEX[tier];
+  const fgHex = theme.fgHex;
+  if (fgHex) return (s) => fgHex.call(theme, hex, s);
+  return (s) => theme.fg(CONTEXT_TIER_THEME_COLOR[tier], s);
+}
+
+function renderBar(
+  theme: Theme,
+  paint: (s: string) => string,
+  pct: number,
+  barWidth: number,
+  ascii: boolean,
+): string {
   const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
   const empty = barWidth - filled;
-  const color = contextUsageColor(pct);
   const filledCell = ascii ? "#" : "█";
   const emptyCell = ascii ? "-" : "░";
   return (
     theme.fg("dim", "[") +
-    theme.fg(color, filledCell.repeat(filled)) +
+    paint(filledCell.repeat(filled)) +
     theme.fg("dim", emptyCell.repeat(empty)) +
     theme.fg("dim", "]")
   );
@@ -70,13 +92,13 @@ export function formatContextBar(
   const contextWindow = contextUsage?.contextWindow ?? 0;
   if (contextWindow <= 0) return "";
   const contextPct = contextUsage?.percent ?? 0;
-  const contextColor = contextUsageColor(contextPct);
-  const pctText = theme.fg(contextColor, `${contextPct.toFixed(1)}%`);
+  const paint = contextPainter(theme, contextUsageTier(contextPct, contextWindow));
+  const pctText = paint(`${contextPct.toFixed(1)}%`);
   const contextTokens = contextUsage?.tokens ?? 0;
-  const ctxText = `${theme.fg(contextColor, fmtTokens(contextTokens))}${theme.fg("dim", "/")}${theme.fg(contextColor, fmtTokens(contextWindow))}`;
+  const ctxText = `${paint(fmtTokens(contextTokens))}${theme.fg("dim", "/")}${paint(fmtTokens(contextWindow))}`;
   const baseCore = `${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
   const base = showIconBar
-    ? `${theme.fg(contextColor, glyphs.context)} ${renderBar(theme, contextPct, barWidth, isAscii)} ${baseCore}`
+    ? `${paint(glyphs.context)} ${renderBar(theme, paint, contextPct, barWidth, isAscii)} ${baseCore}`
     : baseCore;
   const rate = cacheHitRate !== undefined && Number.isFinite(cacheHitRate) ? cacheHitRate : 0;
   const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;

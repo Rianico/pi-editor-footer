@@ -8,7 +8,7 @@
  * thus required touching 3-4 modules with no locality.
  *
  * Depth: one small interface (glyphs + isAscii + fg/dim/glow + format* helpers) hides
- * icon-mode resolution, the SAFETY theme cast, colour application, and the chrome format
+ * icon-mode resolution, the SAFETY theme cast, color application, and the chrome format
  * entry points (context bar, telemetry, tokens, run activity, stall). Callers learn one
  * shape; LiveBorder's islands become thin lookups.
  *
@@ -26,20 +26,30 @@ import type { RunActivitySnapshot } from "./run-activity.js";
 import { formatRunActivityTopRight } from "./run-activity.js";
 import type { TelemetryConfig, TurnTelemetry } from "./telemetry.js";
 import { formatTelemetryTokens, formatTurnDuration, formatTurnTelemetry } from "./telemetry.js";
+import { hexFg } from "./ansi-color.js";
 
 /** Typed fg surface — the only theme capability the chrome needs. */
 export interface ChromeThemeLike {
   fg(style: string, s: string): string;
+  fgHex(hex: string, s: string): string;
 }
 
 /**
- * Read the live pi theme into a typed { fg } surface. The cast is a SAFETY seam — a pi theme
- * missing `fg` degrades to identity rather than throwing, keeping the chrome resilient.
+ * Read the live pi theme into a typed { fg, fgHex } surface. The cast is a SAFETY
+ * seam — a pi theme missing `fg` degrades to identity rather than throwing, keeping
+ * the chrome resilient. `fgHex` needs no theme call at all: the named-token lookup
+ * rejects raw hex, so hex is rendered straight to SGR at the theme's color mode.
  */
 export function adaptTheme(rawTheme: unknown): ChromeThemeLike {
-  const t = rawTheme as { fg?: (style: string, s: string) => string }; // SAFETY: pi theme seam — fg is optional, guarded below
+  const t = rawTheme as {
+    fg?: (style: string, s: string) => string;
+    // SAFETY: pi theme seam — getColorMode is optional, defaulted below
+    getColorMode?: () => string;
+  };
+  const mode = typeof t.getColorMode === "function" ? t.getColorMode() : undefined;
   return {
     fg: (style, s) => (typeof t.fg === "function" ? t.fg(style, s) : s),
+    fgHex: (hex, s) => hexFg(hex, mode)(s),
   };
 }
 
@@ -80,7 +90,7 @@ export class ChromeComposition {
     this.glow = opts.glow ?? resolveGlow(rawTheme);
   }
 
-  /** Colour a string with a theme style (derived once, cast cached). */
+  /** Color a string with a theme style (derived once, cast cached). */
   fg(style: string, s: string): string {
     return this.theme.fg(style, s);
   }

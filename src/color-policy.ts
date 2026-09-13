@@ -7,21 +7,40 @@ export function stressColor(value: number, warn = 70, danger = 90): ThemeColor {
   return "accent";
 }
 
-export function contextUsageColor(pct: number): ThemeColor {
-  // 12.5 / 25 / 50 quotas — four urgency tiers, increasingly aggressive as context fills.
-  // 0 – 12.5%  dim      — plenty of headroom, visually quiet.
-  // 12.5 – 25% accent   — first nudge, noticeable but calm.
-  // 25 – 50%   warning  — half consumed, needs attention.
-  // 50 – 100%  error     — critical, about to run out.
-  // Uses theme semantic tokens (dim/accent/warning/error) so the progression
-  // respects the active theme and remains legible on light/dark/custom palettes.
-  // A fixed hex palette (e.g. grey→sky→amber→red) would be more vivid but
-  // would ignore the user's theme and can clash with light backgrounds —
-  // semantic tokens keep the "aggressive" ordering while staying theme-coherent.
-  if (pct >= 50) return "error";
-  if (pct >= 25) return "warning";
-  if (pct >= 12.5) return "accent";
-  return "dim";
+/** Context-pressure tier: green → amber → red as the window fills. */
+export type ContextTier = "ok" | "warn" | "critical";
+
+/**
+ * Fixed tier palette (nord green / nord yellow / dark red). Hex, not theme tokens:
+ * the tiers are an alarm scale the user picked explicitly, so they must read the
+ * same on every theme. `CONTEXT_TIER_THEME_COLOR` is only the fallback for themes
+ * that cannot emit raw hex.
+ */
+export const CONTEXT_TIER_HEX: Record<ContextTier, string> = {
+  ok: "#A3BE8C",
+  warn: "#EBCB8B",
+  critical: "#9A3939",
+};
+
+/** Semantic token approximating each tier — used when raw hex is unavailable. */
+export const CONTEXT_TIER_THEME_COLOR: Record<ContextTier, ThemeColor> = {
+  ok: "success",
+  warn: "warning",
+  critical: "error",
+};
+
+/**
+ * Tier from the share of the context window consumed.
+ *
+ * Budgets scale with the window: a 1M window only earns 12.5 / 25 % of slack
+ * before the same alarm, while smaller windows (compacted far sooner) keep the
+ * looser 25 / 50 % steps.
+ */
+export function contextUsageTier(pct: number, contextWindow: number): ContextTier {
+  const [warnAt, criticalAt] = contextWindow >= 1_000_000 ? [12.5, 25] : [25, 50];
+  if (pct >= criticalAt) return "critical";
+  if (pct >= warnAt) return "warn";
+  return "ok";
 }
 
 export function cacheHitColor(value: number): ThemeColor {
