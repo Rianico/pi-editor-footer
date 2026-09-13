@@ -1,12 +1,10 @@
-## [Unreleased]
+## [0.12.2](https://github.com/Rianico/pi-editor-footer/compare/v0.12.1...v0.12.2) (2026-09-13)
 
 ### Bug Fixes
 
-* **context:** tier-color the context window section by usage
+* **context:** tier-color the context window section by usage ([#30](https://github.com/Rianico/pi-editor-footer/issues/30)) ([8152d90](https://github.com/Rianico/pi-editor-footer/commit/8152d90b3c1b4013154eff95cc885e79e7564f6f))
 
-### Documentation
-
-* **agents:** record the context tier colors and the hex theme trap
+## [Unreleased]
 
 ## [0.12.1](https://github.com/Rianico/pi-editor-footer/compare/v0.12.0...v0.12.1) (2026-09-07)
 
