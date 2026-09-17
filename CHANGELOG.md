@@ -19,12 +19,12 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-* **issues:** make issue and PR templates project-neutral
-* **changelog:** pin changelog title contract
+* **footer:** count total input tokens in footer statistics
 
 ### Documentation
 
-* tidy AGENTS.md formatting
+* **agents:** mark agent-run token accounting a scope boundary
+* document total input token semantics for the footer
 
 ## [0.12.1](https://github.com/Rianico/pi-editor-footer/compare/v0.12.0...v0.12.1) (2026-09-07)
 
