@@ -21,35 +21,55 @@ export interface UsageTotals {
   latestCacheHitRate: number | undefined;
 }
 
+/** Raw provider usage block as persisted on a session entry. */
+export interface EntryUsage {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  cost?: { total?: number };
+}
+
+/**
+ * Session entry slice read by getUsageTotals — the pi seam, validated at runtime.
+ * `usage` sits at the top level on branch_summary / compaction entries and inside
+ * `message` on message entries.
+ */
+export interface UsageSessionEntry {
+  type: string;
+  id?: string;
+  timestamp?: string;
+  message?: { role: string; usage?: EntryUsage };
+  usage?: EntryUsage;
+}
+
+/** Minimal session-manager seam getUsageTotals reads entries through. */
+export interface UsageTotalsSource {
+  sessionManager?: { getEntries(): UsageSessionEntry[] };
+}
+
+/**
+ * Total input tokens billed to the model: uncached input + cache read + cache write.
+ *
+ * pi-ai `Usage.input` excludes the cached prompt prefix (it lives in cacheRead/cacheWrite),
+ * so `input` alone under-reports the prompt by the whole cached history on every turn.
+ */
+export function totalInputTokens(
+  totals: Pick<UsageTotals, "input" | "cacheRead" | "cacheWrite">,
+): number {
+  return totals.input + totals.cacheRead + totals.cacheWrite;
+}
+
 let usageCache: { key: string; totals: UsageTotals } | undefined;
 
-function entriesKey(ctx: { sessionManager?: { getEntries(): unknown[] } }): string {
+function entriesKey(ctx: UsageTotalsSource): string {
   const entries = ctx.sessionManager?.getEntries() ?? [];
-  const last = entries.at(-1) as { id?: string; timestamp?: string } | undefined;
+  const last = entries.at(-1);
   return `${entries.length}:${String(last?.id ?? "")}:${String(last?.timestamp ?? "")}`;
 }
 
-export function getUsageTotals(ctx: {
-  sessionManager?: {
-    getEntries(): {
-      type: string;
-      message?: {
-        role: string;
-        usage?: {
-          input?: number;
-          output?: number;
-          cacheRead?: number;
-          cacheWrite?: number;
-          cost?: { total?: number };
-        };
-      };
-    }[];
-  };
-}): UsageTotals {
-  const key = entriesKey(
-    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    ctx as unknown as { sessionManager?: { getEntries(): unknown[] } },
-  );
+export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
+  const key = entriesKey(ctx);
   if (usageCache && usageCache.key === key) return usageCache.totals;
 
   const totals: UsageTotals = {
@@ -60,40 +80,33 @@ export function getUsageTotals(ctx: {
     cost: 0,
     latestCacheHitRate: undefined,
   };
-  const entries =
-    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    (
-      ctx as unknown as {
-        sessionManager?: {
-          getEntries(): {
-            type: string;
-            message?: {
-              role: string;
-              usage?: {
-                input?: number;
-                output?: number;
-                cacheRead?: number;
-                cacheWrite?: number;
-                cost?: { total?: number };
-              };
-            };
-          }[];
-        };
-      }
-    ).sessionManager?.getEntries() ?? [];
-  for (const entry of entries) {
+  const addUsage = (usage: EntryUsage): void => {
+    totals.input += usage.input ?? 0;
+    totals.output += usage.output ?? 0;
+    totals.cacheRead += usage.cacheRead ?? 0;
+    totals.cacheWrite += usage.cacheWrite ?? 0;
+    totals.cost += usage.cost?.total ?? 0;
+  };
+  for (const entry of ctx.sessionManager?.getEntries() ?? []) {
+    // Assistant turns carry the cache split the hit rate is derived from; tool results
+    // and summaries are usage from nested model calls — billed, so they count toward the
+    // session totals (parity with pi core's addUsageToTotals loop).
     if (entry.type === "message" && entry.message?.role === "assistant") {
-      const u = entry.message.usage;
-      if (!u) continue;
-      totals.input += u.input ?? 0;
-      totals.output += u.output ?? 0;
-      totals.cacheRead += u.cacheRead ?? 0;
-      totals.cacheWrite += u.cacheWrite ?? 0;
-      totals.cost += u.cost?.total ?? 0;
-      const promptTokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+      const usage = entry.message.usage;
+      if (!usage) continue;
+      addUsage(usage);
+      const promptTokens = (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
       if (promptTokens > 0) {
-        totals.latestCacheHitRate = ((u.cacheRead ?? 0) / promptTokens) * 100;
+        totals.latestCacheHitRate = ((usage.cacheRead ?? 0) / promptTokens) * 100;
       }
+      continue;
+    }
+    if (entry.type === "message" && entry.message?.role === "toolResult") {
+      if (entry.message.usage) addUsage(entry.message.usage);
+      continue;
+    }
+    if (entry.type === "branch_summary" || entry.type === "compaction") {
+      if (entry.usage) addUsage(entry.usage);
     }
   }
   usageCache = { key, totals };

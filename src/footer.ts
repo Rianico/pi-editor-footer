@@ -2,8 +2,8 @@ import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works
 import type { ThemeConfig } from "./config.js";
 import type { GitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
-import type { FooterState, ModelMeta, UsageTotals } from "./state.js";
-import { getUsageTotals } from "./state.js";
+import type { FooterState, ModelMeta, UsageTotals, UsageTotalsSource } from "./state.js";
+import { getUsageTotals, totalInputTokens } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
 import { runtimeSymbol } from "./icons.js";
 import { ChromeComposition } from "./chrome-composition.js";
@@ -191,7 +191,9 @@ export function renderFooter(
 
   const stats: string[] = [];
   if (segments.tokens) {
-    stats.push(theme.fg("accent", `${glyphs.input} ${fmtTokens(totals.input)}`));
+    // Total input billed for the model — includes the cached prompt prefix, not just
+    // `usage.input` (which excludes cacheRead/cacheWrite). See totalInputTokens.
+    stats.push(theme.fg("accent", `${glyphs.input} ${fmtTokens(totalInputTokens(totals))}`));
     stats.push(theme.fg("success", `${glyphs.output} ${fmtTokens(totals.output)}`));
   }
   if (segments.cost) {
@@ -273,24 +275,7 @@ export function installFooter(
     const totals = getUsageTotals(
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as {
-        // SAFETY: intentional unsafe cast — validated at runtime
-        sessionManager?: {
-          getEntries(): {
-            type: string;
-            message?: {
-              role: string;
-              usage?: {
-                input?: number;
-                output?: number;
-                cacheRead?: number;
-                cacheWrite?: number;
-                cost?: { total?: number };
-              };
-            };
-          }[];
-        };
-      },
+      /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as UsageTotalsSource,
     );
     return renderFooter(width, state, config, themeStub, {
       cwd,
@@ -357,24 +342,7 @@ export function installFooter(
           const totals = getUsageTotals(
             // ast-grep-ignore: require-safety-comment-for-as-unknown-as
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-            /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as {
-              // SAFETY: intentional unsafe cast — validated at runtime
-              sessionManager?: {
-                getEntries(): {
-                  type: string;
-                  message?: {
-                    role: string;
-                    usage?: {
-                      input?: number;
-                      output?: number;
-                      cacheRead?: number;
-                      cacheWrite?: number;
-                      cost?: { total?: number };
-                    };
-                  };
-                }[];
-              };
-            },
+            /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as UsageTotalsSource,
           );
           return renderFooter(width, state, config, theme, {
             cwd,
