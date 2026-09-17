@@ -25,7 +25,7 @@ interface ExtensionContext {
     ): Promise<T>;
   };
 }
-import type { ThemeConfig, CursorStyle, IconMode, WorkspaceDisplay } from "./config.ts";
+import type { ThemeConfig, CursorStyle, IconMode, WorkspaceDisplay } from "./config.js";
 
 const TABS = ["general", "appearance", "footer", "telemetry", "timeline"] as const;
 type Tab = (typeof TABS)[number];

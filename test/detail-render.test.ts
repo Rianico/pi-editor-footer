@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { renderDetail, scroll, type DetailItem } from "../src/detail-render";
+import { renderDetail, scroll, type DetailItem } from "../src/detail-render.js";
 
 const item: DetailItem = {
   label: "to-spec",
