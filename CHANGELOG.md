@@ -28,6 +28,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Bug Fixes
+
+* **imports:** use .js extensions for NodeNext module resolution
+
 ## [0.12.1](https://github.com/Rianico/pi-editor-footer/compare/v0.12.0...v0.12.1) (2026-09-07)
 
 ### Bug Fixes

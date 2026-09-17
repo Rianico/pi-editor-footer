@@ -18,7 +18,7 @@ Conventional commits & changelog: see CONTRIBUTING.md
 
 ### Runtime
 
-TypeScript: pnpm v12 + .nvmrc (24) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json
+TypeScript: pnpm v12 + .nvmrc (26) + TS v7 + Vite v8, verify via oxlint/oxfmt/tsc/vitest; see package.json
 
 ## Pi editor replacement — sync contract
 

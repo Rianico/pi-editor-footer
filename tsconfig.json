@@ -1,19 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
     "verbatimModuleSyntax": true,
-    "esModuleInterop": true
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"]
   },
-  "include": [
-    "src",
-    "test"
-  ]
+  "include": ["src", "test"]
 }
