@@ -1,0 +1,3 @@
+# Unattributed ledger entries allowed by ADR-0016's migration. Shrink-only: delete a line
+# when its entry gains (#N) or is removed; never add one.
+**imports:** use .js extensions for NodeNext module resolution
