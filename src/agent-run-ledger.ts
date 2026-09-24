@@ -70,6 +70,9 @@ export function aggregateAgentTurns(
   let stallCount = 0;
   let generationMs = 0;
   let ttftMs = 0;
+  // First observed provider TTFT across turns (run's initial request latency);
+  // null when no turn saw before_provider_request. Mirrors ttftMs below.
+  let ttftProviderMs: number | null = null;
   for (const t of turns) {
     inputTokens = Math.max(inputTokens, t.inputTokens);
     outputTokens += t.outputTokens;
@@ -79,6 +82,7 @@ export function aggregateAgentTurns(
     generationMs += t.generationMs;
   }
   if (turns.length > 0) ttftMs = turns[0]!.ttftMs;
+  ttftProviderMs = turns.map((t) => t.ttftProviderMs).find((v) => v != null) ?? null;
   if (live) {
     inputTokens = Math.max(inputTokens, live.inputTokens);
     outputTokens += live.outputTokens;
@@ -87,6 +91,7 @@ export function aggregateAgentTurns(
     stallCount += live.stallCount;
     generationMs += live.generationMs;
     if (ttftMs === 0) ttftMs = live.ttftMs;
+    if (ttftProviderMs === null) ttftProviderMs = live.ttftProviderMs ?? null;
   }
   totalTokens = inputTokens + outputTokens;
   const totalMs = startMs === null ? 0 : Math.max(0, now - startMs);
@@ -108,6 +113,7 @@ export function aggregateAgentTurns(
     totalTokens,
     costUsd: validCost ? costUsd : 0,
     measurementMs,
+    ttftProviderMs,
     estimated: live?.estimated === true,
   };
 }

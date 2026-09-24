@@ -36,11 +36,25 @@
  *   - input: known at turn_start via getContextUsage().tokens (window
  *     occupancy). Stored as liveInputTokens and capped by AgentRunLedger
  *     (max-vs-sum + contextWindow cap) — see agent-run-ledger.ts.
- *   - output: no usage before message_end, so we estimate O(1) per delta:
- *     liveDeltaChars += delta.length, liveEstimatedTokens = ceil(chars/4)
- *     monotonic max. ~4 chars/token is English; ~2-3 Chinese, ~3.5 code.
- *     Approximately accurate at 1 s display granularity; final
- *     message.usage.output corrects the estimate on message_end/turn_end.
+ *   - output: estimated live, authoritative at message_end. O(1) per delta:
+ *     liveDeltaChars += delta.length, liveEstimatedTokens = max(ceil(chars/4),
+ *     streamed-usage-if-present). Verified provider behavior: Anthropic
+ *     resolves output in message_delta (no stream event), Google after the
+ *     chunk's deltas (none), OpenAI final-chunk only — so delta-carrying
+ *     partials carry stale (≈0) output on all three today and live is
+ *     chars/4 until message_end; the partial.usage adoption is opportunistic
+ *     for providers that attach cumulative usage to delta events. Monotonic
+ *     max; final message.usage.output corrects on message_end/turn_end.
+ *     ~4 chars/token is English; ~2-3 Chinese, ~3.5 code. Approximately
+ *     accurate at 1 s display granularity.
+ *     First token is the first *_delta, except starts that already carry
+ *     complete content (redacted thinking, no-arg tool calls — never any
+ *     deltas). Starts never re-arm the stall clock: start→first-bytes and
+ *     inter-start gaps count as stalls like any other gap.
+ *     before_provider_request anchors provider TTFT (ttftProviderMs)
+ *     alongside whole-turn tps. No generation-window rate is exposed:
+ *     streaming-window TPS stays out per the "one rate" invariant below.
+ *     (First token = first *_delta, except content-bearing starts — detailed above.)
  *     External tiktoken sampled throttled (every 200 ms) would be 10-100×
  *     more CPU and defeat throttling — not used; final corrects.
  *   - TPS: live = estimate / wholeTurnElapsed (stable), final = usage.output
@@ -96,6 +110,52 @@ const CONTENT_START_EVENTS = new Set(["text_start", "thinking_start", "toolcall_
 /** streaming delta variants — where live output estimation happens. */
 const CONTENT_DELTA_EVENTS = new Set(["text_delta", "thinking_delta", "toolcall_delta"]);
 
+/**
+ * Exact output tokens opportunistically adopted mid-flight. Verified
+ * provider behavior: Anthropic resolves output in message_delta (no stream
+ * event), Google after the chunk's deltas (none), OpenAI final-chunk only —
+ * so delta-carrying partials carry stale (≈0) output on all three today and
+ * the caller falls back to chars/4. Any provider that attaches cumulative
+ * usage.output to delta events activates this branch. Null otherwise.
+ */
+function streamedOutputTokens(partial: unknown): number | null {
+  if (!partial || typeof partial !== "object") return null;
+  const usage = (partial as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== "object") return null;
+  const output = (usage as { output?: unknown }).output;
+  if (typeof output !== "number" || !Number.isFinite(output) || output <= 0) return null;
+  return Math.floor(output);
+}
+
+/**
+ * True when a start event already shows model-produced output. Translators
+ * push the block before its start event, so: redacted thinking arrives with
+ * thinking text, no-arg tool calls with name/id set, while normal starts
+ * carry empty text/thinking (or unnamed partial calls) and wait for deltas.
+ * Anchoring here is honest — the output it reports was already generated.
+ */
+function hasStreamContent(partial: unknown): boolean {
+  if (!partial || typeof partial !== "object") return false;
+  const content = (partial as { content?: unknown }).content;
+  if (!Array.isArray(content)) return false;
+  return content.some((b) => {
+    if (!b || typeof b !== "object") return false;
+    const block = b as {
+      type?: unknown;
+      text?: unknown;
+      thinking?: unknown;
+      name?: unknown;
+      id?: unknown;
+    };
+    if (typeof block.text === "string" && block.text.length > 0) return true;
+    if (typeof block.thinking === "string" && block.thinking.length > 0) return true;
+    if (block.type === "toolCall") {
+      if (typeof block.name === "string" && block.name.length > 0) return true;
+      if (typeof block.id === "string" && block.id.length > 0) return true;
+    }
+    return false;
+  });
+}
 export interface TurnTelemetry {
   tps: number | null;
   ttftMs: number;
@@ -111,6 +171,8 @@ export interface TurnTelemetry {
   measurementMs: number | null;
   /** true when outputTokens includes live estimate (chars/4) not yet authoritative usage */
   estimated?: boolean;
+  /** request-anchored TTFT (before_provider_request → first token); null when no provider anchor seen */
+  ttftProviderMs?: number | null;
 }
 
 export interface TelemetryConfig {
@@ -171,6 +233,7 @@ export type TelemetryEvent =
       };
     }
   | { type: "message_end"; message: AgentMessage }
+  | { type: "before_provider_request"; timestamp?: number }
   | { type: "tool_execution_start"; [key: string]: unknown }
   | {
       type: "turn_end";
@@ -187,6 +250,8 @@ interface MessageTiming {
 interface TurnTiming {
   startMs: number;
   firstTokenMs: number | null;
+  /** first before_provider_request in this turn — honest network TTFT anchor; null when unseen */
+  requestStartMs: number | null;
   currentMessage: MessageTiming | null;
   messages: AssistantMessage[];
   generationMs: number;
@@ -303,6 +368,7 @@ export class TurnTelemetryTracker {
         totalTokens: liveInput,
         costUsd: 0,
         measurementMs: null,
+        ttftProviderMs: null,
         estimated: true,
       };
     }
@@ -334,6 +400,10 @@ export class TurnTelemetryTracker {
     // Whole-turn TPS — stable, includes TTFT/prefill/queue (see header). Guard tiny elapsed to avoid spike.
     const measurementMs = elapsed >= 500 && outputTokens > 0 ? elapsed : null;
     const tpsVal = measurementMs === null ? null : round(outputTokens / (measurementMs / 1000), 1);
+    // Provider-anchored TTFT (request→first-token); whole-turn tps stays the headline.
+    // No generation-window rate: streaming-window TPS is deliberately not exposed (see header).
+    const ttftProviderMs =
+      turn.requestStartMs !== null ? turn.firstTokenMs - turn.requestStartMs : null;
     // Also expose pure tps() parity check (unused here, tested separately): tps(outputTokens, turn.startMs, now)
     void tps;
     const validCost = Number.isFinite(costUsd) && costUsd > 0;
@@ -352,6 +422,7 @@ export class TurnTelemetryTracker {
       totalTokens,
       costUsd: validCost ? costUsd : 0,
       measurementMs,
+      ttftProviderMs,
       estimated: true,
     };
   }
@@ -375,7 +446,7 @@ export class TurnTelemetryTracker {
           event as {
             type: "message_update";
             message: AgentMessage;
-            assistantMessageEvent: { type: string; delta: string };
+            assistantMessageEvent: { type: string; delta: string; partial?: unknown };
           },
         );
         return;
@@ -383,6 +454,9 @@ export class TurnTelemetryTracker {
         this.endMessage(event.message);
         return;
       case "tool_execution_start":
+        return;
+      case "before_provider_request":
+        this.markProviderRequest();
         return;
       case "turn_end":
         return this.endTurnAndCollect();
@@ -396,6 +470,7 @@ export class TurnTelemetryTracker {
     this.turn = {
       startMs: this.now(),
       firstTokenMs: null,
+      requestStartMs: null,
       currentMessage: null,
       messages: [],
       generationMs: 0,
@@ -414,6 +489,12 @@ export class TurnTelemetryTracker {
     this.turn.liveInputTokens = Math.round(tokens);
   }
 
+  /** Record a provider request anchor for generation-window readouts. First wins per turn; no-op when idle. */
+  private markProviderRequest(): void {
+    if (!this.turn) return;
+    this.turn.requestStartMs ??= this.now();
+  }
+
   private startMessage(message: AgentMessage): void {
     if (!this.turn || !isAssistantMessage(message)) return;
     const now = this.now();
@@ -426,7 +507,7 @@ export class TurnTelemetryTracker {
 
   private updateMessage(event: {
     message: AgentMessage;
-    assistantMessageEvent: { type: string; delta: string };
+    assistantMessageEvent: { type: string; delta: string; partial?: unknown };
   }): void {
     const turn = this.turn;
     const current = turn?.currentMessage;
@@ -437,16 +518,15 @@ export class TurnTelemetryTracker {
 
     const now = this.now();
 
-    // TTFT — first streamed content of any kind (thinking counts). Mirrors
-    // pi-core-tps-stats CONTENT_START_EVENTS. No delta needed; the start
-    // signal itself is the observation. Return early so stall logic not
-    // double-counts the first chunk's gap.
+    // Start signals usually carry no bytes — TTFT waits for the first *_delta.
+    // Exception: a start whose partial already shows produced output (text in
+    // were genuinely generated. Empty text/thinking blocks wait for deltas.
+    // The stall clock stays armed at message_start — starts never re-arm it,
+    // so start→first-bytes and inter-start gaps count as stalls (review #1).
     if (CONTENT_START_EVENTS.has(type)) {
-      if (turn.firstTokenMs === null) {
-        turn.firstTokenMs = now;
-      }
-      if (current.firstOutputMs === null) {
+      if (current.firstOutputMs === null && hasStreamContent(streamEvent.partial)) {
         current.firstOutputMs = now;
+        turn.firstTokenMs ??= now;
         current.lastUpdateMs = now;
       }
       return;
@@ -459,11 +539,27 @@ export class TurnTelemetryTracker {
     // Data layer: cheap O(1) per delta — no external tokenizer, ~4 chars/token is enough for 1 s throttled display
     turn.liveDeltaChars += streamEvent.delta.length;
     const estFromDelta = Math.ceil(turn.liveDeltaChars / 4);
-    turn.liveEstimatedTokens = Math.max(estFromDelta, turn.liveEstimatedTokens);
+    // Opportunistic exact count: adopted when a provider attaches cumulative
+    // usage.output to delta-carrying events (verified: Anthropic resolves it
+    // in message_delta with no stream event, Google after the chunk's deltas
+    // with none, OpenAI final-chunk only — so live is chars/4 until
+    // message_end on all three today). Monotonic max; message_end corrects.
+    const streamed = streamedOutputTokens(streamEvent.partial);
+    turn.liveEstimatedTokens = Math.max(estFromDelta, streamed ?? 0, turn.liveEstimatedTokens);
     if (current.firstOutputMs === null) {
+      // First bytes — anchor TTFT, but evaluate the message_start→here gap
+      // first: prefill/queue stalls before the first token count like any
+      // other gap (mirror of the main stall branch below, which this return
+      // used to skip — review #1). Clock always advances, same as the main
+      // branch, so continued silence accrues exactly once per gap.
+      if (now - current.lastUpdateMs >= STALL_THRESHOLD_MS) {
+        turn.stallCount++;
+        turn.stallMs += now - current.lastUpdateMs;
+        current.inStall = true;
+      }
+      current.lastUpdateMs = now;
       current.firstOutputMs = now;
       turn.firstTokenMs ??= now;
-      current.lastUpdateMs = now;
       return;
     }
 
@@ -527,6 +623,8 @@ export class TurnTelemetryTracker {
     // Final TPS uses whole-turn (turn.generationMs = end - start), same denominator as live.
     const raw = tps(outputTokens, endMs - turn.generationMs, endMs);
     const tpsVal = measurementMs === null || raw === undefined ? null : round(raw, 1);
+    const ttftProviderMs =
+      turn.requestStartMs !== null ? turn.firstTokenMs! - turn.requestStartMs : null;
     const validCost = Number.isFinite(costUsd) && costUsd > 0;
     const validTokens = Number.isFinite(totalTokens) && totalTokens > 0;
     return {
@@ -543,6 +641,7 @@ export class TurnTelemetryTracker {
       totalTokens,
       costUsd: validCost ? costUsd : 0,
       measurementMs,
+      ttftProviderMs,
       estimated: false,
     };
   }

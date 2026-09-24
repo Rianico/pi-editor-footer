@@ -109,8 +109,18 @@ describe("aggregateAgentTurns", () => {
     // if mistakenly summed 110k, cap would hide but still wrong totalTokens
     assert.notEqual(agg?.inputTokens, 110000);
   });
+  it("propagates first observed provider TTFT, null when none seen", () => {
+    const agg = aggregateAgentTurns(
+      [mkTel({ ttftProviderMs: undefined }), mkTel({ ttftProviderMs: 500 })],
+      null,
+      0,
+      5000,
+    );
+    assert.equal(agg?.ttftProviderMs, 500);
+    const none = aggregateAgentTurns([mkTel({})], null, 0, 5000);
+    assert.equal(none?.ttftProviderMs, null);
+  });
 });
-
 describe("AgentRunLedger", () => {
   it("tracks baseline and startRun", () => {
     const ledger = new AgentRunLedger(() => 0);
