@@ -1,16 +1,3 @@
-# Changelog
-
-## [0.12.3](https://github.com/Rianico/pi-editor-footer/compare/v0.12.2...v0.12.3) (2026-09-17)
-
-### Bug Fixes
-
-* **footer:** count total input tokens in footer statistics ([a2153a1](https://github.com/Rianico/pi-editor-footer/commit/a2153a1f0f4884e3879a610744a9e664a9124053))
-
-### Documentation
-
-* **agents:** mark agent-run token accounting a scope boundary ([ffbbee2](https://github.com/Rianico/pi-editor-footer/commit/ffbbee29300a40d6963e0916c7526e0a1ce49881))
-* document total input token semantics for the footer ([9480bf9](https://github.com/Rianico/pi-editor-footer/commit/9480bf9f1508930d75a5e53b94d944d00d1f6a2a))
-
 <!-- markdownlint-configure-file { "MD004": { "style": "asterisk" } } -->
 <!-- Bullets stay `*`: semantic-release's preset writes `*`, and this file is excluded from the
      formatters so they cannot normalize them to `-`. Keep `# Changelog` as the FIRST line:
@@ -18,13 +5,7 @@
      the configured `changelogTitle`, and prepends release notes above it otherwise. Do not
      move this title below the comments, and do not remove the title. -->
 
-All notable changes to this project will be documented in this file.
-
-## [0.12.2](https://github.com/Rianico/pi-editor-footer/compare/v0.12.1...v0.12.2) (2026-09-13)
-
-### Bug Fixes
-
-* **context:** tier-color the context window section by usage ([#30](https://github.com/Rianico/pi-editor-footer/issues/30)) ([8152d90](https://github.com/Rianico/pi-editor-footer/commit/8152d90b3c1b4013154eff95cc885e79e7564f6f))
+# Changelog
 
 ## [Unreleased]
 
@@ -39,6 +20,25 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Chores
 
 * **scaffold:** refresh git contract to current scaffold (#34)
+
+## [0.12.3](https://github.com/Rianico/pi-editor-footer/compare/v0.12.2...v0.12.3) (2026-09-17)
+
+### Bug Fixes
+
+* **footer:** count total input tokens in footer statistics ([a2153a1](https://github.com/Rianico/pi-editor-footer/commit/a2153a1f0f4884e3879a610744a9e664a9124053))
+
+### Documentation
+
+* **agents:** mark agent-run token accounting a scope boundary ([ffbbee2](https://github.com/Rianico/pi-editor-footer/commit/ffbbee29300a40d6963e0916c7526e0a1ce49881))
+* document total input token semantics for the footer ([9480bf9](https://github.com/Rianico/pi-editor-footer/commit/9480bf9f1508930d75a5e53b94d944d00d1f6a2a))
+
+All notable changes to this project will be documented in this file.
+
+## [0.12.2](https://github.com/Rianico/pi-editor-footer/compare/v0.12.1...v0.12.2) (2026-09-13)
+
+### Bug Fixes
+
+* **context:** tier-color the context window section by usage ([#30](https://github.com/Rianico/pi-editor-footer/issues/30)) ([8152d90](https://github.com/Rianico/pi-editor-footer/commit/8152d90b3c1b4013154eff95cc885e79e7564f6f))
 
 ## [0.12.1](https://github.com/Rianico/pi-editor-footer/compare/v0.12.0...v0.12.1) (2026-09-07)
 
