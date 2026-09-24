@@ -322,6 +322,9 @@ export class SessionOrchestrator {
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
   }
+  getTelemetryTracker(): TurnTelemetryTracker {
+    return this.telemetryTracker;
+  }
   getCurrentModelInfo(): ModelInfo {
     return this.currentModelInfo;
   }
@@ -699,7 +702,9 @@ export class SessionOrchestrator {
       refreshAllLive();
     });
 
-    pi.on("before_provider_request", () => {
+    pi.on("before_provider_request", (e) => {
+      // Anchor the provider request for honest network TTFT (tracker is authoritative; no-op when idle)
+      this.telemetryTracker.handle(e as never);
       refreshAllLive();
     });
     pi.on("message_start", (e) => {
@@ -708,6 +713,9 @@ export class SessionOrchestrator {
     });
     pi.on("message_update", (e) => {
       this.telemetryTracker.handle(e as never);
+      // Data lands per delta; display stays throttled — render() coalesces to REFRESH_MS so streaming never janks.
+      // Do not bypass render() with a direct doRender: the burst test pins one pass-through per 10-delta burst (review #9).
+      refreshAllLive();
     });
     pi.on("message_end", (e) => {
       this.telemetryTracker.handle(e as never);
