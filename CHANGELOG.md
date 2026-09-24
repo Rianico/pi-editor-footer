@@ -28,6 +28,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+* **telemetry:** adopt streamed usage counts and provider-anchored TTFT
+
 ### Bug Fixes
 
 * **imports:** use .js extensions for NodeNext module resolution
