@@ -11,12 +11,15 @@
 
 ### Features
 
-* **telemetry:** adopt streamed usage counts and provider-anchored TTFT
+* **telemetry:** adopt streamed usage counts and provider-anchored TTFT (#33)
 
 ### Bug Fixes
 
 * **imports:** use .js extensions for NodeNext module resolution
 
+### Miscellaneous Chores
+
+* **scaffold:** refresh git contract to current scaffold (#34)
 
 ## [0.12.3](https://github.com/Rianico/pi-editor-footer/compare/v0.12.2...v0.12.3) (2026-09-17)
 
