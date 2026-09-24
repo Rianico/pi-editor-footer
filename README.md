@@ -12,8 +12,8 @@ A [pi](https://pi.dev) extension that turns the editor chrome into a project-awa
 
 **Footer** — single line below the input, responsive via `fitSegmentsByPriority` and `alignRight`:
 - Left: `cwd` (`·` `git branch` + status `[! ? + ↑↓]` + stashed/conflicted) `•` `runtime` (`node`/`python`/`rust`/`go`… + version) `•` `timer` (`working`/`done`)
-- Right: `tokens` (` input |  output |  $cost`) immediately next to `context` (` [bar] % · tokens/contextWindow`)
-- Separators: `·` between `cwd` and `git`, `•` as default between other left components; `tokens` sits directly left of the context bar
+- Right: `tokens` (`↑ <total input> · ↓ <output> · $<cost>`) — `↑` counts every billed input token (uncached input + cache read + cache write), so it tracks the context bar's token figure instead of `usage.input` alone
+- Separators: `·` between `cwd` and `git`, `•` as default between other left components; the `context` bar (`<pct> · <tokens>/<window> | c <hit%>`) sits on the top border next to the model label, not in the footer
 - `cwd` respects `workspaceDisplay` (`~/development/ai/pi-skill-desc` vs `pi-skill-desc`, switchable in settings)
 - `context` bar uses `stressColor` and `renderBar` (12 cols max) with `•`/`·` handling
 - Extension statuses line (`wrapTextWithAnsi`) when `footerSegments.extensionStatuses`

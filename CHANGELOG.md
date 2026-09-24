@@ -1,3 +1,36 @@
+<!-- markdownlint-configure-file { "MD004": { "style": "asterisk" } } -->
+<!-- Bullets stay `*`: semantic-release's preset writes `*`, and this file is excluded from the
+     formatters so they cannot normalize them to `-`. Keep `# Changelog` as the FIRST line:
+     @semantic-release/changelog rewrites the title in place only while the file starts with
+     the configured `changelogTitle`, and prepends release notes above it otherwise. Do not
+     move this title below the comments, and do not remove the title. -->
+
+# Changelog
+
+## [Unreleased]
+
+### Features
+
+* **telemetry:** adopt streamed usage counts and provider-anchored TTFT
+
+### Bug Fixes
+
+* **imports:** use .js extensions for NodeNext module resolution
+
+
+## [0.12.3](https://github.com/Rianico/pi-editor-footer/compare/v0.12.2...v0.12.3) (2026-09-17)
+
+### Bug Fixes
+
+* **footer:** count total input tokens in footer statistics ([a2153a1](https://github.com/Rianico/pi-editor-footer/commit/a2153a1f0f4884e3879a610744a9e664a9124053))
+
+### Documentation
+
+* **agents:** mark agent-run token accounting a scope boundary ([ffbbee2](https://github.com/Rianico/pi-editor-footer/commit/ffbbee29300a40d6963e0916c7526e0a1ce49881))
+* document total input token semantics for the footer ([9480bf9](https://github.com/Rianico/pi-editor-footer/commit/9480bf9f1508930d75a5e53b94d944d00d1f6a2a))
+
+All notable changes to this project will be documented in this file.
+
 ## [0.12.2](https://github.com/Rianico/pi-editor-footer/compare/v0.12.1...v0.12.2) (2026-09-13)
 
 ### Bug Fixes
@@ -21,10 +54,6 @@
 
 * allow pnpm builds for esbuild and genai ([36e139e](https://github.com/Rianico/pi-editor-footer/commit/36e139e9443ef928a4366c3d7c8afe494b6e0850))
 * make prepare tolerant to missing husky for pi install ([23ebb62](https://github.com/Rianico/pi-editor-footer/commit/23ebb62cd8d732656fd113da27c807ffa34579fc))
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
 
 ## [0.11.0] - 2026-08-29
 

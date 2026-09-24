@@ -50,18 +50,22 @@ function update(
   message: AssistantMessage,
   delta = "x",
   type = "text_delta",
+  partial?: unknown,
 ): {
   type: "message_update";
   message: AssistantMessage;
-  assistantMessageEvent: { type: string; delta: string };
+  assistantMessageEvent: { type: string; delta: string; partial?: unknown };
 } {
   return {
     type: "message_update",
     message: message as unknown as AssistantMessage & { role: string },
-    assistantMessageEvent: { type, delta },
+    assistantMessageEvent: {
+      type,
+      delta,
+      ...(partial !== undefined ? { partial } : {}),
+    },
   };
 }
-
 function startTurn(tracker: TurnTelemetryTracker, message: AssistantMessage, turnIndex = 0): void {
   tracker.handle({ type: "turn_start", turnIndex, timestamp: Date.now() });
   tracker.handle({
@@ -101,18 +105,19 @@ describe("TurnTelemetryTracker", () => {
       totalMs: 5000,
       inputTokens: 50,
       outputTokens: 20,
-      stallMs: 0,
-      stallCount: 0,
+      stallMs: 4000, // 4 s message_start→first-bytes silence counts as a pre-token stall
+      stallCount: 1,
       rateUsdPerMTokens: 4,
       generationMs: 5000,
       totalTokens: 70,
       costUsd: 0.00028,
       measurementMs: 5000,
+      ttftProviderMs: null, // no before_provider_request in this turn (no generation-window rate exposed)
       estimated: false,
     });
     assert.equal(
       formatTurnTelemetry(telemetry!, theme, fullConfig),
-      "   4.0 tok/s TPS ·  4.0s TTFT",
+      "   4.0 tok/s TPS ·  4.0s TTFT · !1×4.0s",
     );
   });
 
@@ -203,6 +208,137 @@ describe("TurnTelemetryTracker", () => {
     assert.deepEqual(tracker.getLastTelemetry(), tel);
   });
 
+  test("adopts streamed usage.output when provider reports it mid-stream", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 1000;
+    // 2 chars -> chars/4 estimate would be 1; provider reports exact 25
+    tracker.handle(update(message, "hi", "text_delta", { usage: { output: 25 } }));
+    const live = tracker.peekLive()!;
+    assert.equal(live.outputTokens, 25);
+    assert.equal(live.estimated, true);
+  });
+
+  test("falls back to chars/4 when streamed usage is absent or zero", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 1000;
+    tracker.handle(update(message, "abcdefgh", "text_delta"));
+    assert.equal(tracker.peekLive()!.outputTokens, 2);
+    now = 1100;
+    tracker.handle(update(message, "ijklmnop", "text_delta", { usage: { output: 0 } }));
+    // 16 chars total -> ceil(16/4) = 4, zero usage must not clobber the estimate
+    assert.equal(tracker.peekLive()!.outputTokens, 4);
+  });
+
+  test("streamed usage never regresses the live estimate", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 1000;
+    tracker.handle(update(message, "hi", "text_delta", { usage: { output: 25 } }));
+    assert.equal(tracker.peekLive()!.outputTokens, 25);
+    now = 1100;
+    tracker.handle(update(message, "hello world", "text_delta", { usage: { output: 10 } }));
+    assert.equal(tracker.peekLive()!.outputTokens, 25);
+  });
+
+  test("anchors TTFT to first delta, not start signal", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 1000;
+    tracker.handle(update(message, "", "text_start"));
+    // start signal carries no bytes — still pre-first-token
+    assert.equal(tracker.peekLive()?.ttftMs, 0);
+    now = 1500;
+    tracker.handle(update(message, "hello", "text_delta"));
+    assert.equal(tracker.peekLive()!.ttftMs, 1500);
+  });
+
+  test("exposes provider-anchored TTFT alongside whole-turn TPS", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    tracker.handle({ type: "turn_start", turnIndex: 0, timestamp: Date.now() });
+    now = 1000;
+    tracker.handle({ type: "before_provider_request" });
+    tracker.handle({ type: "message_start", message });
+    now = 1200;
+    tracker.handle({ type: "before_provider_request" }); // retry: first anchor wins
+    now = 1500;
+    tracker.handle(update(message, "0123456789012345678901234567890123456789", "text_delta")); // 40 chars -> 10
+    now = 2500;
+    const live = tracker.peekLive()!;
+    assert.equal(live.outputTokens, 10);
+    assert.equal(live.ttftMs, 1500); // turn-relative: includes queue/prefill
+    assert.equal(live.ttftProviderMs, 500); // request-relative: true network TTFT
+    assert.equal(live.tps, 4); // whole-turn: 10 / 2.5s
+  });
+
+  test("provider anchor is null when unobserved and safe when idle", () => {
+    const tracker = new TurnTelemetryTracker(() => 0);
+    tracker.handle({ type: "before_provider_request" }); // no turn — no-op, no throw
+    assert.equal(tracker.peekLive(), null);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    assert.equal(tracker.peekLive()?.ttftProviderMs, null);
+  });
+
+  test("counts a start-to-first-bytes stall instead of swallowing it", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 500;
+    tracker.handle(update(message, "", "text_start"));
+    now = 3500; // 3.5 s of dead air before first bytes — a prefill stall
+    tracker.handle(update(message, "hello", "text_delta"));
+    const live = tracker.peekLive()!;
+    assert.equal(live.ttftMs, 3500);
+    assert.equal(live.stallCount, 1);
+    assert.equal(live.stallMs, 3500);
+  });
+
+  test("anchors TTFT on a start that already carries complete content", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 1000;
+    // redacted thinking / no-arg tool calls: complete content at start, never any deltas
+    tracker.handle(
+      update(message, "", "thinking_start", {
+        content: [{ type: "thinking", thinking: "redacted" }],
+      }),
+    );
+    assert.equal(tracker.peekLive()!.ttftMs, 1000);
+  });
+
+  test("named toolcall starts anchor, empty text starts wait for deltas", () => {
+    let now = 0;
+    const tracker = new TurnTelemetryTracker(() => now);
+    const message = makeMessage();
+    startTurn(tracker, message);
+    now = 1000;
+    // translators push the (empty) block before its start — no output produced yet
+    tracker.handle(update(message, "", "text_start", { content: [{ type: "text", text: "" }] }));
+    assert.equal(tracker.peekLive()?.ttftMs, 0);
+    now = 1200;
+    // the named call itself is produced output, even with args still streaming
+    tracker.handle(
+      update(message, "", "toolcall_start", {
+        content: [{ type: "toolCall", id: "call_1", name: "get_time", arguments: {} }],
+      }),
+    );
+    assert.equal(tracker.peekLive()!.ttftMs, 1200);
+  });
   test("respects telemetry segment settings", () => {
     const telemetry = {
       tps: 50,

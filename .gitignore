@@ -4,3 +4,5 @@ tmp/
 .pi/
 .agents/
 coverage/
+node_modules/
+dist/

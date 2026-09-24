@@ -111,4 +111,65 @@ describe("SessionOrchestrator", () => {
     assert.ok(orch.getAgentLedger() !== null);
     assert.equal(typeof orch.getLiveBorder().render, "function");
   });
+
+  test("live wiring: anchor reaches tracker, delta bursts coalesce to one render", () => {
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+    });
+    const raw = fakePi();
+    const pi = raw as unknown as Parameters<SessionOrchestrator["install"]>[0];
+    orch.install(pi);
+    const fire = (name: string, e: unknown): void => {
+      for (const h of raw.handlers.get(name) ?? []) h(e, fakeCtx() as never);
+    };
+    // count coalescer pass-throughs (doRender), not render() calls: the rate
+    // cap lives inside LiveBorder.render, so only doRender proves it holds.
+    const lb = orch.getLiveBorder();
+    let renders = 0;
+    const lbDoRender = lb as unknown as { doRender: () => void };
+    const origDoRender = lbDoRender.doRender.bind(lb);
+    lbDoRender.doRender = () => {
+      renders++;
+      origDoRender();
+    };
+    const msg = {
+      role: "assistant",
+      content: [],
+      usage: {
+        input: 10,
+        output: 6,
+        totalTokens: 16,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+    };
+    // Phase 1 (rate): burst of deltas with no turn active. Tracker no-ops
+    // safely; all 10 fires must coalesce into exactly ONE render — this
+    // asserts the LiveBorder rate cap end-to-end (review #9), not the call.
+    // Deterministic: border is fresh (lastRenderMs 0), burst runs in one ms.
+    const burstStart = renders;
+    for (let i = 0; i < 10; i++) {
+      fire("message_update", {
+        type: "message_update",
+        message: msg,
+        assistantMessageEvent: { type: "text_delta", delta: "hi" },
+      });
+    }
+    assert.equal(renders, burstStart + 1);
+    // Phase 2 (anchor/output): real turn; provider usage + anchor reach the tracker.
+    fire("turn_start", { type: "turn_start", turnIndex: 0 });
+    fire("before_provider_request", { type: "before_provider_request" });
+    fire("message_start", { type: "message_start", message: msg });
+    // 2 chars -> chars/4 gives 1; provider reports exact 6
+    fire("message_update", {
+      type: "message_update",
+      message: msg,
+      assistantMessageEvent: { type: "text_delta", delta: "hi", partial: { usage: { output: 6 } } },
+    });
+    const live = orch.getTelemetryTracker().peekLive();
+    assert.ok(live, "expected live telemetry while streaming");
+    assert.equal(live!.outputTokens, 6);
+    assert.ok((live!.ttftProviderMs ?? -1) >= 0, "provider anchor must reach the tracker");
+    orch.dispose();
+  });
 });

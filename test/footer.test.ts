@@ -60,6 +60,29 @@ describe("footer", () => {
     assert.ok(linesName[0]!.includes("project"));
     assert.ok(!linesName[0]!.includes("/Users/test/long/path/to/project"));
   });
+  test("input statistics count total input tokens — cache read + cache write included", () => {
+    const state = makeState();
+    const config = {
+      ...DEFAULT_CONFIG,
+      icons: { ...DEFAULT_CONFIG.icons, mode: "ascii" as const },
+    };
+    const lines = renderFooter(160, state, config, theme as never, {
+      cwd: "/tmp",
+      totals: {
+        input: 395,
+        output: 505,
+        cacheRead: 340_000,
+        cacheWrite: 12_000,
+        cost: 0.16,
+        latestCacheHitRate: 85.3,
+      },
+    });
+    const line = lines[0]!;
+    // 395 + 340_000 + 12_000 = 352_395 → "352k"
+    assert.ok(line.includes("↑ 352k"), line);
+    assert.ok(!line.includes("↑ 395"), line);
+    assert.ok(line.includes("↓ 505"), line);
+  });
 
   test("respects footerSegments toggles", () => {
     const state = makeState({ git: { ...emptyGitStatus(), branch: "main" } });
