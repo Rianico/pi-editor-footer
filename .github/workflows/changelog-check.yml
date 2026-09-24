@@ -40,21 +40,18 @@ jobs:
             python scripts/changelog-gate.py ledger
             exit $?
           fi
-          landing=$(printf '%s\n' "$PR_BODY" \
-            | awk '/^[[:space:]]*[Ll]anding:/{print $2; exit}')
-          case "$landing" in
-            squash|merge) ;;
-            *) landing="" ;;
-          esac
-          if [ -z "$landing" ]; then
-            echo "::error::no landing declaration in the PR body"
-            echo "add 'Landing: squash' or 'Landing: merge'"
-            python scripts/changelog-gate.py ledger --pr "$PR_NUMBER"
-            exit 2
+          waiver=$(printf '%s\n' "$PR_BODY" \
+            | sed -n 's/^[[:space:]]*[Ll]edger-[Ww]aiver:[[:space:]]*//p' \
+            | head -n 1)
+          if [ -n "$waiver" ]; then
+            echo "waiver: $waiver"
+            python scripts/changelog-gate.py ledger \
+              --pr "$PR_NUMBER" \
+              --waiver "$waiver"
+          else
+            python scripts/changelog-gate.py ledger \
+              --pr "$PR_NUMBER"
           fi
-          echo "landing: $landing"
-          python scripts/changelog-gate.py ledger \
-            --pr "$PR_NUMBER" --landing "$landing" --base main
       - name: Comment on failure
         if: failure() && github.event_name == 'pull_request'
         # v9.0.0
@@ -63,26 +60,20 @@ jobs:
           script: |
             const pr = context.issue.number;
             const body = [
-              '> [!warning] Changelog ledger floor failed',
+              '> [!warning] Changelog ledger check failed',
               '',
-              'The `## [Unreleased]` block did not pass the deterministic',
-              'floor (ADR-0016): well-formedness, section integrity,',
-              'duplicate identities, placeholders, provenance, or per-PR',
-              'accounting.',
+              'The `## [Unreleased]` block did not pass verification: well-formedness,',
+              'section integrity, duplicate identities, placeholders, or PR attribution.',
               '',
-              'Every entry names the PR that landed it (`(#N)`), and no PR may',
-              'produce more entries than it had commits. A squash landing must',
-              'collapse the digest to the single entry its subject projects;',
-              'declare it in the PR body as `Landing: squash` or',
-              '`Landing: merge`.',
+              'Every new entry must name this PR (`(#' + pr + ')`). Multiple entries are allowed.',
               '',
               '```bash',
-              'uv run scripts/changelog-gate.py ledger \\',
-              '  --pr ' + pr + ' --landing squash --base main',
+              'uv run scripts/changelog-gate.py ledger --pr ' + pr,
               '```',
               '',
-              'A blocked ledger is waived only with a recorded reason:',
-              '`--waiver "<reason>"`, written in this PR body.',
+              'A blocked ledger is waived only with a recorded reason: add a',
+              '`Ledger-Waiver: <reason>` trailer to this PR body and re-run.',
+              'The gate waives fixable findings only, never a needs-human one.',
             ].join('\n');
             const {data: comments} = await github.rest.issues.listComments({
               owner: context.repo.owner,
