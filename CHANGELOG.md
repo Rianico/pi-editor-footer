@@ -20,6 +20,7 @@
 ### Miscellaneous Chores
 
 * **scaffold:** refresh git contract to current scaffold (#34)
+* **scaffold:** refresh git contract gate to canonical Ledger-Waiver form (#35)
 
 ## [0.12.3](https://github.com/Rianico/pi-editor-footer/compare/v0.12.2...v0.12.3) (2026-09-17)
 
