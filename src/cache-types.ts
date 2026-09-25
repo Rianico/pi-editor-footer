@@ -1,7 +1,8 @@
-// Structural types for the /cache feature. Defined locally — never imported
-// from @earendil-works/pi-ai or pi-coding-agent, which are runtime-provided
-// peers only (see src/index.ts header). The pi session entries satisfy
-// CacheSessionEntryLike structurally at runtime.
+// Output types for the /cache feature metrics and totals. The pi session-entry
+// SHAPE these are computed from lives in src/session-entries.ts (the single
+// seam); metric/totals shapes are defined locally — never imported from
+// @earendil-works/pi-ai or pi-coding-agent, which are runtime-provided peers
+// only (see src/index.ts header).
 
 export interface CacheUsageTotals {
   input: number;
@@ -33,31 +34,6 @@ export interface CacheSessionMetrics {
   activeBranchMessages: AssistantUsageMetric[];
   treeTotals: CacheUsageTotals;
   activeBranchTotals: CacheUsageTotals;
-}
-
-export interface CacheUsageLike {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  totalTokens: number;
-}
-
-export interface CacheSessionEntryLike {
-  type: string;
-  id: string;
-  timestamp: string;
-  message?: {
-    role: string;
-    provider?: string;
-    model?: string;
-    usage?: CacheUsageLike;
-  };
-}
-
-export interface CacheSessionReader {
-  getEntries(): CacheSessionEntryLike[];
-  getBranch(): CacheSessionEntryLike[];
 }
 
 /** Minimal slice of the pi theme the cache dialogs use. */

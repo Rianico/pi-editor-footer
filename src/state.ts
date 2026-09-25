@@ -3,6 +3,14 @@ import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
 import { formatProviderLabel } from "./format.js";
 import { computeCacheHitPercent, promptTokens } from "./cache-math.js";
+import {
+  isAssistantUsageEntry,
+  isSummaryEntry,
+  isToolResultEntry,
+  usageNumbers,
+  type SessionEntryReader,
+  type SessionUsageLike,
+} from "./session-entries.js";
 
 export interface FooterState {
   git: GitStatus;
@@ -21,31 +29,9 @@ export interface UsageTotals {
   latestCacheHitRate: number | undefined;
 }
 
-/** Raw provider usage block as persisted on a session entry. */
-export interface EntryUsage {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  cost?: { total?: number };
-}
-
-/**
- * Session entry slice read by getUsageTotals — the pi seam, validated at runtime.
- * `usage` sits at the top level on branch_summary / compaction entries and inside
- * `message` on message entries.
- */
-export interface UsageSessionEntry {
-  type: string;
-  id?: string;
-  timestamp?: string;
-  message?: { role: string; usage?: EntryUsage };
-  usage?: EntryUsage;
-}
-
 /** Minimal session-manager seam getUsageTotals reads entries through. */
 export interface UsageTotalsSource {
-  sessionManager?: { getEntries(): UsageSessionEntry[] };
+  sessionManager?: SessionEntryReader;
 }
 
 /**
@@ -81,7 +67,7 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
     cost: 0,
     latestCacheHitRate: undefined,
   };
-  const addUsage = (usage: EntryUsage): void => {
+  const addUsage = (usage: SessionUsageLike): void => {
     totals.input += usage.input ?? 0;
     totals.output += usage.output ?? 0;
     totals.cacheRead += usage.cacheRead ?? 0;
@@ -92,13 +78,10 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
     // Assistant turns carry the cache split the hit rate is derived from; tool results
     // and summaries are usage from nested model calls — billed, so they count toward the
     // session totals (parity with pi core's addUsageToTotals loop).
-    if (entry.type === "message" && entry.message?.role === "assistant") {
+    if (isAssistantUsageEntry(entry)) {
       const usage = entry.message.usage;
-      if (!usage) continue;
       addUsage(usage);
-      const input = usage.input ?? 0;
-      const cacheRead = usage.cacheRead ?? 0;
-      const cacheWrite = usage.cacheWrite ?? 0;
+      const { input, cacheRead, cacheWrite } = usageNumbers(usage);
       // `undefined` means "no assistant turn with a real prompt yet" — distinct
       // from a genuine 0% hit, which the owner returns for prompt totals > 0.
       if (promptTokens(input, cacheRead, cacheWrite) > 0) {
@@ -106,11 +89,11 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
       }
       continue;
     }
-    if (entry.type === "message" && entry.message?.role === "toolResult") {
-      if (entry.message.usage) addUsage(entry.message.usage);
+    if (isToolResultEntry(entry)) {
+      if (entry.message?.usage) addUsage(entry.message.usage);
       continue;
     }
-    if (entry.type === "branch_summary" || entry.type === "compaction") {
+    if (isSummaryEntry(entry)) {
       if (entry.usage) addUsage(entry.usage);
     }
   }

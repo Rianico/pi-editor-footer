@@ -8,7 +8,8 @@ import {
 import { ScrollDialog } from "./cache-scroll-dialog.js";
 import { collectCacheSessionMetrics } from "./cache-session-data.js";
 import { renderStatsBody } from "./cache-stats-view.js";
-import type { CacheSessionMetrics, CacheSessionReader, CacheTheme } from "./cache-types.js";
+import type { CacheSessionMetrics, CacheTheme } from "./cache-types.js";
+import type { BranchAwareSessionEntryReader } from "./session-entries.js";
 import { chartGlyphsForMode, type IconMode } from "./icons.js";
 
 interface CacheExtensionContext {
@@ -88,7 +89,7 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
       }
 
       // SAFETY: pi seam — runtime sessionManager provides getEntries/getBranch/getSessionName/getSessionFile
-      const sessionManager = ctx.sessionManager as CacheSessionReader;
+      const sessionManager = ctx.sessionManager as BranchAwareSessionEntryReader;
       let metrics: CacheSessionMetrics = collectCacheSessionMetrics(sessionManager);
 
       if (subcommand === "export") {

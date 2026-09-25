@@ -1,24 +1,16 @@
 import { addToTotals, computeCacheHitPercent, emptyTotals } from "./cache-math.js";
-import type {
-  AssistantUsageMetric,
-  CacheSessionEntryLike,
-  CacheSessionMetrics,
-  CacheSessionReader,
-} from "./cache-types.js";
-
-function isAssistantUsageEntry(entry: CacheSessionEntryLike): boolean {
-  return (
-    entry.type === "message" &&
-    entry.message?.role === "assistant" &&
-    entry.message.usage !== undefined
-  );
-}
+import type { AssistantUsageMetric, CacheSessionMetrics } from "./cache-types.js";
+import {
+  isAssistantUsageEntry,
+  usageNumbers,
+  type BranchAwareSessionEntryReader,
+} from "./session-entries.js";
 
 export function collectCacheSessionMetrics(
-  sessionManager: CacheSessionReader,
+  sessionManager: BranchAwareSessionEntryReader,
 ): CacheSessionMetrics {
   const allEntries = sessionManager.getEntries();
-  const activeBranchIds = new Set(sessionManager.getBranch().map((entry) => entry.id));
+  const activeBranchIds = new Set(sessionManager.getBranch().map((entry) => entry.id ?? ""));
 
   const treeTotals = emptyTotals();
   const activeBranchTotals = emptyTotals();
@@ -30,25 +22,21 @@ export function collectCacheSessionMetrics(
 
   for (const entry of allEntries) {
     if (!isAssistantUsageEntry(entry)) continue;
-    const message = entry.message!;
-    const usage = message.usage!;
+    const entryId = entry.id ?? "";
+    const usage = usageNumbers(entry.message.usage);
 
     sequence += 1;
 
     const metric: AssistantUsageMetric = {
       sequence,
       activeBranchSequence: undefined,
-      entryId: entry.id,
-      timestamp: entry.timestamp,
-      provider: message.provider ?? "",
-      model: message.model ?? "",
-      input: usage.input,
-      output: usage.output,
-      cacheRead: usage.cacheRead,
-      cacheWrite: usage.cacheWrite,
-      totalTokens: usage.totalTokens,
+      entryId,
+      timestamp: entry.timestamp ?? "",
+      provider: entry.message.provider ?? "",
+      model: entry.message.model ?? "",
+      ...usage,
       cacheHitPercent: computeCacheHitPercent(usage.input, usage.cacheRead, usage.cacheWrite),
-      isOnActiveBranch: activeBranchIds.has(entry.id),
+      isOnActiveBranch: activeBranchIds.has(entryId),
     };
 
     addToTotals(treeTotals, metric);

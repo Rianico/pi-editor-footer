@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { getUsageTotals, invalidateUsageCache, totalInputTokens } from "../src/state.js";
+import type { SessionUsageLike } from "../src/session-entries.js";
 
-interface EntryUsageLike {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  cost?: { total?: number };
-}
-
-function usage(over: EntryUsageLike = {}): EntryUsageLike {
+function usage(over: SessionUsageLike = {}): SessionUsageLike {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: { total: 0 }, ...over };
 }
 

@@ -16,11 +16,8 @@ import { buildCsv } from "../src/cache-export.js";
 import { collectCacheSessionMetrics } from "../src/cache-session-data.js";
 import { renderStatsBody } from "../src/cache-stats-view.js";
 import { getUsageTotals, invalidateUsageCache, totalInputTokens } from "../src/state.js";
-import type {
-  AssistantUsageMetric,
-  CacheSessionEntryLike,
-  CacheUsageTotals,
-} from "../src/cache-types.js";
+import type { SessionEntryLike } from "../src/session-entries.js";
+import type { AssistantUsageMetric, CacheUsageTotals } from "../src/cache-types.js";
 
 describe("computeCacheHitPercent", () => {
   test("returns 0 when denominator is zero", () => {
@@ -167,7 +164,7 @@ describe("prompt-token formula parity across all five call sites", () => {
   const EXPECTED_PROMPT = 310; // 100 + 200 + 10
   const EXPECTED_HIT = (200 / 310) * 100;
 
-  function assistantEntry(usage: typeof U): CacheSessionEntryLike {
+  function assistantEntry(usage: typeof U): SessionEntryLike {
     return {
       type: "message",
       id: "e1",
