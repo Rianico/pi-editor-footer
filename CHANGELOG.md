@@ -22,6 +22,7 @@
 
 ### Documentation
 
+* **changelog:** attribute #38 ledger entries
 * **review:** resolve architecture-review minors and fossil comments
 * **agents:** point total-input single source at cache-math
 
