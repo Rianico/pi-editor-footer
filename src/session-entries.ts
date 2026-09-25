@@ -64,8 +64,11 @@ export function isAssistantUsageEntry(entry: SessionEntryLike): entry is Assista
   );
 }
 
+/** A message entry with `role: "toolResult"`. */
+export type ToolResultEntry = SessionEntryLike & { message: SessionMessageLike };
+
 /** Tool-result message (usage, when present, is a nested model call). */
-export function isToolResultEntry(entry: SessionEntryLike): boolean {
+export function isToolResultEntry(entry: SessionEntryLike): entry is ToolResultEntry {
   return entry.type === "message" && entry.message?.role === "toolResult";
 }
 

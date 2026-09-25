@@ -8,7 +8,7 @@
  * occupancy, capped to contextWindow and session totals.
  *
  * Previously this logic was scattered across 3 call sites (telemetry.peekAgentLive
- * max-vs-sum, live-border.refreshContextBar 70L capping, index.agent_settled 60L
+ * max-vs-sum, the context-bar refresh since moved into live-border (then 70L capping), index.agent_settled 60L
  * baseline fallback) with divergent caps. Bugs required holding 3 sites in one head.
  *
  * Depth: small interface (setBaseline / startRun / recordTurn / getTotals / getLive

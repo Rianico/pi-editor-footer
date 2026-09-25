@@ -166,7 +166,7 @@ describe("AgentRunLedger", () => {
     assert.equal(res.input, 5000);
   });
   it("getIdleAuthoritativeDisplay shows baseline delta capped to idle", () => {
-    // Live call site: live-border refreshContextBar idle branch (billed total after agent_end).
+    // Live call site: live-border render idle branch (billed total after agent_end).
     const ledger = new AgentRunLedger();
     ledger.setBaseline(mkTotals({ input: 100000, output: 100, cost: 0.25 }));
     const snap = mkTotals({ input: 160000, output: 500, cost: 0.75 });

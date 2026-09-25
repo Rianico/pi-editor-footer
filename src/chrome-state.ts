@@ -4,7 +4,7 @@
  * Problem it solves (C5): same chrome concepts (context %, git, runtime,
  * tokens, cacheHitRate) render through two seams — footer below input and
  * border on TrackingEditor — with derivation scattered across
- * footer.ts:formatContextBar, state.ts:getUsageTotals, index.ts:refreshContextBar,
+ * footer.ts:formatContextBar, state.ts:getUsageTotals, the then-index.ts:refreshContextBar,
  * and border-renderer. Tracing one token requires bouncing 4 modules.
  *
  * Depth: one interface (snapshot / format helpers) hides truncation, color

@@ -90,7 +90,7 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
       continue;
     }
     if (isToolResultEntry(entry)) {
-      if (entry.message?.usage) addUsage(entry.message.usage);
+      if (entry.message.usage) addUsage(entry.message.usage);
       continue;
     }
     if (isSummaryEntry(entry)) {
