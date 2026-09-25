@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-25
+
 ### Features
 
 * **cache:** add /cache graph, stats and export commands (#37)

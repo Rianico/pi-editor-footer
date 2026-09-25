@@ -33,7 +33,7 @@
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*"
   },
-  "version": "0.12.3",
+  "version": "0.13.0",
   "files": [
     "dist",
     "src",
