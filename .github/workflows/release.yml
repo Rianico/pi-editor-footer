@@ -37,7 +37,6 @@ jobs:
         with: { python-version: "3.14" }
       - name: Retire the migration baselines
         run: |
-          python scripts/typecheck-budget.py --update-baseline
           python scripts/changelog-gate.py ledger --update-baseline
       - run: pnpm install
       - run: pnpm exec semantic-release
