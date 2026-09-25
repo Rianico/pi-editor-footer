@@ -9,7 +9,7 @@ import {
 import {
   formatInt,
   formatPercent,
-  promptTokens as formatPromptTokens,
+  promptTokensOfTotals,
   summarizeHitPercent,
 } from "../src/cache-format.js";
 import { buildCsv } from "../src/cache-export.js";
@@ -65,11 +65,14 @@ describe("promptTokens", () => {
     assert.ok(promptTokens(0, 0, 1) > 0);
   });
 
-  test("is the denominator computeCacheHitPercent uses (same gate boundary)", () => {
-    assert.equal(promptTokens(0, 0, 0), 0);
-    assert.equal(computeCacheHitPercent(0, 0, 0), 0);
-    assert.ok(promptTokens(10, 20, 0) > 0);
-    assert.ok(computeCacheHitPercent(10, 20, 0) > 0);
+  test("gate boundary: separates no-prompt from a genuine 0% hit (hand-pinned constants)", () => {
+    // Callers (state.ts:getUsageTotals) gate on promptTokens > 0 *before*
+    // trusting the percent, so the gate and the zero-hit value must differ:
+    // an uncached-only prompt has a positive denominator yet a 0% hit.
+    assert.equal(promptTokens(0, 0, 0), 0); // 0 + 0 + 0 — gate closed
+    assert.equal(computeCacheHitPercent(0, 0, 0), 0); // zero-denominator sentinel
+    assert.equal(promptTokens(10, 0, 0), 10); // 10 + 0 + 0 — gate open
+    assert.equal(computeCacheHitPercent(10, 0, 0), 0); // 0/10*100 — real 0% hit
   });
 });
 
@@ -192,17 +195,17 @@ describe("prompt-token formula parity across all five call sites", () => {
     // state.totalInputTokens uses the same denominator as the owner.
     assert.equal(totalInputTokens(totals), EXPECTED_PROMPT);
     assert.equal(totalInputTokens(totals), promptTokens(U.input, U.cacheRead, U.cacheWrite));
-    assert.equal(totalInputTokens(totals), formatPromptTokens(totals));
+    assert.equal(totalInputTokens(totals), promptTokensOfTotals(totals));
   });
 
-  test("cache-format promptTokens and summarizeHitPercent equal the owner", () => {
+  test("cache-format promptTokensOfTotals and summarizeHitPercent equal the owner", () => {
     const totals: CacheUsageTotals = {
       ...emptyTotals(),
       input: U.input,
       cacheRead: U.cacheRead,
       cacheWrite: U.cacheWrite,
     };
-    assert.equal(formatPromptTokens(totals), EXPECTED_PROMPT);
+    assert.equal(promptTokensOfTotals(totals), EXPECTED_PROMPT);
     assert.equal(
       summarizeHitPercent(totals),
       computeCacheHitPercent(U.input, U.cacheRead, U.cacheWrite),

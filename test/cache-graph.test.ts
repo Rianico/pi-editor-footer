@@ -185,6 +185,19 @@ describe("stats table layout", () => {
     );
   });
 
+  test("entry id longer than 8 columns is truncated to exactly 8 visible columns", () => {
+    const long = { ...makeMetric(64.5, 1), entryId: "entry-abcdefghijklmnop" };
+    const sibling = { ...makeMetric(64.5, 2), entryId: "e2" };
+    const lines = statsTableLines([long, sibling]).map(stripAnsi);
+    // Column offsets at width ≥ 104: #(4) ' ' B(1) ' ' entry(8) ' ' time(8),
+    // so the entry cell occupies [7,15) and the time cell starts at 16.
+    assert.equal(lines[1]!.slice(7, 15), "entry-ab");
+    assert.equal(lines[1]!.slice(16, 24), "00:00:00");
+    // The long id must not widen or shift its row relative to siblings.
+    const widths = lines.map(visibleWidth);
+    assert.equal(new Set(widths).size, 1, `rows misaligned: ${JSON.stringify(widths)}`);
+  });
+
   test("padRight/padLeft pad to visible width, not string length", () => {
     // Falsifiable against the retired `pad` (String.length based): an ANSI-styled
     // cell is 15 code units but 3 columns wide; length padding added no spaces.

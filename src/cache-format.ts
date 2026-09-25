@@ -1,4 +1,4 @@
-import { computeCacheHitPercent, promptTokens as promptTokensOf } from "./cache-math.js";
+import { computeCacheHitPercent, promptTokens } from "./cache-math.js";
 import type { CacheUsageTotals } from "./cache-types.js";
 
 // formatInt keeps thousands separators: the stats table aligns columns on
@@ -22,17 +22,17 @@ export function summarizeHitPercent(
 }
 
 /** Object-shaped delegate — the formula lives in `cache-math.ts:promptTokens`. */
-export function promptTokens(
+export function promptTokensOfTotals(
   totals: Pick<CacheUsageTotals, "input" | "cacheRead" | "cacheWrite">,
 ): number {
-  return promptTokensOf(totals.input, totals.cacheRead, totals.cacheWrite);
+  return promptTokens(totals.input, totals.cacheRead, totals.cacheWrite);
 }
 
 export function formatTotalsLine(label: string, totals: CacheUsageTotals): string {
   return [
     `${label}:`,
     `${formatInt(totals.assistantMessages)} turns`,
-    `prompt ${formatInt(promptTokens(totals))}`,
+    `prompt ${formatInt(promptTokensOfTotals(totals))}`,
     `received ${formatInt(totals.output)}`,
     `cache hit ${formatInt(totals.cacheRead)}`,
     `cache write ${formatInt(totals.cacheWrite)}`,

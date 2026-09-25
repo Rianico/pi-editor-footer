@@ -2,7 +2,7 @@ import {
   formatInt,
   formatPercent,
   formatTotalsLine,
-  promptTokens,
+  promptTokensOfTotals,
   shortModelName,
   summarizeHitPercent,
 } from "./cache-format.js";
@@ -18,7 +18,7 @@ function buildRow(
     padLeft(String(metric.sequence), 4),
     padRight(metric.isOnActiveBranch ? "*" : " ", 1),
     padRight(shortModelName(metric.provider, metric.model), 24, "…"),
-    padLeft(formatInt(promptTokens(metric)), 9),
+    padLeft(formatInt(promptTokensOfTotals(metric)), 9),
     padLeft(formatInt(metric.output), 9),
     padLeft(formatInt(metric.cacheRead), 9),
     padLeft(formatInt(metric.cacheWrite), 9),
@@ -58,7 +58,7 @@ function buildCumulativeSummary(theme: CacheTheme, metrics: CacheSessionMetrics)
     theme.fg("accent", theme.bold("Cumulative totals")),
     formatTotalsLine("Active branch", metrics.activeBranchTotals),
     formatTotalsLine("Whole tree", metrics.treeTotals),
-    `Delta (tree - branch): prompt ${formatInt(promptTokens(metrics.treeTotals) - promptTokens(metrics.activeBranchTotals))} • ` +
+    `Delta (tree - branch): prompt ${formatInt(promptTokensOfTotals(metrics.treeTotals) - promptTokensOfTotals(metrics.activeBranchTotals))} • ` +
       `received ${formatInt(metrics.treeTotals.output - metrics.activeBranchTotals.output)} • ` +
       `cache hit ${formatInt(metrics.treeTotals.cacheRead - metrics.activeBranchTotals.cacheRead)} • ` +
       `cache write ${formatInt(metrics.treeTotals.cacheWrite - metrics.activeBranchTotals.cacheWrite)} • ` +
