@@ -11,7 +11,7 @@
 
 ### Features
 
-* **cache:** add /cache graph, stats and export commands
+* **cache:** add /cache graph, stats and export commands (#37)
 * **telemetry:** adopt streamed usage counts and provider-anchored TTFT (#33)
 
 ### Bug Fixes
