@@ -1,6 +1,6 @@
 // Barrel — preserves the old import surface while the codebase migrates to
 // focused modules. New code should import from the owning module directly:
-//   path-format → formatCwd, basenamePath, truncateBranch, truncatePath
+//   path-format → formatCwd, basenamePath, truncateBranch, truncatePath, displayCwd
 //   color-policy → stressColor, cacheHitColor, contextUsageTier, providerColor, effortColor
 //   format → fmtTokens, formatDuration, formatModelLabel, formatProviderLabel, formatThinkingLabel, sanitizeStatus, stripAnsi
 //   layout → alignRight, fitSegmentsByPriority, isEditorBorderLine, findBottomBorderIndex, padRight, center, headerColumnWidths + width constants
@@ -11,7 +11,13 @@ export { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works
 export type { ThemeColor, ThinkingLevel, ContextTier } from "./color-policy.js";
 export type { Theme, PrioritizedSegment } from "./layout.js";
 
-export { formatCwd, basenamePath, truncateBranch, truncatePath } from "./path-format.js";
+export {
+  formatCwd,
+  basenamePath,
+  truncateBranch,
+  truncatePath,
+  displayCwd,
+} from "./path-format.js";
 export {
   fmtTokens,
   formatDuration,

@@ -15,8 +15,6 @@ import {
 } from "./layout.js";
 import { basenamePath, formatCwd, truncatePath } from "./path-format.js";
 import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
-// ChromeState owns context bar formatting — re-export for backward compat.
-export { formatContextBar } from "./chrome-state.js";
 
 function renderGitSegment(
   theme: Theme,

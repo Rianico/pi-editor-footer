@@ -1,5 +1,5 @@
 /**
- * ChromeState — deep module owning chrome snapshot derivation behind one seam.
+ * chrome-state — deep module owning chrome snapshot derivation behind one seam.
  *
  * Problem it solves (C5): same chrome concepts (context %, git, runtime,
  * tokens, cacheHitRate) render through two seams — footer below input and
@@ -194,32 +194,4 @@ export function createChromeSnapshot(
     contextUsage,
     totals,
   };
-}
-
-/**
- * Deep module variant — owns snapshot + refresh lifecycle behind one seam.
- * Thin wrapper over createChromeSnapshot for callers that prefer an instance.
- */
-export class ChromeState {
-  constructor(
-    private readonly getFooterState: () => FooterState,
-    private readonly getCtx: () => unknown,
-  ) {}
-
-  snapshot(): ChromeSnapshot {
-    return createChromeSnapshot(
-      this.getCtx() as Parameters<typeof createChromeSnapshot>[0],
-      this.getFooterState(),
-    );
-  }
-
-  /** Convenience: format top context bar from current snapshot + theme. */
-  formatTopContext(
-    theme: Theme,
-    glyphs: IconGlyphs,
-    isAscii: boolean,
-    showIconBar = false,
-  ): string {
-    return formatTopContextFromSnapshot(this.snapshot(), theme, glyphs, isAscii, showIconBar);
-  }
 }

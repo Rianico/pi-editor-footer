@@ -1,7 +1,6 @@
 import type { GitStatus } from "./git.js";
 import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
-import { fmtTokens } from "./format.js";
 import { formatProviderLabel } from "./format.js";
 import { computeCacheHitPercent, promptTokens } from "./cache-math.js";
 
@@ -156,6 +155,3 @@ export function getModelMeta(
   const effort = reasoning ? getThinkingLevel() : undefined;
   return { provider, model, effort };
 }
-
-// Keep fmtTokens usage to satisfy import, used by getUsageTotals display elsewhere
-void fmtTokens;

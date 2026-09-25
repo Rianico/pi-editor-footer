@@ -22,7 +22,7 @@ import type { AgentRunLedger } from "./agent-run-ledger.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
 import type { TrackingEditor } from "./tracking-editor.js";
-import type { ExtensionContextLike } from "./index.js";
+import type { ExtensionContextLike } from "./session-orchestrator.js";
 
 export const REFRESH_MS = 1000;
 
@@ -41,11 +41,6 @@ export class LiveBorder {
   private pendingRender: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: LiveBorderDeps) {}
-
-  /** Legacy baseline setter — kept for call-site compat; ledger is the source of truth. */
-  setAgentBaseline(_baseline: unknown): void {
-    // no-op: baseline is owned by AgentRunLedger
-  }
 
   /** Coalesced render: top (run-activity) + bottom (telemetry) + context bar → editor. */
   render(): void {
@@ -83,11 +78,6 @@ export class LiveBorder {
     this.refreshTopBorder(comp);
     this.refreshLiveTelemetry(comp);
     this.refreshContextBar(comp, snapshot);
-  }
-
-  /** Alias for render — kept for call-site readability (refreshAllLive migration). */
-  refreshAll(): void {
-    this.render();
   }
 
   startTick(): void {

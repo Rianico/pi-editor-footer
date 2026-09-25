@@ -294,50 +294,6 @@ export class AgentRunLedger {
   }
 
   /**
-   * Idle display totals for LiveBorder when not running.
-   * Prefers liveAgent/liveTelemetry when available; else baseline delta, capped to idle.
-   */
-  getIdleDisplayTotals(
-    snapshotTotals: UsageTotals,
-    contextTokens: number | undefined,
-    liveAgent: TurnTelemetry | null,
-  ): TurnTelemetry {
-    let displayInput: number;
-    let displayOutput: number;
-    let displayCost: number;
-    if (liveAgent) {
-      displayInput = liveAgent.inputTokens;
-      displayOutput = liveAgent.outputTokens;
-      displayCost = liveAgent.costUsd;
-    } else if (this.baseline) {
-      const d = deltaFromBaseline(snapshotTotals, this.baseline);
-      displayInput = d.input;
-      displayOutput = d.output;
-      displayCost = d.cost;
-    } else {
-      displayInput = snapshotTotals.input;
-      displayOutput = snapshotTotals.output;
-      displayCost = snapshotTotals.cost;
-    }
-    const cappedInput = capInputForIdle(displayInput, contextTokens, snapshotTotals.input);
-    return {
-      tps: null,
-      ttftMs: 0,
-      totalMs: 0,
-      inputTokens: cappedInput,
-      outputTokens: displayOutput,
-      stallMs: 0,
-      stallCount: 0,
-      rateUsdPerMTokens: null,
-      generationMs: 0,
-      totalTokens: cappedInput + displayOutput,
-      costUsd: displayCost,
-      measurementMs: null,
-      estimated: false,
-    };
-  }
-
-  /**
    * Idle authoritative display (hybrid Q7 b): snapshot delta capped, for use when
    * not running to show billed total without ~ after agent_end.
    */
@@ -373,38 +329,6 @@ export class AgentRunLedger {
       costUsd: displayCost,
       measurementMs: null,
       estimated: false,
-    };
-  }
-
-  /**
-   * Live display totals when running: liveTurn input (current window) replaces
-   * agentLive input, output/cost remain per-agent sum, capped to live context only.
-   * @deprecated — retained for backward compat; prefer getIncrementalLiveDisplayTotals for Q1/Q9.
-   */
-  getLiveDisplayTotals(
-    liveTurn: TurnTelemetry | null,
-    agentLive: TurnTelemetry | null,
-    contextTokens: number | undefined,
-  ): TurnTelemetry | null {
-    if (!agentLive && !liveTurn) return null;
-    let displayLive: TurnTelemetry | null = agentLive;
-    if (agentLive && liveTurn) {
-      displayLive = {
-        ...agentLive,
-        inputTokens: liveTurn.inputTokens,
-        totalTokens: liveTurn.inputTokens + agentLive.outputTokens,
-      };
-    } else if (!agentLive && liveTurn) {
-      // Edge: no agent yet but liveTurn exists — use liveTurn window
-      displayLive = liveTurn;
-    }
-    if (!displayLive) return null;
-    const cappedInput = capInputForLive(displayLive.inputTokens, contextTokens);
-    return {
-      ...displayLive,
-      inputTokens: cappedInput,
-      totalTokens: cappedInput + displayLive.outputTokens,
-      estimated: true,
     };
   }
 

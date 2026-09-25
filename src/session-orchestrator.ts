@@ -50,7 +50,7 @@ import {
   estimateTokensFromChars,
 } from "./agent-run-ledger.js";
 
-// Minimal pi ExtensionAPI slice — duplicated from index to avoid circular import.
+// Minimal pi ExtensionAPI slice — single home for the *Like declarations.
 // Authoritative types live in @earendil-works/pi-coding-agent.
 export interface ExtensionWidgetOptionsLike {
   placement?: "aboveEditor" | "belowEditor";
@@ -317,23 +317,14 @@ export class SessionOrchestrator {
   getLiveBorder(): LiveBorder {
     return this.liveBorder;
   }
-  getTranscriptTimeline(): TranscriptTimeline {
-    return this.transcriptTimeline;
-  }
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
   }
   getTelemetryTracker(): TurnTelemetryTracker {
     return this.telemetryTracker;
   }
-  getCurrentModelInfo(): ModelInfo {
-    return this.currentModelInfo;
-  }
   getTuiRef(): TUI | null {
     return this.tuiRef;
-  }
-  getInstalledEditor(): TrackingEditor | null {
-    return this.installedEditor;
   }
 
   // ——— widget ———
@@ -624,7 +615,6 @@ export class SessionOrchestrator {
       this.agentBaselineTotals = null;
       this.agentLedger.setBaseline(null);
       this.agentLedger.reset();
-      this.liveBorder.setAgentBaseline(null);
       this.deferredInstallTimer = setTimeout(() => this.installEditor(ctx.ui), 0);
       this.ensureFooter(ctx);
       if (this.watchTimer !== null) clearInterval(this.watchTimer);
@@ -671,7 +661,6 @@ export class SessionOrchestrator {
           this.agentLedger.setTriggerTokens(
             extractTriggerTokensFromCtx(ctx ?? this.lastSessionCtx),
           );
-          this.liveBorder.setAgentBaseline(this.agentBaselineTotals);
         }
       } catch {
         // SAFETY: best-effort, ignore recoverable error

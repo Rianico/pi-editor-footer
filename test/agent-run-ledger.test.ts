@@ -165,45 +165,50 @@ describe("AgentRunLedger", () => {
     const res = ledger.getPerAgentTotalsForTimeline(null, snap, 10000);
     assert.equal(res.input, 5000);
   });
-  it("getIdleDisplayTotals prefers liveAgent capped to idle", () => {
+  it("getIdleAuthoritativeDisplay shows baseline delta capped to idle", () => {
+    // Live call site: live-border refreshContextBar idle branch (billed total after agent_end).
+    const ledger = new AgentRunLedger();
+    ledger.setBaseline(mkTotals({ input: 100000, output: 100, cost: 0.25 }));
+    const snap = mkTotals({ input: 160000, output: 500, cost: 0.75 });
+    // delta input 60000, context 50000 wins over session total 160000
+    const display = ledger.getIdleAuthoritativeDisplay(snap, 50000);
+    assert.equal(display.inputTokens, 50000);
+    assert.equal(display.outputTokens, 400);
+    assert.equal(display.costUsd, 0.5);
+    assert.equal(display.totalTokens, 50400);
+    // authoritative — never marked as an estimate, no live tps carried
+    assert.equal(display.estimated, false);
+    assert.equal(display.tps, null);
+  });
+  it("getIdleAuthoritativeDisplay keeps delta when under both caps", () => {
     const ledger = new AgentRunLedger();
     ledger.setBaseline(mkTotals({ input: 1000, output: 0, cost: 0 }));
     const snap = mkTotals({ input: 61000, output: 1000, cost: 0.02 });
-    const liveAgent = mkTel({ inputTokens: 60000, outputTokens: 500 });
-    const display = ledger.getIdleDisplayTotals(snap, 60000, liveAgent);
+    // delta 60000 < context 70000 and < session total 61000 → uncapped
+    const display = ledger.getIdleAuthoritativeDisplay(snap, 70000);
     assert.equal(display.inputTokens, 60000);
-    assert.equal(display.outputTokens, 500);
+    assert.equal(display.outputTokens, 1000);
+    assert.equal(display.totalTokens, 61000);
   });
-  it("getIdleDisplayTotals falls back to baseline delta when no liveAgent", () => {
+  it("getIdleAuthoritativeDisplay falls back to session totals when no baseline", () => {
     const ledger = new AgentRunLedger();
-    ledger.setBaseline(mkTotals({ input: 1000, output: 0, cost: 0 }));
-    const snap = mkTotals({ input: 61000, output: 1000, cost: 0.02 });
-    const display = ledger.getIdleDisplayTotals(snap, 70000, null);
-    // delta = 60000, capped to sessionTotal 61000 and context 70000 -> 60000
-    assert.equal(display.inputTokens, 60000);
+    const snap = mkTotals({ input: 416000, output: 505, cost: 0.16 });
+    const display = ledger.getIdleAuthoritativeDisplay(snap, 1000000);
+    assert.equal(display.inputTokens, 416000);
+    assert.equal(display.outputTokens, 505);
+    assert.equal(display.costUsd, 0.16);
+    assert.equal(display.totalTokens, 416505);
+    assert.equal(display.estimated, false);
   });
-  it("getLiveDisplayTotals uses liveTurn window and caps to live only", () => {
+  it("getIdleAuthoritativeDisplay clamps a negative delta to zero", () => {
     const ledger = new AgentRunLedger();
-    const agentLive = mkTel({ inputTokens: 50000, outputTokens: 300 });
-    const liveTurn = mkTel({ inputTokens: 60000, outputTokens: 100 });
-    const display = ledger.getLiveDisplayTotals(liveTurn, agentLive, 60000);
-    assert.ok(display);
-    assert.equal(display.inputTokens, 60000); // liveTurn window replaces agentLive input
-    assert.equal(display.outputTokens, 300); // agentLive already includes live output via peekAgentLive
-    // capped to context 60000
-    assert.equal(capInputForLive(display.inputTokens, 60000), 60000);
-    // not capped to session total — even if session total is 50000 interim, live still 60000
-    const display2 = ledger.getLiveDisplayTotals(liveTurn, agentLive, 60000);
-    assert.equal(display2?.inputTokens, 60000);
-  });
-  it("live caps only to context, not session total", () => {
-    // simulate predictive live 60k while authoritative totals interim 50k
-    const ledger = new AgentRunLedger();
-    const agentLive = mkTel({ inputTokens: 50000, outputTokens: 200 });
-    const liveTurn = mkTel({ inputTokens: 60000, outputTokens: 100 });
-    const display = ledger.getLiveDisplayTotals(liveTurn, agentLive, 60000);
-    // should be 60k even if session total were 50000 (not passed for live cap)
-    assert.equal(display?.inputTokens, 60000);
+    ledger.setBaseline(mkTotals({ input: 100, output: 50, cost: 0.1 }));
+    const snap = mkTotals({ input: 40, output: 10, cost: 0.02 });
+    const display = ledger.getIdleAuthoritativeDisplay(snap, 70000);
+    assert.equal(display.inputTokens, 0);
+    assert.equal(display.outputTokens, 0);
+    assert.equal(display.costUsd, 0);
+    assert.equal(display.totalTokens, 0);
   });
   it("reset clears state", () => {
     const ledger = new AgentRunLedger(() => 0);

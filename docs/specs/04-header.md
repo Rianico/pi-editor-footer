@@ -1,5 +1,7 @@
 # Spec 04 — Header: cwd + Hints (No Model)
 
+> Status: superseded — src/header.ts retired in refactor/arch-deepening (C6); live rendering is footer.ts.
+
 Ticket: #9 · Type: grilling · Branch: `feat/header`
 
 ## Question

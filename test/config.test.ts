@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { DEFAULT_CONFIG, getConfigPath, loadConfig, saveConfig } from "../src/config.js";
-import { formatCwd, basenamePath, truncatePath, displayCwd } from "../src/utils-workspace.js";
+import { formatCwd, basenamePath, truncatePath, displayCwd } from "../src/path-format.js";
 
 describe("DEFAULT_CONFIG", () => {
   test("has expected defaults", () => {
@@ -101,7 +101,7 @@ describe("loadConfig / saveConfig with temp HOME", () => {
   });
 });
 
-describe("utils-workspace helpers", () => {
+describe("path-format helpers", () => {
   const origHome = process.env.HOME;
   beforeEach(() => {
     // Use a stable HOME for these tests
