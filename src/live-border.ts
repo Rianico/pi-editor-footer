@@ -7,21 +7,31 @@
  *
  * Depth: small interface (render / startTick / stopTick) hides coalesced border composition
  * (run-activity + telemetry + context usage) and timer ownership. Callers learn one shape.
- * Impl hides ChromeComposition (glyphs + theme + chrome format), getUsageTotals, and the
- * AgentRunLedger capping. One coalesced render per tick/event — not per-delta.
+ * Impl hides getUsageTotals and the AgentRunLedger capping. One coalesced render per
+ * tick/event — not per-delta — and, since C3, one setChrome (hence one requestRender) per
+ * render pass: the three islands write into a single Partial<ChromeSnapshot> patch.
  *
- * Glyph/theme derivation (C3) lives in ChromeComposition — LiveBorder no longer calls
- * resolveGlyphs/resolveIconMode or casts the live theme; it queries composition once per
- * render (cached), and each island is a thin lookup.
+ * C3 dissolved the ChromeComposition pass-through seam: islands call the real formatting
+ * functions (telemetry.ts / run-activity.ts / chrome-state.ts) directly with an adapted
+ * theme, and that ChromeThemeLike + glyph derivation is cached — rebuilt only when the live
+ * theme identity or icons.mode changes, not on every render.
  */
 
-import { createChromeSnapshot, type ChromeSnapshot } from "./chrome-state.js";
-import { ChromeComposition } from "./chrome-composition.js";
+import {
+  createChromeSnapshot,
+  formatTopContextFromSnapshot,
+  type ChromeSnapshot,
+} from "./chrome-state.js";
+import { adaptTheme, type ChromeThemeLike } from "./chrome-theme.js";
+import type { IconGlyphs, IconMode } from "./icons.js";
+import { resolveGlyphs, resolveIconMode } from "./icons.js";
+import { formatTurnDuration, formatTelemetryTokens, formatTurnTelemetry } from "./telemetry.js";
+import { formatRunActivityTopRight } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
 import type { AgentRunLedger } from "./agent-run-ledger.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
-import type { TrackingEditor } from "./tracking-editor.js";
+import type { ChromeSnapshot as EditorChromeSnapshot, TrackingEditor } from "./tracking-editor.js";
 import type { ExtensionContextLike } from "./session-orchestrator.js";
 
 export const REFRESH_MS = 1000;
@@ -35,10 +45,18 @@ export interface LiveBorderDeps {
   agentLedger: AgentRunLedger;
 }
 
+/** Derived once per (theme identity, icon mode) pair, reused across renders. */
+interface ChromeStyle {
+  theme: ChromeThemeLike;
+  glyphs: IconGlyphs;
+  isAscii: boolean;
+}
+
 export class LiveBorder {
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastRenderMs = 0;
   private pendingRender: ReturnType<typeof setTimeout> | null = null;
+  private cached: { rawTheme: unknown; iconMode: IconMode; style: ChromeStyle } | null = null;
 
   constructor(private readonly deps: LiveBorderDeps) {}
 
@@ -61,23 +79,6 @@ export class LiveBorder {
     }
     this.lastRenderMs = now;
     this.doRender();
-  }
-
-  private doRender(): void {
-    const editor = this.deps.getEditor();
-    const ctx = this.deps.getCtx();
-    if (!editor || !ctx) return;
-    const comp = this.composition();
-    if (!comp) return;
-    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    const snapshot = createChromeSnapshot(
-      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-      undefined,
-    );
-    this.refreshTopBorder(comp);
-    this.refreshLiveTelemetry(comp);
-    this.refreshContextBar(comp, snapshot);
   }
 
   startTick(): void {
@@ -110,24 +111,63 @@ export class LiveBorder {
     return this.timer !== null;
   }
 
-  // ——— internal: three islands now hidden behind one seam ———
-
-  /** Build one ChromeComposition from the live config + theme (per-render, theme is live). */
-  private composition(): ChromeComposition | null {
+  private doRender(): void {
+    const editor = this.deps.getEditor();
     const ctx = this.deps.getCtx();
-    const cfg = this.deps.getConfig();
-    if (!ctx) return null;
-    // SAFETY: pi context seam — ctx.ui.theme is the live TUI theme (ThemeLike shape)
-    return new ChromeComposition(cfg.icons.mode, ctx.ui.theme);
+    if (!editor || !ctx) return;
+    const style = this.chromeStyle();
+    if (!style) return;
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    const snapshot = createChromeSnapshot(
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      undefined,
+    );
+    // C3: one patch across the whole pass → one setChrome → one requestRender per refresh.
+    // Each island keeps its own try/catch, so a failing island still leaves the others'
+    // computed fields in the patch, exactly as the old per-island setChrome calls did.
+    const patch: Partial<EditorChromeSnapshot> = {};
+    this.applyTopBorder(patch, style);
+    this.applyTelemetry(patch, style);
+    this.applyContext(patch, style, snapshot);
+    if (Object.keys(patch).length > 0) {
+      try {
+        editor.setChrome(patch);
+      } catch {
+        // SAFETY: best-effort UI, ignore recoverable error
+      }
+    }
   }
 
-  private refreshTopBorder(comp: ChromeComposition): void {
-    const editor = this.deps.getEditor();
+  // ——— internal: three islands now hidden behind one seam ———
+
+  /**
+   * Cached theme-adapter + glyph derivation (C3): rebuilt only when the live theme
+   * identity or icons.mode changes — constructing on every render was the waste.
+   */
+  private chromeStyle(): ChromeStyle | null {
+    const ctx = this.deps.getCtx();
+    if (!ctx) return null;
+    const iconMode = this.deps.getConfig().icons.mode;
+    const rawTheme = ctx.ui.theme;
+    const cached = this.cached;
+    if (cached !== null && cached.rawTheme === rawTheme && cached.iconMode === iconMode) {
+      return cached.style;
+    }
+    const style: ChromeStyle = {
+      theme: adaptTheme(rawTheme),
+      glyphs: resolveGlyphs(iconMode),
+      isAscii: resolveIconMode(iconMode) === "ascii",
+    };
+    this.cached = { rawTheme, iconMode, style };
+    return style;
+  }
+
+  private applyTopBorder(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
     const cfg = this.deps.getConfig();
-    if (!editor) return;
     try {
       const snap = this.deps.runActivityTracker.getSnapshot();
-      let text = comp.formatRunActivityTopRight(snap);
+      let text = formatRunActivityTopRight(snap, style.theme);
       // Relocate stall to the right of tool use with pipe separator — agent-run live (option B), not bottom telemetry
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
         // Deepened via AgentRunLedger — stall is agent-run live, single source
@@ -135,31 +175,29 @@ export class LiveBorder {
           this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive()) ??
           this.deps.telemetryTracker.getLastTelemetry();
         if (tel && tel.stallMs > 0) {
-          const stallText = comp.formatStall(tel);
+          const stallText = style.theme.fg(
+            "warning",
+            `${style.glyphs.stall}${tel.stallCount}×${formatTurnDuration(tel.stallMs).trim()}`,
+          );
           if (text) {
-            const pipe = comp.dim(" | ");
+            const pipe = style.theme.fg("dim", " | ");
             text = `${text}${pipe}${stallText}`;
           } else {
             text = stallText;
           }
         }
       }
-      editor.setChrome({ topRightText: text });
+      patch.topRightText = text;
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
-  private refreshLiveTelemetry(comp: ChromeComposition): void {
-    const editor = this.deps.getEditor();
+  private applyTelemetry(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
     const cfg = this.deps.getConfig();
-    if (!editor) return;
     if (!cfg.telemetry.enabled) {
-      try {
-        editor.setChrome({ telemetryText: "", bottomLeftText: "" });
-      } catch {
-        // SAFETY: best-effort UI, ignore recoverable error
-      }
+      patch.telemetryText = "";
+      patch.bottomLeftText = "";
       return;
     }
     try {
@@ -169,20 +207,22 @@ export class LiveBorder {
       if (!live) return;
       // Stall relocated to top right of tool use with pipe — suppress in bottom telemetry
       const bottomCfg = { ...cfg.telemetry, stalls: false };
-      const right = comp.formatTurnTelemetry(live, bottomCfg);
+      const right = formatTurnTelemetry(live, style.theme, bottomCfg, style.glyphs);
       if (live.totalMs > 0) {
-        editor.setChrome({ telemetryText: right });
-        editor.setChrome({ bottomLeftText: "" });
+        patch.telemetryText = right;
+        patch.bottomLeftText = "";
       }
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
   }
 
-  private refreshContextBar(comp: ChromeComposition, snapshot: ChromeSnapshot): void {
-    const editor = this.deps.getEditor();
+  private applyContext(
+    patch: Partial<EditorChromeSnapshot>,
+    style: ChromeStyle,
+    snapshot: ChromeSnapshot,
+  ): void {
     const cfg = this.deps.getConfig();
-    if (!editor) return;
     try {
       let contextText = "";
       if (
@@ -190,11 +230,12 @@ export class LiveBorder {
         snapshot.contextUsage &&
         snapshot.contextUsage.contextWindow
       ) {
-        // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        contextText = comp.formatTopContext(
+        contextText = formatTopContextFromSnapshot(
           snapshot,
-          (cfg as ThemeConfig & { contextIconBar?: boolean }).contextIconBar ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-            false,
+          style.theme,
+          style.glyphs,
+          style.isAscii,
+          cfg.contextIconBar,
         );
       }
       let tokensText = "";
@@ -207,7 +248,7 @@ export class LiveBorder {
             snapshot.totals,
             contextTokens,
           );
-          tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
+          tokensText = formatTelemetryTokens(display, style.theme, cfg.telemetry, style.glyphs);
         } else {
           const liveTurn = this.deps.telemetryTracker.peekLive();
           const agentLive =
@@ -219,12 +260,12 @@ export class LiveBorder {
             contextTokens,
           );
           if (display) {
-            tokensText = comp.formatTelemetryTokens(display, cfg.telemetry);
+            tokensText = formatTelemetryTokens(display, style.theme, cfg.telemetry, style.glyphs);
           }
         }
       }
-      editor.setChrome({ topContextText: contextText });
-      editor.setChrome({ topTokensText: tokensText });
+      patch.topContextText = contextText;
+      patch.topTokensText = tokensText;
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }

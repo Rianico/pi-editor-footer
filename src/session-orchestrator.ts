@@ -11,7 +11,7 @@
  * Depth: small interface (install / dispose) hides coalesced lifecycle
  * (deferred editor install + watchdog ownership + footer lifecycle single path +
  *  detail→widget + timeline ledger delegation). Callers learn one shape.
- * Impl hides LiveBorder, AgentRunLedger, DetailChrome, ChromeComposition,
+ * Impl hides LiveBorder, AgentRunLedger, DetailChrome, the chrome-theme adapter,
  * and the footer install deduplication. Two adapters (real pi TUI + in-memory
  * fake) justify the seam — tests hit one interface.
  */
@@ -375,7 +375,7 @@ export class SessionOrchestrator {
       editor.setChrome({ modelInfo: this.currentModelInfo });
       editor.setChrome({ glowEnabled: this.glowEnabled });
       editor.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
-      this.refreshContextBar();
+      this.renderLiveChrome();
       editor.onHighlight = (item) => {
         this.detailChrome.setItem(item);
         this.updateWidget(ctx);
@@ -402,15 +402,9 @@ export class SessionOrchestrator {
     }
   }
 
-  // ——— live border ———
+  // ——— live border — single render intent (C3: alias trio dissolved) ———
 
-  private refreshContextBar(): void {
-    this.liveBorder.render();
-  }
-  private refreshTopBorder(): void {
-    this.liveBorder.render();
-  }
-  private refreshLiveTelemetry(): void {
+  private renderLiveChrome(): void {
     this.liveBorder.render();
   }
 
@@ -456,7 +450,7 @@ export class SessionOrchestrator {
                   process.cwd();
                 const git = await readGitStatus(cwd);
                 this.footerState = { ...this.footerState, git } as FooterState;
-                this.refreshContextBar();
+                this.renderLiveChrome();
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
                 (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
                 const runtime = await readRuntimeInfo(cwd);
@@ -488,7 +482,7 @@ export class SessionOrchestrator {
           process.cwd();
         const git = await readGitStatus(cwd);
         this.footerState = { ...this.footerState, git } as FooterState;
-        this.refreshContextBar();
+        this.renderLiveChrome();
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
         const runtime = await readRuntimeInfo(cwd);
@@ -502,7 +496,7 @@ export class SessionOrchestrator {
     this.installedEditor?.setChrome({
       cursorStyle: this.currentConfig.cursorStyle,
     });
-    this.refreshContextBar();
+    this.renderLiveChrome();
   }
 
   private removeFooter(): void {
@@ -542,8 +536,7 @@ export class SessionOrchestrator {
         this.installedEditor?.setChrome({
           cursorStyle: this.currentConfig.cursorStyle,
         });
-        this.refreshContextBar();
-        this.refreshLiveTelemetry();
+        this.renderLiveChrome();
         this.tuiRef?.requestRender();
       },
       onOverlayClosed: () => {
@@ -822,7 +815,7 @@ export class SessionOrchestrator {
         }
       }
       this.agentLedger.reset();
-      this.refreshTopBorder();
+      this.renderLiveChrome();
     });
 
     pi.on("model_select", (_event, ctx) => {

@@ -1,12 +1,29 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { hexFg, hexToRgb, normalizeColorMode, rgbTo256, rgbToFgAnsi } from "../src/ansi-color.js";
-import { adaptTheme, ChromeComposition } from "../src/chrome-composition.js";
-import { createChromeSnapshot, formatContextBar } from "../src/chrome-state.js";
+import { adaptTheme } from "../src/chrome-theme.js";
+import {
+  createChromeSnapshot,
+  formatContextBar,
+  formatTopContextFromSnapshot,
+} from "../src/chrome-state.js";
+import { resolveGlyphs } from "../src/icons.js";
+import type { ChromeSnapshot } from "../src/chrome-state.js";
 
 const TRUE_COLOR = "\x1b[38;2;163;190;140m"; // #A3BE8C
 const DARK_RED = "\x1b[38;2;154;57;57m"; // #9A3939
 const RESET_FG = "\x1b[39m";
+
+/** Live-border's path: adaptTheme surface + ascii glyphs straight to the snapshot helper. */
+function topContext(rawTheme: unknown, snap: ChromeSnapshot, iconBar = false): string {
+  return formatTopContextFromSnapshot(
+    snap,
+    adaptTheme(rawTheme),
+    resolveGlyphs("ascii"),
+    true,
+    iconBar,
+  );
+}
 
 function snapshotWith(percent: number, contextWindow: number) {
   return createChromeSnapshot(
@@ -62,33 +79,26 @@ describe("adaptTheme fgHex", () => {
 });
 
 describe("context window section color", () => {
+  const asciiTrueColor = {
+    fg: (_s: string, v: string) => v,
+    getColorMode: () => "truecolor",
+  };
+
   test("1M window at 5% is green, at 20% amber, at 30% dark red", () => {
-    const c = new ChromeComposition("ascii", {
-      fg: (_s: string, v: string) => v,
-      getColorMode: () => "truecolor",
-    });
-    assert.ok(c.formatTopContext(snapshotWith(5, 1_000_000), false).includes(TRUE_COLOR));
+    assert.ok(topContext(asciiTrueColor, snapshotWith(5, 1_000_000)).includes(TRUE_COLOR));
     assert.ok(
-      c.formatTopContext(snapshotWith(20, 1_000_000), false).includes("\x1b[38;2;235;203;139m"),
+      topContext(asciiTrueColor, snapshotWith(20, 1_000_000)).includes("\x1b[38;2;235;203;139m"),
     );
-    assert.ok(c.formatTopContext(snapshotWith(30, 1_000_000), false).includes(DARK_RED));
+    assert.ok(topContext(asciiTrueColor, snapshotWith(30, 1_000_000)).includes(DARK_RED));
   });
 
   test("small window keeps green up to 25% and turns dark red at 50%", () => {
-    const c = new ChromeComposition("ascii", {
-      fg: (_s: string, v: string) => v,
-      getColorMode: () => "truecolor",
-    });
-    assert.ok(c.formatTopContext(snapshotWith(24, 200_000), false).includes(TRUE_COLOR));
-    assert.ok(c.formatTopContext(snapshotWith(50, 200_000), false).includes(DARK_RED));
+    assert.ok(topContext(asciiTrueColor, snapshotWith(24, 200_000)).includes(TRUE_COLOR));
+    assert.ok(topContext(asciiTrueColor, snapshotWith(50, 200_000)).includes(DARK_RED));
   });
 
   test("icon bar mode colors the bar fill with the same tier", () => {
-    const c = new ChromeComposition("ascii", {
-      fg: (_s: string, v: string) => v,
-      getColorMode: () => "truecolor",
-    });
-    const out = c.formatTopContext(snapshotWith(30, 1_000_000), true);
+    const out = topContext(asciiTrueColor, snapshotWith(30, 1_000_000), true);
     assert.ok(out.includes(DARK_RED));
   });
 
