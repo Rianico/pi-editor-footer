@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { summarizeHitPercent } from "./cache-format.js";
+import { promptTokens } from "./cache-math.js";
 import type { AssistantUsageMetric, CacheSessionMetrics } from "./cache-types.js";
 
 export function csvEscape(value: string | number | boolean | null | undefined): string {
@@ -70,10 +71,6 @@ type CsvHeader = (typeof headers)[number];
 type CsvCell = string | number | boolean;
 type CsvRow = Partial<Record<CsvHeader, CsvCell>>;
 
-function promptOf(t: CacheSessionMetrics["treeTotals"]): number {
-  return t.input + t.cacheRead + t.cacheWrite;
-}
-
 function summaryRows(metrics: CacheSessionMetrics): CsvRow[] {
   const treeHitRate = summarizeHitPercent(metrics.treeTotals);
   const branchHitRate = summarizeHitPercent(metrics.activeBranchTotals);
@@ -83,7 +80,11 @@ function summaryRows(metrics: CacheSessionMetrics): CsvRow[] {
       row_type: "summary",
       scope: "active_branch",
       assistant_messages: metrics.activeBranchTotals.assistantMessages,
-      prompt_tokens: promptOf(metrics.activeBranchTotals),
+      prompt_tokens: promptTokens(
+        metrics.activeBranchTotals.input,
+        metrics.activeBranchTotals.cacheRead,
+        metrics.activeBranchTotals.cacheWrite,
+      ),
       received_tokens: metrics.activeBranchTotals.output,
       cache_hit_tokens: metrics.activeBranchTotals.cacheRead,
       cache_write_tokens: metrics.activeBranchTotals.cacheWrite,
@@ -95,7 +96,11 @@ function summaryRows(metrics: CacheSessionMetrics): CsvRow[] {
       row_type: "summary",
       scope: "whole_tree",
       assistant_messages: metrics.treeTotals.assistantMessages,
-      prompt_tokens: promptOf(metrics.treeTotals),
+      prompt_tokens: promptTokens(
+        metrics.treeTotals.input,
+        metrics.treeTotals.cacheRead,
+        metrics.treeTotals.cacheWrite,
+      ),
       received_tokens: metrics.treeTotals.output,
       cache_hit_tokens: metrics.treeTotals.cacheRead,
       cache_write_tokens: metrics.treeTotals.cacheWrite,
@@ -132,7 +137,7 @@ function messageRows(metrics: CacheSessionMetrics): CsvRow[] {
     provider: metric.provider,
     model: metric.model,
     model_key: `${metric.provider}/${metric.model}`,
-    prompt_tokens: metric.input + metric.cacheRead + metric.cacheWrite,
+    prompt_tokens: promptTokens(metric.input, metric.cacheRead, metric.cacheWrite),
     received_tokens: metric.output,
     cache_hit_tokens: metric.cacheRead,
     cache_write_tokens: metric.cacheWrite,

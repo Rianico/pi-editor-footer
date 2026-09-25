@@ -28,7 +28,7 @@ function buildRow(
     pad(String(metric.sequence), 4, "left"),
     pad(metric.isOnActiveBranch ? "*" : " ", 1),
     pad(truncate(shortModelName(metric.provider, metric.model), 24), 24),
-    pad(formatInt(metric.input + metric.cacheRead + metric.cacheWrite), 9, "left"),
+    pad(formatInt(promptTokens(metric)), 9, "left"),
     pad(formatInt(metric.output), 9, "left"),
     pad(formatInt(metric.cacheRead), 9, "left"),
     pad(formatInt(metric.cacheWrite), 9, "left"),

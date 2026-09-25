@@ -3,6 +3,7 @@ import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
 import { fmtTokens } from "./format.js";
 import { formatProviderLabel } from "./format.js";
+import { computeCacheHitPercent, promptTokens } from "./cache-math.js";
 
 export interface FooterState {
   git: GitStatus;
@@ -53,11 +54,12 @@ export interface UsageTotalsSource {
  *
  * pi-ai `Usage.input` excludes the cached prompt prefix (it lives in cacheRead/cacheWrite),
  * so `input` alone under-reports the prompt by the whole cached history on every turn.
+ * The denominator itself is owned by `cache-math.ts:promptTokens`.
  */
 export function totalInputTokens(
   totals: Pick<UsageTotals, "input" | "cacheRead" | "cacheWrite">,
 ): number {
-  return totals.input + totals.cacheRead + totals.cacheWrite;
+  return promptTokens(totals.input, totals.cacheRead, totals.cacheWrite);
 }
 
 let usageCache: { key: string; totals: UsageTotals } | undefined;
@@ -95,9 +97,13 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
       const usage = entry.message.usage;
       if (!usage) continue;
       addUsage(usage);
-      const promptTokens = (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-      if (promptTokens > 0) {
-        totals.latestCacheHitRate = ((usage.cacheRead ?? 0) / promptTokens) * 100;
+      const input = usage.input ?? 0;
+      const cacheRead = usage.cacheRead ?? 0;
+      const cacheWrite = usage.cacheWrite ?? 0;
+      // `undefined` means "no assistant turn with a real prompt yet" — distinct
+      // from a genuine 0% hit, which the owner returns for prompt totals > 0.
+      if (promptTokens(input, cacheRead, cacheWrite) > 0) {
+        totals.latestCacheHitRate = computeCacheHitPercent(input, cacheRead, cacheWrite);
       }
       continue;
     }
