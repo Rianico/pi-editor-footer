@@ -40,6 +40,7 @@ import type { ModelInfo, ThemeLike } from "./model-info.js";
 import { loadConfig, saveConfig } from "./config.js";
 import type { ThemeConfig } from "./config.js";
 import { registerThemeSettingsCommand } from "./theme-settings.js";
+import { registerCacheCommand } from "./cache-command.js";
 import { resolveGlyphs } from "./icons.js";
 import { TranscriptTimeline } from "./transcript-timeline.js";
 import { LiveBorder } from "./live-border.js";
@@ -557,6 +558,13 @@ export class SessionOrchestrator {
       onOverlayClosed: () => {
         this.tuiRef?.requestRender();
       },
+    });
+
+    // /cache graph|stats|export — ported from pi-cache-graph. The real pi
+    // ExtensionContext carries sessionManager/cwd/hasUI beyond ExtensionContextLike.
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    registerCacheCommand(pi as unknown as Parameters<typeof registerCacheCommand>[0], {
+      getConfig: () => this.currentConfig,
     });
 
     // Timeline custom entry renderer
