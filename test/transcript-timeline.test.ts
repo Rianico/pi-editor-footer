@@ -97,6 +97,58 @@ describe("buildTimelineText — pure, TUI-free seam", () => {
     assert.ok(text.includes("\n"), "two lines");
   });
 
+  // Hand-built deterministic inputs: ascii glyphs pinned, tel input 4000 < ctx 100000 and
+  // < totals.input 5000 so capInputForIdle is a no-op → perAgent = {input 4000, output 800, cost 0.25}.
+  // dt is taken from the same formatter (TZ-portable); the rest of line1 is byte-exact.
+  function goldenParams(overrides?: { wallTime?: boolean; tokens?: boolean; cost?: boolean }) {
+    const config = structuredClone(DEFAULT_CONFIG);
+    config.icons.mode = "ascii";
+    if (overrides?.wallTime !== undefined) config.timeline.wallTime = overrides.wallTime;
+    if (overrides?.tokens !== undefined) config.timeline.tokens = overrides.tokens;
+    if (overrides?.cost !== undefined) config.timeline.cost = overrides.cost;
+    const now = new Date("2026-08-25T10:00:00Z");
+    const text = buildTimelineText({
+      effectiveTel: mkTel({ inputTokens: 4000, outputTokens: 800, costUsd: 0.25 }),
+      totals: mkTotals({ latestCacheHitRate: 75 }),
+      ctxTokens: 100000,
+      snap: mkSnap({ turnNumber: 2, completedCount: 4, failedCount: 0, activeTools: 0 }),
+      config,
+      lastDoneIn: 8234,
+      now,
+      ledger: new AgentRunLedger(() => 0),
+    });
+    return { dt: formatDateTimeWithTimezone(now), text };
+  }
+
+  it("golden: default config (all flags on) byte-exact two-line output (characterization)", () => {
+    // Captured from behavior BEFORE flags were honored — must stay identical after.
+    const { dt, text } = goldenParams();
+    assert.equal(
+      text,
+      `${dt} · 8s · ↑ 4.0k · ↓ 800 · c 75.0% · $0.25\n2 turns · 4 tools · 0 failed`,
+    );
+  });
+
+  it("wallTime off drops exactly the wall segment, dt then tokens with single joiners", () => {
+    const { dt, text } = goldenParams({ wallTime: false });
+    assert.equal(text, `${dt} · ↑ 4.0k · ↓ 800 · c 75.0% · $0.25\n2 turns · 4 tools · 0 failed`);
+  });
+
+  it("tokens off drops ↑ ↓ and the cache segment (cache is a token metric)", () => {
+    const { dt, text } = goldenParams({ tokens: false });
+    assert.equal(text, `${dt} · 8s · $0.25\n2 turns · 4 tools · 0 failed`);
+  });
+
+  it("cost off drops the $ segment", () => {
+    const { dt, text } = goldenParams({ cost: false });
+    assert.equal(text, `${dt} · 8s · ↑ 4.0k · ↓ 800 · c 75.0%\n2 turns · 4 tools · 0 failed`);
+  });
+
+  it("all three off → line1 is just the datetime, line2 never gated", () => {
+    const { dt, text } = goldenParams({ wallTime: false, tokens: false, cost: false });
+    assert.equal(text, `${dt}\n2 turns · 4 tools · 0 failed`);
+  });
+
   it("uses ledger per-Agent totals — max not sum", () => {
     const ledger = new AgentRunLedger(() => 0);
     ledger.setBaseline(mkTotals({ input: 1000, output: 0 }));

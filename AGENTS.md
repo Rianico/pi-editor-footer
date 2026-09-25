@@ -118,6 +118,7 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 - User spec: `<datetime with timezone> · 11s · ↑ 495 · ↓ 708 · <cache rate> · $0.00` + `<turn number> · <tools calling num> · <tools calling failure num>`.
 - Fix: `src/index.ts:formatDateTimeWithTimezone` (`Intl.DateTimeFormat` `en-CA` `short` TZ → `2026-08-21 13:48:46 GMT+8`), first line `dt · wallDur · ↑ input · ↓ output · cacheStr · $cost` (cache `glyphs.cacheHit` + `latestCacheHitRate.toFixed(1)%`), second line `${turn} turns · ${totalTools} tools · ${failed} failed` from `runActivityTracker.getSnapshot()`. Both dim left-aligned, injected as `rawLine.split("\n").map(dim)` two-line `Component`, history stores `line1+"\n"+line2`.
+- Update: the `timeline.wallTime`/`tokens`/`cost` toggles are now real in `transcript-timeline.ts:buildTimelineText` (they were no-ops with identical if/else branches) — each off omits its segment (`tokens` also drops the cache `c x%`, a token metric with no config row of its own); `dt` and line2 are never gated.
 
 ### Dimmed timeline between each agent run — transcript injection `User/Assistant/<dim>`
 
