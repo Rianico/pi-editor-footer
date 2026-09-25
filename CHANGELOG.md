@@ -16,15 +16,15 @@
 
 ### Bug Fixes
 
-* **timeline:** honor wallTime, tokens and cost toggles in Agent-run rows
-* **cache:** resolve promptTokens name clash, pin gate test, cover entry-id truncation
+* **timeline:** honor wallTime, tokens and cost toggles in Agent-run rows (#38)
+* **cache:** resolve promptTokens name clash, pin gate test, cover entry-id truncation (#38)
 * **imports:** use .js extensions for NodeNext module resolution
 
 ### Documentation
 
-* **changelog:** attribute #38 ledger entries
-* **review:** resolve architecture-review minors and fossil comments
-* **agents:** point total-input single source at cache-math
+* **changelog:** attribute #38 ledger entries (#38)
+* **review:** resolve architecture-review minors and fossil comments (#38)
+* **agents:** point total-input single source at cache-math (#38)
 
 ### Miscellaneous Chores
 

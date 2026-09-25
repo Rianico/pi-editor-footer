@@ -8,3 +8,5 @@ dist/
 .lsz/*
 !.lsz/config.yaml
 __pycache__/
+.qoder/
+skills-lock.json
