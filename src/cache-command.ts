@@ -1,6 +1,5 @@
 import { exportStatsCsv } from "./cache-export.js";
 import {
-  chartGlyphsForMode,
   GRAPH_VIEWS,
   type GraphView,
   graphViewLabel,
@@ -10,7 +9,7 @@ import { ScrollDialog } from "./cache-scroll-dialog.js";
 import { collectCacheSessionMetrics } from "./cache-session-data.js";
 import { renderStatsBody } from "./cache-stats-view.js";
 import type { CacheSessionMetrics, CacheSessionReader, CacheTheme } from "./cache-types.js";
-import type { IconMode } from "./icons.js";
+import { chartGlyphsForMode, type IconMode } from "./icons.js";
 
 interface CacheExtensionContext {
   hasUI: boolean;

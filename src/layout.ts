@@ -111,6 +111,12 @@ export function padRight(text: string, width: number, ellipsis = ""): string {
   return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
 }
 
+/** Mirror of `padRight` — pads on the left, truncating on visible width. */
+export function padLeft(text: string, width: number, ellipsis = ""): string {
+  const clipped = truncateToWidth(text, width, ellipsis);
+  return " ".repeat(Math.max(0, width - visibleWidth(clipped))) + clipped;
+}
+
 export function center(text: string, width: number): string {
   if (width <= 0) return "";
   const w = visibleWidth(text);

@@ -1,15 +1,7 @@
 import { computeCumulativeSeries, type CumulativeSeries } from "./cache-cumulative.js";
 import { formatInt, formatPercent, formatTotalsLine } from "./cache-format.js";
-import {
-  ASCII_CHART_GLYPHS,
-  type CacheSessionMetrics,
-  type CacheTheme,
-  type AssistantUsageMetric,
-  type ChartGlyphs,
-  UNICODE_CHART_GLYPHS,
-} from "./cache-types.js";
-import { resolveIconMode } from "./icons.js";
-import type { IconMode } from "./icons.js";
+import type { CacheSessionMetrics, CacheTheme, AssistantUsageMetric } from "./cache-types.js";
+import { type ChartGlyphs, UNICODE_CHART_GLYPHS } from "./icons.js";
 
 export type GraphView = "per-turn" | "cumulative-percent" | "cumulative-total";
 
@@ -24,10 +16,6 @@ export function graphViewLabel(view: GraphView): string {
     case "cumulative-total":
       return "Cumulative (aggregate) total";
   }
-}
-
-export function chartGlyphsForMode(mode: IconMode): ChartGlyphs {
-  return resolveIconMode(mode) === "ascii" ? ASCII_CHART_GLYPHS : UNICODE_CHART_GLYPHS;
 }
 
 // ─── Bucketing helpers ────────────────────────────────────────────────────────

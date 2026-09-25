@@ -60,42 +60,6 @@ export interface CacheSessionReader {
   getBranch(): CacheSessionEntryLike[];
 }
 
-/**
- * Chart glyphs for the graph views, resolved from the repo's icon mode.
- * The reference hardcoded the unicode set; ascii mode swaps in
- * single-byte fallbacks the same way footer's renderBar does.
- */
-export interface ChartGlyphs {
-  /** filled cell in the 0–100% bar charts */
-  full: string;
-  /** unlit cell */
-  empty: string;
-  /** x-axis line */
-  axis: string;
-  /** stacked-chart series */
-  input: string;
-  cacheWrite: string;
-  cacheRead: string;
-}
-
-export const UNICODE_CHART_GLYPHS: ChartGlyphs = {
-  full: "█",
-  empty: "·",
-  axis: "─",
-  input: "▇",
-  cacheWrite: "░",
-  cacheRead: "▒",
-};
-
-export const ASCII_CHART_GLYPHS: ChartGlyphs = {
-  full: "#",
-  empty: ".",
-  axis: "-",
-  input: "=",
-  cacheWrite: "+",
-  cacheRead: "%",
-};
-
 /** Minimal slice of the pi theme the cache dialogs use. */
 export interface CacheTheme {
   fg(style: string, text: string): string;

@@ -6,7 +6,14 @@ import {
   maxHitPercent,
   minHitPercent,
 } from "../src/cache-graph-view.js";
-import type { AssistantUsageMetric } from "../src/cache-types.js";
+import { renderStatsBody } from "../src/cache-stats-view.js";
+import type {
+  AssistantUsageMetric,
+  CacheSessionMetrics,
+  CacheTheme,
+  CacheUsageTotals,
+} from "../src/cache-types.js";
+import { padLeft, padRight, stripAnsi, visibleWidth } from "../src/layout.js";
 
 function makeMetric(cacheHitPercent: number, seq = 1): AssistantUsageMetric {
   return {
@@ -98,5 +105,94 @@ describe("minHitPercent / maxHitPercent", () => {
   test("returns smallest / largest across multiple messages", () => {
     assert.equal(minHitPercent(msgs), 10);
     assert.equal(maxHitPercent(msgs), 50);
+  });
+});
+
+// ─── Stats table width math (layout-owned padRight/padLeft/truncateToWidth) ───
+
+const plainTheme: CacheTheme = {
+  fg: (_style: string, text: string) => text,
+  bold: (text: string) => text,
+};
+
+function makeTotals(): CacheUsageTotals {
+  return {
+    input: 100,
+    output: 50,
+    cacheRead: 200,
+    cacheWrite: 10,
+    totalTokens: 360,
+    assistantMessages: 1,
+  };
+}
+
+function makeMetrics(messages: AssistantUsageMetric[]): CacheSessionMetrics {
+  return {
+    allMessages: messages,
+    activeBranchMessages: messages,
+    treeTotals: makeTotals(),
+    activeBranchTotals: makeTotals(),
+  };
+}
+
+function withModel(seq: number, model: string): AssistantUsageMetric {
+  return { ...makeMetric(64.5, seq), model };
+}
+
+/** Header + data rows of the per-message breakdown (dashes line excluded). */
+function statsTableLines(messages: AssistantUsageMetric[]): string[] {
+  const lines = renderStatsBody(plainTheme, makeMetrics(messages), 120);
+  const headerIdx = lines.findIndex((line) => line.includes("Per-message breakdown"));
+  assert.ok(headerIdx >= 0, "breakdown section missing");
+  return [lines[headerIdx + 1]!, ...lines.slice(headerIdx + 3)];
+}
+
+describe("stats table layout", () => {
+  // Golden strings captured from the retired local pad/truncate implementation —
+  // the visible (ANSI-stripped) plain-ASCII output must not change. layout's
+  // truncateToWidth appends an invisible SGR reset at a real cut, which is the
+  // same rendering and consistent with the repo's existing padRight behaviour.
+  test("plain-ASCII rows are visually identical to the retired local pad", () => {
+    const lines = statsTableLines([
+      withModel(1, "claude-3"),
+      withModel(2, "anthropic/claude-opus-4-20260805-vision-x"),
+    ]).map(stripAnsi);
+    assert.equal(
+      lines[0],
+      "   # B entry    time     model                       prompt      recv       hit     write    hit%",
+    );
+    assert.equal(
+      lines[1],
+      "   1 * e1       00:00:00 anthropic/claude-3             310        50       200        10   64.5%",
+    );
+    assert.equal(
+      lines[2],
+      "   2 * e2       00:00:00 anthropic/anthropic/cla…       310        50       200        10   64.5%",
+    );
+  });
+
+  test("CJK and overlong models keep every row on the same visible width", () => {
+    const lines = statsTableLines([
+      withModel(1, "claude-3"),
+      withModel(2, "anthropic/claude-opus-4-20260805-vision-x"),
+      withModel(3, "智谱清言-v4"),
+    ]);
+    const widths = lines.map(visibleWidth);
+    assert.equal(
+      new Set(widths).size,
+      1,
+      `rows misaligned (length-based padding?): ${JSON.stringify(widths)}`,
+    );
+  });
+
+  test("padRight/padLeft pad to visible width, not string length", () => {
+    // Falsifiable against the retired `pad` (String.length based): an ANSI-styled
+    // cell is 15 code units but 3 columns wide; length padding added no spaces.
+    const styled = "\u001b[31mred\u001b[0m";
+    assert.equal(visibleWidth(padRight(styled, 6)), 6);
+    assert.equal(visibleWidth(padLeft(styled, 6)), 6);
+    assert.equal(padRight("abc", 6), "abc   ");
+    assert.equal(padLeft("abc", 6), "   abc");
+    assert.equal(padLeft("123", 9), "      123");
   });
 });
