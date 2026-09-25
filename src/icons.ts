@@ -120,6 +120,46 @@ export function resolveGlyphs(mode: IconMode): IconGlyphs {
   return resolved === "nerd" ? NERD_GLYPHS : ASCII_GLYPHS;
 }
 
+/**
+ * Chart glyphs for the graph views, resolved from the repo's icon mode.
+ * The reference hardcoded the unicode set; ascii mode swaps in
+ * single-byte fallbacks the same way footer's renderBar does.
+ */
+export interface ChartGlyphs {
+  /** filled cell in the 0–100% bar charts */
+  full: string;
+  /** unlit cell */
+  empty: string;
+  /** x-axis line */
+  axis: string;
+  /** stacked-chart series */
+  input: string;
+  cacheWrite: string;
+  cacheRead: string;
+}
+
+export const UNICODE_CHART_GLYPHS: ChartGlyphs = {
+  full: "█",
+  empty: "·",
+  axis: "─",
+  input: "▇",
+  cacheWrite: "░",
+  cacheRead: "▒",
+};
+
+export const ASCII_CHART_GLYPHS: ChartGlyphs = {
+  full: "#",
+  empty: ".",
+  axis: "-",
+  input: "=",
+  cacheWrite: "+",
+  cacheRead: "%",
+};
+
+export function chartGlyphsForMode(mode: IconMode): ChartGlyphs {
+  return resolveIconMode(mode) === "ascii" ? ASCII_CHART_GLYPHS : UNICODE_CHART_GLYPHS;
+}
+
 const RUNTIME_SYMBOLS: Record<string, string> = {
   nodejs: "\uE718",
   rust: "\uE7A8",

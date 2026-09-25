@@ -58,7 +58,6 @@ pi-editor-footer/
 │   ├── index.ts               # extension entry, widget/header/footer install, /model-info
 │   ├── tracking-editor.ts     # TrackingEditor (Editor slot, highlight, border, cursor)
 │   ├── footer.ts              # renderFooter / installFooter (cwd·git • runtime • tokens·context)
-│   ├── header.ts              # header disabled, cwd preserved in footer
 │   ├── detail-render.ts       # wrap/scroll/ellipsis (tested)
 │   ├── window-presentation.ts # bordered themed box (tested)
 │   ├── model-info.ts          # top border glow+label

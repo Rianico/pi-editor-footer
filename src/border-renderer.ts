@@ -1,5 +1,5 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { applyModelInfo, buildLabel, type ModelInfo, type ThemeLike } from "./model-info.js";
+import { buildLabel, resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -42,22 +42,9 @@ export class BorderRenderer {
     if (hasTop) {
       const theme = this.getLiveTheme();
       const info = this.getModelInfo();
-      const glow = (s: string): string => {
-        try {
-          const maybeGlow = // SAFETY: intentional unsafe cast — validated at runtime
-            (
-              theme as unknown as {
-                // SAFETY: intentional unsafe cast — validated at runtime
-                // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
-                getThinkingBorderColor?: (l: string) => (s: string) => string;
-              }
-            ).getThinkingBorderColor;
-          if (typeof maybeGlow === "function") return maybeGlow.call(theme, info.level)(s);
-        } catch {
-          // SAFETY: best-effort UI, ignore recoverable error
-        }
-        return s;
-      };
+      // C3: single glow home in model-info.ts; identity fallback explicit at this site.
+      const glowFor = resolveThinkingGlow(theme);
+      const glow = (s: string): string => (glowFor ? glowFor(info.level, s) : s);
       // When tokens line exists, right moves to that line (one padding) — don't duplicate on top
       const topRightForTop = opts.topTokensText ? "" : opts.topRightText;
       if (opts.glowEnabled) {
@@ -76,8 +63,7 @@ export class BorderRenderer {
         if (topRightForTop) {
           out = embedTopWithLeftAndRight(out, width, leftLabel, topRightForTop, glow);
         } else {
-          // Only left (model+context), no right — use applyModelInfo replacement but with combined left
-          // Reuse embedTopWithLeftAndRight with empty right
+          // Only left (model+context), no right — reuse embedTopWithLeftAndRight with empty right
           out = embedTopWithLeftAndRight(out, width, leftLabel, "", glow);
         }
       } else if (opts.topContextText || topRightForTop) {
@@ -114,23 +100,9 @@ export class BorderRenderer {
     // Bottom embedding (telemetry left/right)
     if (opts.telemetryText || opts.bottomLeftText) {
       const theme = this.getLiveTheme();
-      const glow = (s: string): string => {
-        try {
-          const maybeGlow = // SAFETY: intentional unsafe cast — validated at runtime
-            (
-              theme as unknown as {
-                // SAFETY: intentional unsafe cast — validated at runtime
-                // SAFETY: pi theme seam — getThinkingBorderColor is optional theme extension
-                getThinkingBorderColor?: (l: string) => (s: string) => string;
-              }
-            ).getThinkingBorderColor;
-          if (typeof maybeGlow === "function")
-            return maybeGlow.call(theme, this.getModelInfo().level)(s);
-        } catch {
-          // SAFETY: best-effort UI, ignore recoverable error
-        }
-        return s;
-      };
+      // C3: single glow home; this site re-reads the live model level per call — kept explicit.
+      const glowFor = resolveThinkingGlow(theme);
+      const glow = (s: string): string => (glowFor ? glowFor(this.getModelInfo().level, s) : s);
       out = embedBottomBorder(
         out,
         width,
@@ -233,7 +205,7 @@ function embedTopRightBorder(
   // If top is scroll indicator, don't embed right — keep glow recolor only
   if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
   const rightW = visibleWidth(rightText);
-  // left label already embedded by applyModelInfo — its visible width is width - middle - right
+  // left label already embedded on the top border — its visible width is width - middle - right
   // We need to truncate right if too wide, preserving at least 10 chars for left
   const maxRight = Math.max(0, width - 12);
   let displayRight = rightText;

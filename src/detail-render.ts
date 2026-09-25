@@ -3,10 +3,12 @@
  *
  * Given a highlighted completion candidate and window state, produces the
  * lines to render in the 5-line detail window above the input box.
- * No pi imports — this is the single testable seam of the extension.
+ * The only import beyond node builtins is `layout`'s ANSI-aware
+ * `truncateToWidth` — the repo's single width-math owner.
  */
 
 import * as os from "node:os";
+import { truncateToWidth } from "./layout.js";
 
 export interface DetailItem {
   label: string;
@@ -80,10 +82,10 @@ export function renderDetail(
     } else if (pathSeg !== "" || invocationSeg !== "") {
       const suffixLen = pathSeg.length + invocationLen + markerLen;
       const baseWidth = Math.max(0, wrapWidth - suffixLen);
-      header = truncateToWidth(base, baseWidth) + pathSeg + invocationSeg + marker;
+      header = truncateToWidth(base, baseWidth, "") + pathSeg + invocationSeg + marker;
     } else {
       const nameWidth = Math.max(0, wrapWidth - markerLen);
-      header = truncateToWidth(base, nameWidth) + marker;
+      header = truncateToWidth(base, nameWidth, "") + marker;
     }
   } else if (invocationSeg !== "") {
     const totalLen = base.length + invocationLen + markerLen;
@@ -91,13 +93,13 @@ export function renderDetail(
       header = base + invocationSeg + marker;
     } else {
       const baseWidth = Math.max(0, wrapWidth - invocationLen - markerLen);
-      header = truncateToWidth(base, baseWidth) + invocationSeg + marker;
+      header = truncateToWidth(base, baseWidth, "") + invocationSeg + marker;
     }
   } else if (overflows) {
     const nameWidth = Math.max(0, wrapWidth - markerLen);
-    header = truncateToWidth(base, nameWidth) + marker;
+    header = truncateToWidth(base, nameWidth, "") + marker;
   } else {
-    header = truncateToWidth(base, wrapWidth);
+    header = truncateToWidth(base, wrapWidth, "");
   }
 
   return [header, ...visibleLines];
@@ -156,10 +158,6 @@ function wrapDescription(description: string, width: number): string[] {
     }
   }
   return lines;
-}
-
-function truncateToWidth(text: string, width: number): string {
-  return text.length <= width ? text : text.slice(0, width);
 }
 
 export function normalizePath(raw: string): string {

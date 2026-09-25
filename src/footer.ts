@@ -5,8 +5,7 @@ import type { RuntimeInfo } from "./runtime.js";
 import type { FooterState, ModelMeta, UsageTotals, UsageTotalsSource } from "./state.js";
 import { getUsageTotals, totalInputTokens } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
-import { runtimeSymbol } from "./icons.js";
-import { ChromeComposition } from "./chrome-composition.js";
+import { resolveGlyphs, runtimeSymbol } from "./icons.js";
 import {
   alignRight,
   fitSegmentsByPriority,
@@ -15,8 +14,6 @@ import {
 } from "./layout.js";
 import { basenamePath, formatCwd, truncatePath } from "./path-format.js";
 import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
-// ChromeState owns context bar formatting — re-export for backward compat.
-export { formatContextBar } from "./chrome-state.js";
 
 function renderGitSegment(
   theme: Theme,
@@ -124,8 +121,7 @@ export function renderFooter(
   },
 ): string[] {
   if (width <= 0) return [""];
-  const comp = new ChromeComposition(config.icons.mode, theme);
-  const glyphs = comp.glyphs;
+  const glyphs = resolveGlyphs(config.icons.mode);
   const segments = config.footerSegments;
   const totals = ctx.totals ?? {
     input: 0,

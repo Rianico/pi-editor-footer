@@ -70,8 +70,10 @@ export interface BuildTimelineParams {
 /**
  * Pure timeline text builder: Agent-run → dim line (line1 · line2).
  * Single source for dt · wallDur · cache · tokens · cost + turns/tools formatting.
- * Respects timeline config but preserves current behaviour (wallDur/tokens/cost always shown;
- * config flags gate future omit — currently both branches push same, kept for compat).
+ * Gated by config.timeline: wallTime toggles the wallDur segment, tokens toggles
+ * ↑/↓ and the cache segment (cache is a token metric with no row of its own in
+ * CONFIG_SCHEMA), cost toggles the $ segment. dt (first) and line2 are never gated;
+ * segments join with " · ", so a removed middle segment leaves no dangling separator.
  * Testable without TUI — no global scan.
  */
 export function buildTimelineText(params: BuildTimelineParams): string {
@@ -87,17 +89,12 @@ export function buildTimelineText(params: BuildTimelineParams): string {
   const telCost = perAgent.cost;
   const line1Parts: string[] = [dt];
   if (config.timeline.wallTime) line1Parts.push(wallDur);
-  else line1Parts.push(wallDur);
   if (config.timeline.tokens) {
     line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
     line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
-  } else {
-    line1Parts.push(`${glyphs.input} ${fmtTokens(telInput)}`);
-    line1Parts.push(`${glyphs.output} ${fmtTokens(telOutput)}`);
+    line1Parts.push(cacheStr);
   }
-  line1Parts.push(cacheStr);
   if (config.timeline.cost) line1Parts.push(`$${telCost.toFixed(2)}`);
-  else line1Parts.push(`$${telCost.toFixed(2)}`);
   const line1 = line1Parts.join(" · ");
   const turnNum = snap.turnNumber ?? 1;
   const totalTools = snap.completedCount + snap.failedCount + snap.activeTools;

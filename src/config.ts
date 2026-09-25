@@ -51,6 +51,12 @@ export interface ThemeConfig {
   footerSegments: FooterSegments;
 }
 
+/**
+ * Shape anchor for `ThemeConfig`. Kept annotated (not `satisfies`) on purpose:
+ * `satisfies` narrows props to literals (e.g. `icons.mode: "auto"`) and breaks
+ * consumers that spread-override fields with other valid enum members.
+ * The no-orphan-row guarantee lives in the leaf-walk guard test, not the type.
+ */
 export const DEFAULT_CONFIG: ThemeConfig = {
   enabled: true,
   workspaceDisplay: "path",
@@ -86,7 +92,7 @@ export const DEFAULT_CONFIG: ThemeConfig = {
     tokens: true,
     cost: true,
   },
-};
+} satisfies ThemeConfig;
 
 export function getConfigPath(): string {
   const home = homedir();
@@ -122,48 +128,227 @@ function deepMerge<T>(base: T, override: unknown): T {
 }
 
 // ---------------------------------------------------------------------------
-// Table-driven schema — single source for defaults + validation
-// Adding a flag = one row here. deepMerge handles missing keys, validate()
+// Table-driven descriptors — single source for defaults + validation + settings UI
+// Adding a flag = one row here (label/tab make it appear in the settings dialog;
+// the leaf-walk guard test fails if a config leaf has no row).
 // SAFETY: intentional unsafe cast — validated at runtime
 // enforces types. No `as unknown as` scattered per field.
 // ---------------------------------------------------------------------------
 
-type Descriptor =
-  | { path: string; kind: "boolean" }
-  | { path: string; kind: "enum"; values: readonly string[] };
+/** Settings dialog tabs; row order within a tab follows table order. */
+export type ConfigTab = "general" | "appearance" | "footer" | "telemetry" | "timeline";
+
+export type ConfigDescriptor =
+  | {
+      path: string;
+      kind: "boolean";
+      /** Settings row id — defaults to the last path segment. */
+      id?: string;
+      label: string;
+      tab: ConfigTab;
+      default: boolean;
+    }
+  | {
+      path: string;
+      kind: "enum";
+      /** Settings row id — defaults to the last path segment. */
+      id?: string;
+      label: string;
+      tab: ConfigTab;
+      /** Display order doubles as the settings cycle order. */
+      values: readonly string[];
+      /** Optional per-value display text; falls back to the raw value. */
+      valueLabels?: Record<string, string>;
+      default: string;
+    };
 
 /** Single schema table — adding a config leaf is one row. */
-export const CONFIG_SCHEMA: readonly Descriptor[] = [
-  { path: "enabled", kind: "boolean" },
-  { path: "workspaceDisplay", kind: "enum", values: ["path", "name"] },
-  { path: "cursorStyle", kind: "enum", values: ["block", "bar", "underline"] },
-  { path: "icons.mode", kind: "enum", values: ["auto", "nerd", "ascii"] },
-  { path: "contextIconBar", kind: "boolean" },
-  { path: "footerSegments.cwd", kind: "boolean" },
-  { path: "footerSegments.sessionName", kind: "boolean" },
-  { path: "footerSegments.gitBranch", kind: "boolean" },
-  { path: "footerSegments.gitStatus", kind: "boolean" },
-  { path: "footerSegments.gitCommit", kind: "boolean" },
-  { path: "footerSegments.runtime", kind: "boolean" },
-  { path: "footerSegments.context", kind: "boolean" },
-  { path: "footerSegments.tokens", kind: "boolean" },
-  { path: "footerSegments.cost", kind: "boolean" },
-  { path: "footerSegments.extensionStatuses", kind: "boolean" },
-  { path: "telemetry.enabled", kind: "boolean" },
-  { path: "telemetry.tps", kind: "boolean" },
-  { path: "telemetry.ttft", kind: "boolean" },
-  { path: "telemetry.duration", kind: "boolean" },
-  { path: "telemetry.tokens", kind: "boolean" },
-  { path: "telemetry.stalls", kind: "boolean" },
-  { path: "telemetry.cost", kind: "boolean" },
-  { path: "timeline.enabled", kind: "boolean" },
-  { path: "timeline.wallTime", kind: "boolean" },
-  { path: "timeline.tokens", kind: "boolean" },
-  { path: "timeline.cost", kind: "boolean" },
-] as const;
+export const CONFIG_SCHEMA: readonly ConfigDescriptor[] = [
+  // general
+  { path: "enabled", kind: "boolean", label: "Enabled", tab: "general", default: true },
+  {
+    path: "workspaceDisplay",
+    kind: "enum",
+    values: ["path", "name"],
+    valueLabels: { path: "Full path", name: "Name only" },
+    label: "Workspace display",
+    tab: "general",
+    default: "path",
+  },
+  {
+    path: "cursorStyle",
+    kind: "enum",
+    values: ["block", "bar", "underline"],
+    valueLabels: { block: "Block", bar: "Bar", underline: "Underline" },
+    label: "Cursor style",
+    tab: "general",
+    default: "block",
+  },
+  // appearance
+  {
+    path: "icons.mode",
+    kind: "enum",
+    id: "iconMode",
+    values: ["auto", "nerd", "ascii"],
+    valueLabels: { auto: "Auto", nerd: "Nerd", ascii: "ASCII" },
+    label: "Icon mode",
+    tab: "appearance",
+    default: "auto",
+  },
+  // footer (display order interleaves the top-level contextIconBar)
+  {
+    path: "footerSegments.cwd",
+    kind: "boolean",
+    label: "CWD",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "footerSegments.sessionName",
+    kind: "boolean",
+    label: "Session name",
+    tab: "footer",
+    default: false,
+  },
+  {
+    path: "footerSegments.gitBranch",
+    kind: "boolean",
+    label: "Git branch",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "footerSegments.gitStatus",
+    kind: "boolean",
+    label: "Git status",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "footerSegments.gitCommit",
+    kind: "boolean",
+    label: "Git commit (detached)",
+    tab: "footer",
+    default: false,
+  },
+  {
+    path: "footerSegments.runtime",
+    kind: "boolean",
+    label: "Runtime",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "footerSegments.context",
+    kind: "boolean",
+    label: "Context bar",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "contextIconBar",
+    kind: "boolean",
+    label: "Context icon bar",
+    tab: "footer",
+    default: false,
+  },
+  {
+    path: "footerSegments.tokens",
+    kind: "boolean",
+    label: "Tokens",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "footerSegments.cost",
+    kind: "boolean",
+    label: "Cost",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "footerSegments.extensionStatuses",
+    kind: "boolean",
+    label: "Extension status line",
+    tab: "footer",
+    default: true,
+  },
+  // telemetry
+  {
+    path: "telemetry.enabled",
+    kind: "boolean",
+    label: "Enabled",
+    tab: "telemetry",
+    default: true,
+  },
+  { path: "telemetry.tps", kind: "boolean", label: "TPS", tab: "telemetry", default: true },
+  { path: "telemetry.ttft", kind: "boolean", label: "TTFT", tab: "telemetry", default: true },
+  {
+    path: "telemetry.duration",
+    kind: "boolean",
+    label: "Total duration",
+    tab: "telemetry",
+    default: true,
+  },
+  {
+    path: "telemetry.tokens",
+    kind: "boolean",
+    label: "Tokens",
+    tab: "telemetry",
+    default: true,
+  },
+  {
+    path: "telemetry.stalls",
+    kind: "boolean",
+    label: "Stall details",
+    tab: "telemetry",
+    default: true,
+  },
+  {
+    path: "telemetry.cost",
+    kind: "boolean",
+    label: "Cost rate",
+    tab: "telemetry",
+    default: true,
+  },
+  // timeline
+  {
+    path: "timeline.enabled",
+    kind: "boolean",
+    label: "Timeline enabled",
+    tab: "timeline",
+    default: true,
+  },
+  {
+    path: "timeline.wallTime",
+    kind: "boolean",
+    label: "Wall time",
+    tab: "timeline",
+    default: true,
+  },
+  {
+    path: "timeline.tokens",
+    kind: "boolean",
+    label: "Tokens",
+    tab: "timeline",
+    default: true,
+  },
+  {
+    path: "timeline.cost",
+    kind: "boolean",
+    label: "Cost",
+    tab: "timeline",
+    default: true,
+  },
+];
+
+/** Settings row id for a descriptor — explicit `id` wins, else the leaf name. */
+export function descriptorRowId(desc: ConfigDescriptor): string {
+  return desc.id ?? desc.path.split(".").pop()!;
+}
 
 // SAFETY: table-driven config access — path validated against CONFIG_SCHEMA, caller validates via validate()
-function getByPath<T>(obj: unknown, path: string): T | undefined {
+export function getByPath<T>(obj: unknown, path: string): T | undefined {
   const parts = path.split(".");
   let cur: unknown = obj;
   for (const p of parts) {
@@ -174,7 +359,7 @@ function getByPath<T>(obj: unknown, path: string): T | undefined {
   return cur as T | undefined;
 }
 
-function setByPath(obj: unknown, path: string, value: unknown): void {
+export function setByPath(obj: unknown, path: string, value: unknown): void {
   const parts = path.split(".");
   let cur = obj as Record<string, unknown>;
   for (let i = 0; i < parts.length - 1; i++) {
@@ -188,21 +373,16 @@ function setByPath(obj: unknown, path: string, value: unknown): void {
   cur[parts[parts.length - 1]!] = value;
 }
 
-// SAFETY: table-driven config access — path validated against CONFIG_SCHEMA, caller validates via validate()
-function getDefaultByPath<T>(path: string): T | undefined {
-  return getByPath<T>(DEFAULT_CONFIG, path);
-}
-
 function validate(config: ThemeConfig): ThemeConfig {
   for (const desc of CONFIG_SCHEMA) {
     const cur = getByPath(config, desc.path);
     if (desc.kind === "boolean") {
       if (typeof cur !== "boolean") {
-        setByPath(config, desc.path, getDefaultByPath(desc.path));
+        setByPath(config, desc.path, desc.default);
       }
     } else if (desc.kind === "enum") {
       if (!desc.values.includes(cur as string)) {
-        setByPath(config, desc.path, getDefaultByPath(desc.path));
+        setByPath(config, desc.path, desc.default);
       }
     }
   }

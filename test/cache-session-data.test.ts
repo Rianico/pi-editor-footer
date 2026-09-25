@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { computeCacheHitPercent, emptyTotals } from "../src/cache-math.js";
 import { collectCacheSessionMetrics } from "../src/cache-session-data.js";
-import type { CacheSessionEntryLike, CacheSessionReader } from "../src/cache-types.js";
+import type { BranchAwareSessionEntryReader, SessionEntryLike } from "../src/session-entries.js";
 
 type FakeUsage = {
   input: number;
@@ -16,7 +16,7 @@ function makeAssistantEntry(
   id: string,
   usage: FakeUsage,
   opts: { provider?: string; model?: string; timestamp?: string } = {},
-): CacheSessionEntryLike {
+): SessionEntryLike {
   return {
     type: "message",
     id,
@@ -31,12 +31,12 @@ function makeAssistantEntry(
 }
 
 function makeSessionManager(
-  entries: CacheSessionEntryLike[],
+  entries: SessionEntryLike[],
   branchIds: string[],
-): CacheSessionReader {
+): BranchAwareSessionEntryReader {
   return {
     getEntries: () => entries,
-    getBranch: () => entries.filter((entry) => branchIds.includes(entry.id)),
+    getBranch: () => entries.filter((entry) => branchIds.includes(entry.id ?? "")),
   };
 }
 
@@ -142,7 +142,7 @@ describe("collectCacheSessionMetrics — two messages, one on branch one off", (
 
 describe("collectCacheSessionMetrics — non-assistant entries are filtered out", () => {
   const usage: FakeUsage = { input: 50, output: 25, cacheRead: 10, cacheWrite: 5, totalTokens: 90 };
-  const entries: CacheSessionEntryLike[] = [
+  const entries: SessionEntryLike[] = [
     { type: "message", id: "u1", timestamp: "2024-01-01T00:00:00.000Z", message: { role: "user" } },
     makeAssistantEntry("e1", usage),
     { type: "tool_result", id: "t1", timestamp: "2024-01-01T00:00:00.000Z" },

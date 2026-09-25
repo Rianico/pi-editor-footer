@@ -1,8 +1,16 @@
 import type { GitStatus } from "./git.js";
 import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
-import { fmtTokens } from "./format.js";
 import { formatProviderLabel } from "./format.js";
+import { computeCacheHitPercent, promptTokens } from "./cache-math.js";
+import {
+  isAssistantUsageEntry,
+  isSummaryEntry,
+  isToolResultEntry,
+  usageNumbers,
+  type SessionEntryReader,
+  type SessionUsageLike,
+} from "./session-entries.js";
 
 export interface FooterState {
   git: GitStatus;
@@ -21,31 +29,9 @@ export interface UsageTotals {
   latestCacheHitRate: number | undefined;
 }
 
-/** Raw provider usage block as persisted on a session entry. */
-export interface EntryUsage {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  cost?: { total?: number };
-}
-
-/**
- * Session entry slice read by getUsageTotals — the pi seam, validated at runtime.
- * `usage` sits at the top level on branch_summary / compaction entries and inside
- * `message` on message entries.
- */
-export interface UsageSessionEntry {
-  type: string;
-  id?: string;
-  timestamp?: string;
-  message?: { role: string; usage?: EntryUsage };
-  usage?: EntryUsage;
-}
-
 /** Minimal session-manager seam getUsageTotals reads entries through. */
 export interface UsageTotalsSource {
-  sessionManager?: { getEntries(): UsageSessionEntry[] };
+  sessionManager?: SessionEntryReader;
 }
 
 /**
@@ -53,11 +39,12 @@ export interface UsageTotalsSource {
  *
  * pi-ai `Usage.input` excludes the cached prompt prefix (it lives in cacheRead/cacheWrite),
  * so `input` alone under-reports the prompt by the whole cached history on every turn.
+ * The denominator itself is owned by `cache-math.ts:promptTokens`.
  */
 export function totalInputTokens(
   totals: Pick<UsageTotals, "input" | "cacheRead" | "cacheWrite">,
 ): number {
-  return totals.input + totals.cacheRead + totals.cacheWrite;
+  return promptTokens(totals.input, totals.cacheRead, totals.cacheWrite);
 }
 
 let usageCache: { key: string; totals: UsageTotals } | undefined;
@@ -80,7 +67,7 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
     cost: 0,
     latestCacheHitRate: undefined,
   };
-  const addUsage = (usage: EntryUsage): void => {
+  const addUsage = (usage: SessionUsageLike): void => {
     totals.input += usage.input ?? 0;
     totals.output += usage.output ?? 0;
     totals.cacheRead += usage.cacheRead ?? 0;
@@ -91,21 +78,22 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
     // Assistant turns carry the cache split the hit rate is derived from; tool results
     // and summaries are usage from nested model calls — billed, so they count toward the
     // session totals (parity with pi core's addUsageToTotals loop).
-    if (entry.type === "message" && entry.message?.role === "assistant") {
+    if (isAssistantUsageEntry(entry)) {
       const usage = entry.message.usage;
-      if (!usage) continue;
       addUsage(usage);
-      const promptTokens = (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-      if (promptTokens > 0) {
-        totals.latestCacheHitRate = ((usage.cacheRead ?? 0) / promptTokens) * 100;
+      const { input, cacheRead, cacheWrite } = usageNumbers(usage);
+      // `undefined` means "no assistant turn with a real prompt yet" — distinct
+      // from a genuine 0% hit, which the owner returns for prompt totals > 0.
+      if (promptTokens(input, cacheRead, cacheWrite) > 0) {
+        totals.latestCacheHitRate = computeCacheHitPercent(input, cacheRead, cacheWrite);
       }
       continue;
     }
-    if (entry.type === "message" && entry.message?.role === "toolResult") {
+    if (isToolResultEntry(entry)) {
       if (entry.message.usage) addUsage(entry.message.usage);
       continue;
     }
-    if (entry.type === "branch_summary" || entry.type === "compaction") {
+    if (isSummaryEntry(entry)) {
       if (entry.usage) addUsage(entry.usage);
     }
   }
@@ -150,6 +138,3 @@ export function getModelMeta(
   const effort = reasoning ? getThinkingLevel() : undefined;
   return { provider, model, effort };
 }
-
-// Keep fmtTokens usage to satisfy import, used by getUsageTotals display elsewhere
-void fmtTokens;

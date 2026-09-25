@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { getUsageTotals, invalidateUsageCache, totalInputTokens } from "../src/state.js";
+import type { SessionUsageLike } from "../src/session-entries.js";
 
-interface EntryUsageLike {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  cost?: { total?: number };
-}
-
-function usage(over: EntryUsageLike = {}): EntryUsageLike {
+function usage(over: SessionUsageLike = {}): SessionUsageLike {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: { total: 0 }, ...over };
 }
 
@@ -80,6 +73,40 @@ describe("getUsageTotals", () => {
     );
     assert.equal(totalInputTokens(totals), 11_000);
     assert.equal(totalInputTokens({ input: 0, cacheRead: 0, cacheWrite: 0 }), 0);
+  });
+
+  test("assistant turn with zero prompt keeps latestCacheHitRate undefined (edge semantics)", () => {
+    invalidateUsageCache();
+    const totals = getUsageTotals(
+      ctxWith([
+        {
+          type: "message",
+          id: "z1",
+          message: { role: "assistant", usage: usage({ input: 0, output: 5 }) },
+        },
+      ]),
+    );
+    // Current behavior: hit rate is only set when the prompt total > 0, so
+    // "no cache seen yet" (undefined) stays distinct from "0% hit".
+    assert.equal(totals.latestCacheHitRate, undefined);
+
+    invalidateUsageCache();
+    // A later zero-prompt turn must not clobber the previous real rate.
+    const later = getUsageTotals(
+      ctxWith([
+        {
+          type: "message",
+          id: "z2",
+          message: { role: "assistant", usage: usage({ input: 100, cacheRead: 100 }) },
+        },
+        {
+          type: "message",
+          id: "z3",
+          message: { role: "assistant", usage: usage({ input: 0, output: 0 }) },
+        },
+      ]),
+    );
+    assert.equal(later.latestCacheHitRate, 50);
   });
 
   test("caches by entry set — new entries recompute, identical set is stable", () => {

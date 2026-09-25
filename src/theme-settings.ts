@@ -25,12 +25,12 @@ interface ExtensionContext {
     ): Promise<T>;
   };
 }
-import type { ThemeConfig, CursorStyle, IconMode, WorkspaceDisplay } from "./config.js";
+import type { ThemeConfig, ConfigTab, ConfigDescriptor } from "./config.js";
+import { CONFIG_SCHEMA, descriptorRowId, getByPath, setByPath } from "./config.js";
 
-const TABS = ["general", "appearance", "footer", "telemetry", "timeline"] as const;
-type Tab = (typeof TABS)[number];
+const TABS: readonly ConfigTab[] = ["general", "appearance", "footer", "telemetry", "timeline"];
 
-interface SettingItem {
+export interface SettingItem {
   id: string;
   label: string;
   currentValue: string;
@@ -46,259 +46,57 @@ const COPY = {
     timeline: "Timeline",
   },
   hint: "Tab/Shift+Tab/←/→: tabs · ↑/↓: move · Enter/Space: change · Esc/q: close",
-  labels: {
-    enabled: "Enabled",
-    cursorStyle: "Cursor style",
-    iconMode: "Icon mode",
-    workspaceDisplay: "Workspace display",
-    cwd: "CWD",
-    sessionName: "Session name",
-    gitBranch: "Git branch",
-    gitStatus: "Git status",
-    gitCommit: "Git commit (detached)",
-    runtime: "Runtime",
-    context: "Context bar",
-    contextIconBar: "Context icon bar",
-    tokens: "Tokens",
-    cost: "Cost",
-    extensionStatuses: "Extension status line",
-    tps: "TPS",
-    ttft: "TTFT",
-    duration: "Total duration",
-    stallDetails: "Stall details",
-    costRate: "Cost rate",
-    timelineEnabled: "Timeline enabled",
-    wallTime: "Wall time",
-  },
   values: {
     on: "On",
     off: "Off",
-    workspaceDisplays: { path: "Full path", name: "Name only" } as Record<WorkspaceDisplay, string>,
-    cursorStyles: {
-      block: "Block",
-      bar: "Bar",
-      underline: "Underline",
-    } as Record<CursorStyle, string>,
-    icons: { auto: "Auto", nerd: "Nerd", ascii: "ASCII" } as Record<IconMode, string>,
   },
 };
 
-function cycleCursor(config: ThemeConfig): ThemeConfig {
-  const order: CursorStyle[] = ["block", "bar", "underline"];
-  const idx = order.indexOf(config.cursorStyle);
-  const next = order[(idx + 1) % order.length]!;
-  return { ...config, cursorStyle: next };
+// ---------------------------------------------------------------------------
+// Pure settings renderer + reducer over CONFIG_SCHEMA (no TUI) — labels, tabs
+// and cycle order live in the descriptor table; ids stay byte-compatible.
+// ---------------------------------------------------------------------------
+
+function rowCurrentValue(desc: ConfigDescriptor, config: ThemeConfig): string {
+  if (desc.kind === "boolean") {
+    return getByPath<boolean>(config, desc.path) ? COPY.values.on : COPY.values.off;
+  }
+  const value = getByPath<string>(config, desc.path) ?? desc.default;
+  return desc.valueLabels?.[value] ?? value;
 }
-function cycleWorkspaceDisplay(config: ThemeConfig): ThemeConfig {
-  const next: WorkspaceDisplay = config.workspaceDisplay === "path" ? "name" : "path";
-  return { ...config, workspaceDisplay: next };
+
+export function settingRowsFor(tab: ConfigTab, config: ThemeConfig): SettingItem[] {
+  return CONFIG_SCHEMA.filter((desc) => desc.tab === tab).map((desc) => ({
+    id: descriptorRowId(desc),
+    label: desc.label,
+    currentValue: rowCurrentValue(desc, config),
+  }));
 }
-function cycleIconMode(config: ThemeConfig): ThemeConfig {
-  const order: IconMode[] = ["auto", "nerd", "ascii"];
-  const idx = order.indexOf(config.icons.mode);
-  const next = order[(idx + 1) % order.length]!;
-  return { ...config, icons: { mode: next } };
-}
-function toggleFlag<K extends keyof ThemeConfig["footerSegments"]>(
+
+export function applySettingChange(
+  tab: ConfigTab,
+  itemId: string,
   config: ThemeConfig,
-  key: K,
 ): ThemeConfig {
-  return {
-    ...config,
-    footerSegments: {
-      ...config.footerSegments,
-      [key]: !config.footerSegments[key],
-    },
-  };
-}
-function toggleTimeline<K extends keyof ThemeConfig["timeline"]>(
-  config: ThemeConfig,
-  key: K,
-): ThemeConfig {
-  return {
-    ...config,
-    timeline: { ...config.timeline, [key]: !config.timeline[key] },
-  };
-}
-
-function toggleTelemetry<K extends keyof ThemeConfig["telemetry"]>(
-  config: ThemeConfig,
-  key: K,
-): ThemeConfig {
-  if (key === "enabled") {
-    // keep sub-flags as-is when toggling enabled, but allow it
-    return {
-      ...config,
-      telemetry: { ...config.telemetry, enabled: !config.telemetry.enabled },
-    };
+  const desc = CONFIG_SCHEMA.find((d) => d.tab === tab && descriptorRowId(d) === itemId);
+  if (!desc) return config;
+  const next = structuredClone(config);
+  if (desc.kind === "boolean") {
+    setByPath(next, desc.path, !getByPath<boolean>(next, desc.path));
+  } else {
+    // cycle in `values` order (the table doubles as the display/cycle order)
+    const cur = getByPath<string>(next, desc.path);
+    const idx = desc.values.indexOf(cur as string);
+    setByPath(next, desc.path, desc.values[(idx + 1) % desc.values.length]!);
   }
-  return {
-    ...config,
-    telemetry: { ...config.telemetry, [key]: !config.telemetry[key] },
-  };
-}
-
-function buildGeneralItems(config: ThemeConfig): SettingItem[] {
-  return [
-    {
-      id: "enabled",
-      label: COPY.labels.enabled,
-      currentValue: config.enabled ? COPY.values.on : COPY.values.off,
-    },
-    {
-      id: "workspaceDisplay",
-      label: COPY.labels.workspaceDisplay,
-      currentValue: COPY.values.workspaceDisplays[config.workspaceDisplay],
-    },
-    {
-      id: "cursorStyle",
-      label: COPY.labels.cursorStyle,
-      currentValue: COPY.values.cursorStyles[config.cursorStyle],
-    },
-  ];
-}
-function buildAppearanceItems(config: ThemeConfig): SettingItem[] {
-  return [
-    {
-      id: "iconMode",
-      label: COPY.labels.iconMode,
-      currentValue: COPY.values.icons[config.icons.mode],
-    },
-  ];
-}
-function buildFooterItems(config: ThemeConfig): SettingItem[] {
-  const segs = config.footerSegments;
-  const flag = (v: boolean) => (v ? COPY.values.on : COPY.values.off);
-  return [
-    { id: "cwd", label: COPY.labels.cwd, currentValue: flag(segs.cwd) },
-    {
-      id: "sessionName",
-      label: COPY.labels.sessionName,
-      currentValue: flag(segs.sessionName),
-    },
-    {
-      id: "gitBranch",
-      label: COPY.labels.gitBranch,
-      currentValue: flag(segs.gitBranch),
-    },
-    {
-      id: "gitStatus",
-      label: COPY.labels.gitStatus,
-      currentValue: flag(segs.gitStatus),
-    },
-    {
-      id: "gitCommit",
-      label: COPY.labels.gitCommit,
-      currentValue: flag(segs.gitCommit),
-    },
-    {
-      id: "runtime",
-      label: COPY.labels.runtime,
-      currentValue: flag(segs.runtime),
-    },
-    {
-      id: "context",
-      label: COPY.labels.context,
-      currentValue: flag(segs.context),
-    },
-    {
-      id: "contextIconBar",
-      label: COPY.labels.contextIconBar,
-      currentValue: flag(config.contextIconBar),
-    },
-    {
-      id: "tokens",
-      label: COPY.labels.tokens,
-      currentValue: flag(segs.tokens),
-    },
-    { id: "cost", label: COPY.labels.cost, currentValue: flag(segs.cost) },
-    {
-      id: "extensionStatuses",
-      label: COPY.labels.extensionStatuses,
-      currentValue: flag(segs.extensionStatuses),
-    },
-  ];
-}
-function buildTimelineItems(config: ThemeConfig): SettingItem[] {
-  const tl = config.timeline;
-  const flag = (v: boolean) => (v ? COPY.values.on : COPY.values.off);
-  return [
-    { id: "enabled", label: COPY.labels.timelineEnabled, currentValue: flag(tl.enabled) },
-    { id: "wallTime", label: COPY.labels.wallTime, currentValue: flag(tl.wallTime) },
-    { id: "tokens", label: COPY.labels.tokens, currentValue: flag(tl.tokens) },
-    { id: "cost", label: COPY.labels.cost, currentValue: flag(tl.cost) },
-  ];
-}
-
-function buildTelemetryItems(config: ThemeConfig): SettingItem[] {
-  const t = config.telemetry;
-  const flag = (v: boolean) => (v ? COPY.values.on : COPY.values.off);
-  return [
-    {
-      id: "enabled",
-      label: COPY.labels.enabled,
-      currentValue: flag(t.enabled),
-    },
-    { id: "tps", label: COPY.labels.tps, currentValue: flag(t.tps) },
-    { id: "ttft", label: COPY.labels.ttft, currentValue: flag(t.ttft) },
-    {
-      id: "duration",
-      label: COPY.labels.duration,
-      currentValue: flag(t.duration),
-    },
-    { id: "tokens", label: COPY.labels.tokens, currentValue: flag(t.tokens) },
-    {
-      id: "stalls",
-      label: COPY.labels.stallDetails,
-      currentValue: flag(t.stalls),
-    },
-    { id: "cost", label: COPY.labels.costRate, currentValue: flag(t.cost) },
-  ];
-}
-function buildItems(tab: Tab, config: ThemeConfig): SettingItem[] {
-  switch (tab) {
-    case "general":
-      return buildGeneralItems(config);
-    case "appearance":
-      return buildAppearanceItems(config);
-    case "footer":
-      return buildFooterItems(config);
-    case "telemetry":
-      return buildTelemetryItems(config);
-    case "timeline":
-      return buildTimelineItems(config);
-  }
-}
-
-function handleSettingChange(tab: Tab, itemId: string, config: ThemeConfig): ThemeConfig {
-  if (tab === "general") {
-    if (itemId === "enabled") return { ...config, enabled: !config.enabled };
-    if (itemId === "workspaceDisplay") return cycleWorkspaceDisplay(config);
-    if (itemId === "cursorStyle") return cycleCursor(config);
-  }
-  if (tab === "appearance") {
-    if (itemId === "iconMode") return cycleIconMode(config);
-  }
-  if (tab === "footer") {
-    if (itemId === "contextIconBar") {
-      return { ...config, contextIconBar: !config.contextIconBar };
-    }
-    return toggleFlag(config, itemId as keyof ThemeConfig["footerSegments"]);
-  }
-  if (tab === "telemetry") {
-    return toggleTelemetry(config, itemId as keyof ThemeConfig["telemetry"]);
-  }
-  if (tab === "timeline") {
-    return toggleTimeline(config, itemId as keyof ThemeConfig["timeline"]);
-  }
-  return config;
+  return next;
 }
 
 class SettingsUi {
-  private tab: Tab = "general";
+  private tab: ConfigTab = "general";
   private config: ThemeConfig;
   private selectList!: SelectList;
-  private readonly selectedItemByTab: Partial<Record<Tab, string>> = {};
+  private readonly selectedItemByTab: Partial<Record<ConfigTab, string>> = {};
   private readonly container: Box;
   private readonly theme: Theme;
   private readonly onChange: (config: ThemeConfig) => void;
@@ -330,7 +128,7 @@ class SettingsUi {
 
   private applySetting(itemId: string): void {
     this.selectedItemByTab[this.tab] = itemId;
-    this.config = handleSettingChange(this.tab, itemId, this.config);
+    this.config = applySettingChange(this.tab, itemId, this.config);
     this.onChange(this.config);
     this.rebuild(itemId);
   }
@@ -352,7 +150,7 @@ class SettingsUi {
     this.container.addChild(new Text(tabBar, 1, 0));
     this.container.addChild(new Text(this.theme.fg("dim", COPY.hint), 1, 0));
 
-    const items = buildItems(this.tab, this.config).map((item) => ({
+    const items = settingRowsFor(this.tab, this.config).map((item) => ({
       value: item.id,
       label: this.compact ? `${item.label}: ${item.currentValue}` : item.label,
       description: this.compact ? undefined : item.currentValue,

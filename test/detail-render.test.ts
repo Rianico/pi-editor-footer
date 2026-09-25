@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { renderDetail, scroll, type DetailItem } from "../src/detail-render.js";
+import { visibleWidth } from "../src/layout.js";
 
 const item: DetailItem = {
   label: "to-spec",
@@ -120,8 +121,10 @@ describe("renderDetail", () => {
       description: "x".repeat(200),
     };
     const lines = renderDetail(overflowing, 10, 5, 0);
-    assert.ok(lines[0].length <= 10);
-    assert.match(lines[0], /\d+\/\d+$/);
+    // layout's ANSI-aware truncation may append an invisible SGR reset at the
+    // cut, so assert on visible width (raw `.length` was a proxy pre-fix).
+    assert.ok(visibleWidth(lines[0]!) <= 10);
+    assert.match(lines[0]!, /\d+\/\d+$/);
   });
 
   test("shows '...' on the last visible line when content remains below", () => {

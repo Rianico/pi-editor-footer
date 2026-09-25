@@ -42,3 +42,9 @@ export function truncatePath(path: string, maxLen: number): string {
   const result = `${head}${sepChar}...${sepChar}${tail.join(sepChar)}`;
   return result.length > maxLen ? result.slice(0, maxLen - 3) + "..." : result;
 }
+
+/** Resolve display string for a cwd given a workspaceDisplay mode. */
+export function displayCwd(cwd: string, mode: "path" | "name"): string {
+  const formatted = formatCwd(cwd);
+  return mode === "name" ? basenamePath(formatted) : formatted;
+}

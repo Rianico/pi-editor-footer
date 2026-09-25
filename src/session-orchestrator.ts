@@ -11,7 +11,7 @@
  * Depth: small interface (install / dispose) hides coalesced lifecycle
  * (deferred editor install + watchdog ownership + footer lifecycle single path +
  *  detail→widget + timeline ledger delegation). Callers learn one shape.
- * Impl hides LiveBorder, AgentRunLedger, DetailChrome, ChromeComposition,
+ * Impl hides LiveBorder, AgentRunLedger, DetailChrome, the chrome-theme adapter,
  * and the footer install deduplication. Two adapters (real pi TUI + in-memory
  * fake) justify the seam — tests hit one interface.
  */
@@ -50,7 +50,7 @@ import {
   estimateTokensFromChars,
 } from "./agent-run-ledger.js";
 
-// Minimal pi ExtensionAPI slice — duplicated from index to avoid circular import.
+// Minimal pi ExtensionAPI slice — single home for the *Like declarations.
 // Authoritative types live in @earendil-works/pi-coding-agent.
 export interface ExtensionWidgetOptionsLike {
   placement?: "aboveEditor" | "belowEditor";
@@ -317,23 +317,14 @@ export class SessionOrchestrator {
   getLiveBorder(): LiveBorder {
     return this.liveBorder;
   }
-  getTranscriptTimeline(): TranscriptTimeline {
-    return this.transcriptTimeline;
-  }
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
   }
   getTelemetryTracker(): TurnTelemetryTracker {
     return this.telemetryTracker;
   }
-  getCurrentModelInfo(): ModelInfo {
-    return this.currentModelInfo;
-  }
   getTuiRef(): TUI | null {
     return this.tuiRef;
-  }
-  getInstalledEditor(): TrackingEditor | null {
-    return this.installedEditor;
   }
 
   // ——— widget ———
@@ -384,7 +375,7 @@ export class SessionOrchestrator {
       editor.setChrome({ modelInfo: this.currentModelInfo });
       editor.setChrome({ glowEnabled: this.glowEnabled });
       editor.setChrome({ cursorStyle: this.currentConfig.cursorStyle });
-      this.refreshContextBar();
+      this.renderLiveChrome();
       editor.onHighlight = (item) => {
         this.detailChrome.setItem(item);
         this.updateWidget(ctx);
@@ -411,15 +402,9 @@ export class SessionOrchestrator {
     }
   }
 
-  // ——— live border ———
+  // ——— live border — single render intent (C3: alias trio dissolved) ———
 
-  private refreshContextBar(): void {
-    this.liveBorder.render();
-  }
-  private refreshTopBorder(): void {
-    this.liveBorder.render();
-  }
-  private refreshLiveTelemetry(): void {
+  private renderLiveChrome(): void {
     this.liveBorder.render();
   }
 
@@ -465,7 +450,7 @@ export class SessionOrchestrator {
                   process.cwd();
                 const git = await readGitStatus(cwd);
                 this.footerState = { ...this.footerState, git } as FooterState;
-                this.refreshContextBar();
+                this.renderLiveChrome();
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
                 (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
                 const runtime = await readRuntimeInfo(cwd);
@@ -497,7 +482,7 @@ export class SessionOrchestrator {
           process.cwd();
         const git = await readGitStatus(cwd);
         this.footerState = { ...this.footerState, git } as FooterState;
-        this.refreshContextBar();
+        this.renderLiveChrome();
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
         const runtime = await readRuntimeInfo(cwd);
@@ -511,7 +496,7 @@ export class SessionOrchestrator {
     this.installedEditor?.setChrome({
       cursorStyle: this.currentConfig.cursorStyle,
     });
-    this.refreshContextBar();
+    this.renderLiveChrome();
   }
 
   private removeFooter(): void {
@@ -551,8 +536,7 @@ export class SessionOrchestrator {
         this.installedEditor?.setChrome({
           cursorStyle: this.currentConfig.cursorStyle,
         });
-        this.refreshContextBar();
-        this.refreshLiveTelemetry();
+        this.renderLiveChrome();
         this.tuiRef?.requestRender();
       },
       onOverlayClosed: () => {
@@ -624,7 +608,6 @@ export class SessionOrchestrator {
       this.agentBaselineTotals = null;
       this.agentLedger.setBaseline(null);
       this.agentLedger.reset();
-      this.liveBorder.setAgentBaseline(null);
       this.deferredInstallTimer = setTimeout(() => this.installEditor(ctx.ui), 0);
       this.ensureFooter(ctx);
       if (this.watchTimer !== null) clearInterval(this.watchTimer);
@@ -671,7 +654,6 @@ export class SessionOrchestrator {
           this.agentLedger.setTriggerTokens(
             extractTriggerTokensFromCtx(ctx ?? this.lastSessionCtx),
           );
-          this.liveBorder.setAgentBaseline(this.agentBaselineTotals);
         }
       } catch {
         // SAFETY: best-effort, ignore recoverable error
@@ -833,7 +815,7 @@ export class SessionOrchestrator {
         }
       }
       this.agentLedger.reset();
-      this.refreshTopBorder();
+      this.renderLiveChrome();
     });
 
     pi.on("model_select", (_event, ctx) => {
