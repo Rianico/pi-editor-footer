@@ -77,6 +77,7 @@ describe("git", () => {
     const { root, cleanup } = makeRepo();
     try {
       const status = await readGitStatus(root);
+      assert.ok(status !== null, "readGitStatus must answer on a temp repo");
       assert.equal(status.branch, undefined);
       assert.equal(status.staged, 0);
     } finally {
@@ -86,6 +87,7 @@ describe("git", () => {
 
   test("readGitStatus on this repo returns branch", async () => {
     const status = await readGitStatus(process.cwd());
+    assert.ok(status !== null, "readGitStatus must answer on a temp repo");
     // Branch may be undefined if detached, but should not throw
     assert.ok(typeof status.ahead === "number");
     assert.ok(typeof status.staged === "number");
@@ -109,6 +111,8 @@ describe("git", () => {
       git(work, ["fetch", "-q"]);
 
       const status = await readGitStatus(work);
+
+      assert.ok(status !== null, "readGitStatus must answer on a temp repo");
       assert.equal(status.branch, "main", "diverged branch must keep its name");
       assert.equal(status.ahead, 1);
       assert.equal(status.behind, 1);
@@ -125,6 +129,8 @@ describe("git", () => {
       git(work, ["fetch", "-q", "--prune"]);
 
       const status = await readGitStatus(work);
+
+      assert.ok(status !== null, "readGitStatus must answer on a temp repo");
       assert.equal(status.branch, "main", "gone upstream must keep its name");
       assert.equal(status.ahead, 0);
       assert.equal(status.behind, 0);
@@ -141,6 +147,8 @@ describe("git", () => {
       git(work, ["checkout", "-q", "v0.13.0"]);
 
       const status = await readGitStatus(work);
+
+      assert.ok(status !== null, "readGitStatus must answer on a temp repo");
       assert.equal(status.branch, undefined, "detached has no branch name");
       assert.ok(status.commit?.detached, "detached flag must be set");
       assert.match(status.commit?.oid ?? "", /^[0-9a-f]{40}$/, "detached must carry the oid");
@@ -258,6 +266,7 @@ describe("git — spawn budget (one read per refresh)", () => {
   test("normal path is exactly one status spawn", async () => {
     const { calls, exec } = countingExec(z("# branch.head main", "# branch.ab +1 -2"), null);
     const s = await readGitStatus("/tmp", exec);
+    assert.ok(s !== null, "readGitStatus must answer on a temp repo");
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], [...GIT_STATUS_ARGS]);
     assert.equal(s.ahead, 1);
@@ -270,6 +279,7 @@ describe("git — spawn budget (one read per refresh)", () => {
       "v0.13.0\n",
     );
     const s = await readGitStatus("/tmp", exec);
+    assert.ok(s !== null, "readGitStatus must answer on a temp repo");
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[1], ["describe", "--tags", "--exact-match", "HEAD"]);
     assert.equal(s.commit?.tag, "v0.13.0");
@@ -301,6 +311,8 @@ describe("git — spawn budget (one read per refresh)", () => {
     };
 
     const s = await readGitStatus("/tmp", exec);
+
+    assert.ok(s !== null, "readGitStatus must answer on a temp repo");
     assert.equal(s?.branch, "main", "the rail survives the missing flag");
     assert.equal(s?.untracked, 1);
     assert.equal(s?.stashed, 0, "stash is simply unknown, so the part is omitted");
@@ -329,6 +341,7 @@ describe("git — spawn budget (one read per refresh)", () => {
       };
     };
     const s = await readGitStatus("/tmp", exec);
+    assert.ok(s !== null, "readGitStatus must answer on a temp repo");
     assert.equal(s?.commit?.tag, null);
     assert.equal(
       composeGitRail(s ?? emptyGitStatus(), resolveGlyphs("ascii"), DEFAULT_CONFIG.footerSegments)
