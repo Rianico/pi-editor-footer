@@ -10,6 +10,27 @@
 ## Changelog
 
 `CHANGELOG.md` `## [Unreleased]` guarded by `pre-push` hook (`warn+block`, `uv run python scripts/changelog-unreleased.py update`) and `changelog-check.yml` (`pull_request` required); `release.yml` runs `scripts/changelog-unreleased.py clear` then `semantic-release` owns versioned sections. Do not hand-edit versioned sections. Commit the sync as a hidden type (e.g. `chore: sync changelog unreleased section`) — a visible type re-triggers the guard and loops forever. Hidden types only appear when `!`/`BREAKING CHANGE`.
+### Release hygiene — the last two checks
+
+Run these before asking for review; both are enforced (the first on every PR, the second by `changelog-check.yml` and now the `pre-push` hook).
+
+```sh
+pnpm install --frozen-lockfile                # 1. the install must match the pin
+node --import tsx scripts/check-pinned-versions.ts
+python3 scripts/changelog-gate.py ledger --pr <N>
+```
+
+The first one exists because a stale `node_modules` is indistinguishable from an API
+change: a `@earendil-works/pi-tui` that drifted from the pinned version produced five
+tsc errors and four failing suites in #44 while the code was correct. The guard names
+the pinned version, the installed version and the fix, and `pinned-versions.yml` runs
+it on every pull request (plus before the build in `release.yml`).
+
+The ledger floor is what `changelog-check.yml` checks: every `[Unreleased]` bullet names
+a `(#N)` that resolves, sections are known, no duplicate identities, no double attribution.
+Before a PR exists there is no number to name yet, so the `pre-push` hook only warns;
+once the PR exists it blocks the push. See `docs/reference/pi-tui-internals.md` for the
+stale-tree signature that motivated the version guard.
 ## Reporting Issues
 
 Pick the template that matches your intent — see `.github/ISSUE_TEMPLATE/` (blank issues disabled).

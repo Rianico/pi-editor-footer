@@ -31,8 +31,11 @@
 * **specs:** mark the git state engine spec superseded by ADR-0003 (#49)
 * align git-rail specs, AGENTS, README and glossary with ADR-0003 (#49)
 * **reference:** refresh pi-tui internals reference for 1.3.0 (#43)
-* **reference:** record the stale-tree signature that mimics 1.3.0 API drift (#44)
+* **reference:** record the stale-tree signature that mimics 1.3.0 API drift (#49)
 
+### Continuous Integration
+
+* **ci:** fail fast when the installed pi packages drift from the pinned versions, and run the changelog ledger floor before a push (#48)
 ## [0.13.0] - 2026-09-25
 
 ### Features
