@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 import { emptyGitStatus } from "../src/git.js";
 import { composeGitRail, renderGitSegment } from "../src/footer.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
-import type { IconGlyphs } from "../src/icons.js";
 import { resolveGlyphs } from "../src/icons.js";
 
 const NERD = resolveGlyphs("nerd");
@@ -73,12 +72,29 @@ describe("git rail — powerlevel10k composition (ADR-0003)", () => {
     assert.equal(parts[0]?.color, "error");
   });
 
-  test("detached shows the commit and its tag", () => {
+  test("detached with the default config shows the sha but no tag (#45b ruling)", () => {
     const detached = {
       ...emptyGitStatus(),
       commit: { oid: "9f2c1a8bdeadbeefdeadbeefdeadbeefdeadbeef", detached: true, tag: "v0.13.0" },
     };
-    assert.equal(rail(detached), "9f2c1a8b v0.13.0");
+    assert.equal(
+      rail(detached),
+      "9f2c1a8b",
+      "gitBranch gates the sha; gitCommit is off by default",
+    );
+  });
+
+  test("detached with gitCommit on shows the tag beside the sha", () => {
+    const detached = {
+      ...emptyGitStatus(),
+      commit: { oid: "9f2c1a8bdeadbeefdeadbeefdeadbeefdeadbeef", detached: true, tag: "v0.13.0" },
+    };
+    assert.equal(
+      composeGitRail(detached, NERD, { ...SEGMENTS, gitCommit: true })
+        .map((p) => p.text)
+        .join(" "),
+      "9f2c1a8b v0.13.0",
+    );
   });
 
   test("tags render only while detached", () => {
@@ -87,18 +103,28 @@ describe("git rail — powerlevel10k composition (ADR-0003)", () => {
       branch: "main",
       commit: { oid: "9f2c1a8bdeadbeefdeadbeefdeadbeefdeadbeef", detached: false, tag: "v0.13.0" },
     };
-    assert.equal(rail(onBranch), nerdBranch);
+    assert.equal(rail(onBranch, "nerd", "", { ...SEGMENTS, gitCommit: true }), nerdBranch);
   });
 
-  test("gitCommit hides the detached commit+tag; gitBranch gates the branch", () => {
+  test("gitCommit gates only the tag, never the sha", () => {
     const git = {
       ...emptyGitStatus(),
       commit: { oid: "9f2c1a8bdeadbeefdeadbeefdeadbeefdeadbeef", detached: true, tag: "v0.13.0" },
     };
-    assert.equal(composeGitRail(git, NERD, { ...SEGMENTS, gitCommit: false }).length, 0);
+    const off = composeGitRail(git, NERD, { ...SEGMENTS, gitCommit: false });
+    assert.equal(off.length, 1, "the sha survives gitCommit: false");
+    assert.equal(off[0]?.text, "9f2c1a8b");
+  });
+
+  test("gitBranch gates the detached sha, since it is the identity part", () => {
+    const git = {
+      ...emptyGitStatus(),
+      commit: { oid: "9f2c1a8bdeadbeefdeadbeefdeadbeefdeadbeef", detached: true, tag: "v0.13.0" },
+    };
     assert.equal(
-      composeGitRail({ ...git, branch: "main" }, NERD, { ...SEGMENTS, gitBranch: false }).length,
+      composeGitRail(git, NERD, { ...SEGMENTS, gitBranch: false, gitCommit: true }).length,
       0,
+      "with gitBranch off there is no identity part, so no sha and no tag",
     );
   });
 

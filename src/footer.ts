@@ -44,10 +44,11 @@ export function composeGitRail(
 
   if (segments.gitBranch) {
     if (detached) {
-      // Tags render only while detached, and only when the commit toggle is on.
-      if (segments.gitCommit) {
-        if (git.commit?.oid) parts.push({ text: git.commit.oid.slice(0, 8), color: "dim" });
-        if (git.commit?.tag) parts.push({ text: git.commit.tag, color: "warning" });
+      // Identity vs decoration (#45b ruling): the sha is the identity part, so gitBranch
+      // gates it; gitCommit stays off by default and decorates it with the tag only.
+      if (git.commit?.oid) parts.push({ text: git.commit.oid.slice(0, 8), color: "dim" });
+      if (segments.gitCommit && git.commit?.tag) {
+        parts.push({ text: git.commit.tag, color: "warning" });
       }
     } else if (git.branch !== undefined) {
       // Conflicts are colour-only: no glyph, no count, the branch itself turns red.
