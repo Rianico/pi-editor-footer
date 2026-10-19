@@ -11,6 +11,7 @@
 
 ### Bug Fixes
 
+* **editor:** map mouse rows past the prepended token row
 * **border:** keep pi's scroll hint in every 1.3.0 shape
 * **cursor:** restore unfocused cursor preview on pi-tui 1.3.0
 * **border:** recognise pi-tui 1.3.0 centred scroll borders
