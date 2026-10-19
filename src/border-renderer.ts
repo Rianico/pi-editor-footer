@@ -7,6 +7,20 @@ function stripAnsi(s: string): string {
 }
 
 /**
+ * Rows `renderWithBorders` prepends above the editor's own top border.
+ *
+ * The token row is the only one: context/glow/activity embed into the existing
+ * top border, and the bottom only rewrites a row. Editor mouse hit-testing
+ * (`Editor.handleMouse`, pi-tui 1.3.0) indexes rows relative to the editor's own
+ * `[top border][content…][bottom border]` output, so it has to undo this shift —
+ * see `TrackingEditor.handleMouse`. Keep the predicate here so render and
+ * hit-testing can never drift.
+ */
+export function rowsPrependedAboveEditor(opts: { topTokensText?: string }): number {
+  return opts.topTokensText ? 1 : 0;
+}
+
+/**
  * BorderRenderer — deep module owning top glow + bottom border embedding.
  * Deduplicates stripAnsi/isBorder logic previously spread between model-info.ts
  * and tracking-editor.ts. Behind a single seam, tested via render().
@@ -80,7 +94,7 @@ export class BorderRenderer {
     if (opts.topTokensText || opts.topRightText) {
       const tokensLeft = opts.topTokensText ?? "";
       const tokensRight = opts.topRightText ?? "";
-      if (tokensLeft) {
+      if (rowsPrependedAboveEditor(opts) > 0) {
         // Use | as separator between ↑/↓ and tool turns (dimmed) per user request
         // SAFETY: pi theme seam — fg is optional theme method
         const themeForTokens = this.getLiveTheme() as unknown as {
