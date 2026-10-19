@@ -56,21 +56,58 @@ export const GIT_STATUS_ARGS = [
   "--untracked-files=all",
 ] as const;
 
-/** Subprocess seam: tests assert the spawn count through it. */
-export type GitExec = (args: string[], cwd: string) => Promise<string | null>;
+/**
+ * The same read without `--show-stash`, for git builds that reject the flag (unknown option,
+ * exit 129). Costs one extra spawn only on that failure path, and yields a partial rail.
+ */
+export const PARTIAL_STATUS_ARGS = [
+  "status",
+  "--porcelain=v2",
+  "-z",
+  "--branch",
+  "--untracked-files=all",
+] as const;
 
-async function gitExec(args: string[], cwd: string): Promise<string | null> {
+/**
+ * Outcome of one git spawn.
+ *
+ * The failure *kind* is load-bearing: a timeout says "I do not know" and must keep the last
+ * known rail, while a clean non-zero exit says "I know, and the answer is nothing" (not a
+ * repo), which is what lets the rail fall back to `(no git)` instead of pinning stale state.
+ */
+export type GitExecResult =
+  | { readonly kind: "ok"; readonly stdout: string }
+  | { readonly kind: "failed"; readonly transient: boolean; readonly code: number | null };
+
+/** Subprocess seam: tests assert the spawn count and the failure kind through it. */
+export type GitExec = (args: string[], cwd: string) => Promise<GitExecResult>;
+
+async function gitExec(args: string[], cwd: string): Promise<GitExecResult> {
   try {
     const { stdout } = await execFileAsync("git", args, {
       cwd,
       timeout: GIT_TIMEOUT_MS,
       maxBuffer: 1024 * 1024,
     });
-    return stdout;
-  } catch {
-    // SAFETY: best-effort, ignore recoverable error
-    return null;
+    return { kind: "ok", stdout };
+  } catch (error) {
+    // SAFETY: best-effort — a failed spawn is data (which kind of failure), never a throw.
+    const failed = error as { code?: unknown; killed?: unknown };
+    const killed = failed.killed === true;
+    const code = typeof failed.code === "number" ? failed.code : null;
+    // Killed/timeout has no exit status: the state is unknown, so the caller keeps its own.
+    return { kind: "failed", transient: killed || code === null, code };
   }
+}
+
+/**
+ * Keep the last known rail when a read could not answer (transient failure).
+ *
+ * `null` means "unknown", not "clean": replacing state with `emptyGitStatus()` here would
+ * flicker the rail to `(no git)` on every timeout.
+ */
+export function mergeGitStatus(previous: GitStatus, next: GitStatus | null): GitStatus {
+  return next ?? previous;
 }
 
 /**
@@ -143,20 +180,37 @@ export function parseGitStatus(stdout: string): GitStatus {
   return status;
 }
 
-export async function readGitStatus(cwd: string, exec: GitExec = gitExec): Promise<GitStatus> {
-  const stdout = await exec([...GIT_STATUS_ARGS], cwd);
-  if (stdout === null) {
-    return emptyGitStatus();
+export function readGitStatus(cwd: string, exec: GitExec = gitExec): Promise<GitStatus | null> {
+  return acquireGitStatus(cwd, exec);
+}
+
+/**
+ * `null` means "could not answer" (timeout, killed, unparseable failure): keep the last rail.
+ * A clean non-zero exit is an answer — not a work tree — so it yields the empty status and the
+ * rail is free to render `(no git)`.
+ */
+async function acquireGitStatus(cwd: string, exec: GitExec): Promise<GitStatus | null> {
+  let result = await exec([...GIT_STATUS_ARGS], cwd);
+
+  // Some git builds predate `--show-stash` and reject it as an unknown option (exit 129).
+  // Retrying without it buys a partial rail (everything but the stash part) instead of
+  // degrading the whole repository to `(no git)`.
+  if (result.kind === "failed" && !result.transient && result.code === 129) {
+    result = await exec([...PARTIAL_STATUS_ARGS], cwd);
   }
 
-  const status = parseGitStatus(stdout);
+  if (result.kind === "failed") {
+    return result.transient ? null : emptyGitStatus();
+  }
+
+  const status = parseGitStatus(result.stdout);
 
   // One conditional second spawn, detached only: the oid and divergence already came
   // from the status read, so a tag is the only thing left to ask git for.
   if (status.commit?.detached) {
     const tag = await exec(["describe", "--tags", "--exact-match", "HEAD"], cwd);
-    if (tag !== null) {
-      const trimmed = tag.trim();
+    if (tag.kind === "ok") {
+      const trimmed = tag.stdout.trim();
       status.commit.tag = trimmed.length > 0 ? trimmed : null;
     }
   }

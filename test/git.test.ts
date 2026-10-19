@@ -4,8 +4,17 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { emptyGitStatus, GIT_STATUS_ARGS, parseGitStatus, readGitStatus } from "../src/git.js";
+import {
+  emptyGitStatus,
+  GIT_STATUS_ARGS,
+  mergeGitStatus,
+  parseGitStatus,
+  readGitStatus,
+} from "../src/git.js";
 import type { GitExec } from "../src/git.js";
+import { composeGitRail } from "../src/footer.js";
+import { resolveGlyphs } from "../src/icons.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
 
 /** `-z` output: every field is NUL-terminated (records below are joined with \0). */
 const z = (...fields: string[]): string => fields.map((f) => `${f}\0`).join("");
@@ -200,15 +209,18 @@ describe("git — porcelain v2 parse (ADR-0003)", () => {
   });
 
   test("rename record's second -z field is a path, not a record", () => {
+    // The original path is chosen so that *not* skipping it would look like a record:
+    // "1-old.txt" read as a record has XY = "ol", which double-counts staged. With a
+    // harmless path like "ren.txt" this test passed even with the skip deleted.
     const s = parseGitStatus(
       z(
         "# branch.head main",
         "2 R. N... 100644 100644 100644 aaa bbb R100 renamed.txt",
-        "ren.txt",
+        "1-old.txt",
         "? un1.txt",
       ),
     );
-    assert.equal(s.staged, 1, "the rename counts once");
+    assert.equal(s.staged, 1, "the rename counts once, not twice");
     assert.equal(s.unstaged, 0);
     assert.equal(s.untracked, 1, "the original path did not swallow the untracked record");
   });
@@ -235,7 +247,10 @@ describe("git — spawn budget (one read per refresh)", () => {
     const calls: string[][] = [];
     const exec: GitExec = async (args) => {
       calls.push([...args]);
-      return args[0] === "describe" ? describeOut : statusOut;
+      const stdout = args[0] === "describe" ? describeOut : statusOut;
+      return stdout === null
+        ? { kind: "failed", transient: false, code: 128 }
+        : { kind: "ok", stdout };
     };
     return { calls, exec };
   }
@@ -260,8 +275,80 @@ describe("git — spawn budget (one read per refresh)", () => {
     assert.equal(s.commit?.tag, "v0.13.0");
   });
 
-  test("a failed status read yields the empty status, not a throw", async () => {
-    const exec: GitExec = async () => null;
+  test("a timeout keeps the caller's last-known state: null, not empty", async () => {
+    // Transient failure (killed/timeout): the rail must keep what it had rather than
+    // flickering to "(no git)".
+    const exec: GitExec = async () => ({ kind: "failed", transient: true, code: null });
+    assert.equal(await readGitStatus("/tmp", exec), null);
+  });
+
+  test("not-a-repo is a real answer, not a transient one: empty status, not null", async () => {
+    // `git status` exits 128 outside a work tree. That is authoritative, so the rail must
+    // still be able to go to "(no git)" — otherwise cd-ing out of a repo pins a stale rail.
+    const exec: GitExec = async () => ({ kind: "failed", transient: false, code: 128 });
     assert.deepEqual(await readGitStatus("/tmp", exec), emptyGitStatus());
+  });
+
+  test("unsupported --show-stash degrades to a partial rail, never (no git)", async () => {
+    const calls: string[][] = [];
+    const exec: GitExec = async (args) => {
+      calls.push([...args]);
+      if (args.includes("--show-stash")) {
+        // Old git: "error: unknown option `show-stash'" exits 129.
+        return { kind: "failed", transient: false, code: 129 };
+      }
+      return { kind: "ok", stdout: z("# branch.head main", "# branch.ab +1 -0", "? a.txt") };
+    };
+
+    const s = await readGitStatus("/tmp", exec);
+    assert.equal(s?.branch, "main", "the rail survives the missing flag");
+    assert.equal(s?.untracked, 1);
+    assert.equal(s?.stashed, 0, "stash is simply unknown, so the part is omitted");
+    assert.equal(calls.length, 2, "one retry, then stop");
+    assert.ok(!calls[1]?.includes("--show-stash"), "the retry drops the unsupported flag");
+  });
+
+  test("a transient failure on the retry is still transient, not empty", async () => {
+    const exec: GitExec = async (args) =>
+      args.includes("--show-stash")
+        ? { kind: "failed", transient: false, code: 129 }
+        : { kind: "failed", transient: true, code: null };
+    assert.equal(await readGitStatus("/tmp", exec), null);
+  });
+
+  test("detached and untagged renders the oid alone (P2 gap)", async () => {
+    // describe finds no exact tag and fails; the rail must still identify the commit.
+    const exec: GitExec = async (args) => {
+      if (args[0] === "describe") return { kind: "failed", transient: false, code: 128 };
+      return {
+        kind: "ok",
+        stdout: z(
+          "# branch.oid 88aea4a26c3983df875be03a657008ab7ed719f8",
+          "# branch.head (detached)",
+        ),
+      };
+    };
+    const s = await readGitStatus("/tmp", exec);
+    assert.equal(s?.commit?.tag, null);
+    assert.equal(
+      composeGitRail(s ?? emptyGitStatus(), resolveGlyphs("ascii"), DEFAULT_CONFIG.footerSegments)
+        .map((p) => p.text)
+        .join(" "),
+      "88aea4a2",
+      "8-char oid and nothing else",
+    );
+  });
+});
+
+describe("git — merge keeps the last-known rail", () => {
+  const known = { ...emptyGitStatus(), branch: "main", staged: 2 };
+
+  test("a null read preserves the previous status", () => {
+    assert.deepEqual(mergeGitStatus(known, null), known);
+  });
+
+  test("a successful read replaces it", () => {
+    const next = { ...emptyGitStatus(), branch: "feature", ahead: 1 };
+    assert.deepEqual(mergeGitStatus(known, next), next);
   });
 });

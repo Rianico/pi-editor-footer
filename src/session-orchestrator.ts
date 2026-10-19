@@ -33,7 +33,7 @@ import type { FooterState } from "./state.js";
 import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
 import { createRunActivityTracker } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
-import { readGitStatus } from "./git.js";
+import { mergeGitStatus, readGitStatus } from "./git.js";
 import { readRuntimeInfo } from "./runtime.js";
 import { DetailChrome } from "./detail-chrome.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
@@ -448,7 +448,9 @@ export class SessionOrchestrator {
                   // SAFETY: pi seam — intentional unsafe cast, validated at runtime
                   (ctx as unknown as { cwd?: string }).cwd ??
                   process.cwd();
-                const git = await readGitStatus(cwd);
+                // A transient failure yields null: keep the last known rail instead of
+                // flickering to `(no git)` on every timeout.
+                const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
                 this.footerState = { ...this.footerState, git } as FooterState;
                 this.renderLiveChrome();
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
@@ -480,7 +482,9 @@ export class SessionOrchestrator {
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
           (ctx as unknown as { cwd?: string }).cwd ??
           process.cwd();
-        const git = await readGitStatus(cwd);
+        // A transient failure yields null: keep the last known rail instead of flickering
+        // to `(no git)` on every timeout.
+        const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
         this.footerState = { ...this.footerState, git } as FooterState;
         this.renderLiveChrome();
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
