@@ -8,6 +8,15 @@ Which rich git states does the footer's git segment surface, and how are they co
 
 ## Decision
 
+> **Superseded by ADR-0003 (ticket #45).** The `GitStatus` shape and the multi-command
+> detection recorded below are the historical decision. The rail now follows
+> powerlevel10k's composition and `readGitStatus` performs a single
+> `git status --porcelain=v2 -z --branch --show-stash --untracked-files=all` read, plus
+> `git describe --tags --exact-match` only while detached. `deleted`/`renamed` fold into
+> `staged`/`unstaged`, `modified`/`conflicted` are gone as kinds, and divergence comes
+> from the `# branch.ab` header rather than a branch suffix. Current contract:
+> `src/git.ts` and `docs/adr/0003-git-rail-follows-powerlevel10k-composition.md`.
+
 Rebuild `tmp/pi-open-tui/extensions/open-tui/git.ts` bespoke. Expose:
 
 ```ts
