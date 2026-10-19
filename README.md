@@ -11,7 +11,7 @@ A [pi](https://pi.dev) extension that turns the editor chrome into a project-awa
 **Model border** — top border shows `provider/model · thinking · contextWindow` with thinking-level glow via `getThinkingBorderColor`. Toggle with `/model-info` (off restores pi's stock border).
 
 **Footer** — single line below the input, responsive via `fitSegmentsByPriority` and `alignRight`:
-- Left: `cwd` (`·` `git branch` + status `[! ? + ↑↓]` + stashed/conflicted) `•` `runtime` (`node`/`python`/`rust`/`go`… + version) `•` `timer` (`working`/`done`)
+- Left: `cwd` (`·` git rail per ADR-0003 — powerlevel10k's order, no brackets, a part shows bare at count 1, e.g. `main A2 ! ?3`, `main |MERGING`, `9f2c1a8b v0.13.0`) `•` `runtime` (`node`/`python`/`rust`/`go`… + version) `•` `timer` (`working`/`done`)
 - Right: `tokens` (`↑ <total input> · ↓ <output> · $<cost>`) — `↑` counts every billed input token (uncached input + cache read + cache write), so it tracks the context bar's token figure instead of `usage.input` alone
 - Separators: `·` between `cwd` and `git`, `•` as default between other left components; the `context` bar (`<pct> · <tokens>/<window> | c <hit%>`) sits on the top border next to the model label, not in the footer
 - `cwd` respects `workspaceDisplay` (`~/development/ai/pi-skill-desc` vs `pi-skill-desc`, switchable in settings)
@@ -36,7 +36,7 @@ Type `/` → popup opens, detail window appears above input, header shows model 
 
 ## Why you need this
 
-The native popup truncates long skill descriptions mid-sentence; the detail window shows the full text without guessing. The native footer shows only context; this footer adds the project context you actually need — which branch, how many files changed, which runtime, how many tokens — while keeping the context bar for the limit.
+The native popup truncates long skill descriptions mid-sentence; the detail window shows the full text without guessing. The native footer shows only context; this footer adds the project context you actually need — which branch and how far it has diverged, whether a merge, rebase or cherry-pick is still in flight, which runtime, how many tokens — while keeping the context bar for the limit.
 
 ## Breakage mode
 
@@ -46,7 +46,7 @@ Highlight tracking observes two private `pi-tui` internals (`autocompleteList`, 
 
 1. `pi -e ./src/index.ts` (or `pi -ne -e ./src/index.ts` to isolate)
 2. `/` → tab through candidates, detail window follows; `shift+down` scrolls long text
-3. Footer: `cwd` (`·` `git`) `•` `runtime` left, `tokens` right next to `[bar] %` right; `/pi-footer` → General → `Workspace display` toggles `~/…/pi-skill-desc` vs `pi-skill-desc`
+3. Footer: `cwd` (`·` git rail — `main A2 ! ?3`, or `main |MERGING` while an operation is live) `•` `runtime` left, `tokens` right next to `[bar] %` right; `/pi-footer` → General → `Workspace display` toggles `~/…/pi-skill-desc` vs `pi-skill-desc`
 4. Cursor: `/pi-footer` → General → `Cursor style` cycles `block`/`bar`/`underline`, shape updates in real time (bar shows `|`, underline `_`)
 5. Disable: `/pi-footer` → General → `Enabled: Off` → footer reverts to pi's default (relative time / model); re-enable restores theme
 
@@ -61,7 +61,8 @@ pi-editor-footer/
 │   ├── detail-render.ts       # wrap/scroll/ellipsis (tested)
 │   ├── window-presentation.ts # bordered themed box (tested)
 │   ├── model-info.ts          # top border glow+label
-│   ├── git.ts                 # readGitStatus (branch/ahead/behind + staged/modified/...)
+│   ├── git.ts                 # readGitStatus: one porcelain-v2 read (branch/ahead/behind/staged/unstaged/untracked/stashed/unmerged)
+│   ├── git-action.ts          # readGitAction: in-progress operation label (|MERGING, |REBASE 2/7)
 │   ├── runtime.ts             # readRuntimeInfo (node/python/rust/go/… via lockfiles)
 │   ├── telemetry.ts           # TurnTelemetryTracker + formatTurnTelemetry
 │   ├── config.ts              # ThemeConfig + load/save

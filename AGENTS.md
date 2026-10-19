@@ -109,10 +109,17 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - **Live** before `message_end` has no `usage`, so we estimate from deltas: `liveDeltaChars += delta.length` (O(1) per `message_update`) and `liveEstimatedTokens = max(ceil(liveDeltaChars/4), prev)` (`~4 chars/token` English, ~2-3 Chinese, ~3.5 code). `peekLive()` at display time (1 s `liveTickTimer`) does `tps = liveEstimatedTokens / (now-firstTokenMs)` — cheap and approximately accurate at 1 s. No `tiktoken`/`js-tiktoken`/`Intl.Segmenter` needed.
 - **Gotcha**: `estimateMessageTokens(msg)` that did `JSON.stringify(content).length/4` per delta is O(n) per delta (heavy) and redundant — keep only `liveDeltaChars/4` in data layer. External `tiktoken` (`o200k_base` for GPT-4o) would be 10-100× more CPU per delta and defeat the throttling goal. Approximately accurate at 1 s is enough; final `message.usage` corrects it. Trick: if you sample `tiktoken` at all, do it throttled (e.g. every 200 ms) not per delta.
 
-### Git branch `feature/…` collapsed to 20 chars
-
+### Git rail — p10k composition (ADR-0003), never-fold branch
 - `renderGitSegment` did `truncateBranch(git.branch, 20)` (`branch.slice(0,17) + "..."`) and `renderFooter` gave git `priority: 4` (same as stats/runtime, below cwd `5`), so long names were always `feature/add-obsidia...` even at 200 cols and omitted before cwd.
-- Fix: never fold branch — `renderGitSegment` now `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped.
+- Fix: never fold branch — the branch part is `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped. ADR-0003 kept this rule and `priority: 6` through the rewrite; `truncateBranch` in `src/path-format.ts` now has no non-test callers.
+
+### Git rail composition and action label (ADR-0003)
+
+- Order is `[COMMIT] [BRANCH] [TAG] [STAGED] [UNSTAGED] [UNTRACKED] [BEHIND] [AHEAD] [STASH] [ACTION]`, single-space separated, **no brackets**, and a part is rendered bare when its count is 1 (`!3` stays, `!1` renders `!`); stash is the one part that always carries its count (`$1`). Behind precedes ahead. The pre-ADR starship catalogue — bracketed, a count on every glyph, ahead before behind — is dead; ADR-0003 records that history, living docs must not repeat it.
+- Conflicts are colour-only: `unmerged > 0` paints the branch `error`, with no glyph and no count. Detached renders `gitBranch`-gated identity — the 8-char sha — and `gitCommit` (default **off**, label "Git tag (detached)") gates only the tag beside it: `9f2c1a8b` vs `9f2c1a8b v0.13.0`. Tags never render on a branch.
+- `[ACTION]` is `|MERGING`, `|REBASE 2/7`, `|REBASE-i 2/7`, `|AM`, `|CHERRY-PICKING`, `|REVERTING`, `|BISECTING` from one `git rev-parse --git-path …` probe, and while it is live the counts are suppressed (they are the operation's own churn). The label is `warning`, `error` while `unmerged > 0`. This is the part that catches *resolved-and-staged* conflicts, where `unmerged` is already 0 and the colour signal went silent.
+- Two acquisition traps live here: `--git-path` answers with a **cwd-relative** path (`../.git/MERGE_HEAD` from a subdirectory) and prints a path whether or not the file exists — resolve against cwd, then `stat`, never trust non-empty output.
+- Failure discipline: transient read → `null` → `mergeGitStatus` keeps the last known rail (no flicker to `(no git)`); a clean non-zero exit → empty status → `(no git)`; failed action probe → no label, rail intact. Tested in `test/git.test.ts` and `test/git-action.test.ts`.
 
 ### Timeline two-line format `datetime · 11s · ↑·↓·cache·$` + `T·tools·failed`
 
@@ -179,7 +186,7 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 ## Verification — how to check the style
 
-- **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | # [#####-------] 39.6% · 416k/1.0M | c 0.0%` left (or `| c 85.3%` with cache) and `T1 · 8s · 2 tools` right; bottom shows `> TPS 60.6 tok/s | ~ TTFT 2.5s | + 8.3s | ↑ 395 | ↓ 505 | $0.16` right. Footer shows `cwd · git • runtime` left / `↑ 352k · ↓ 505 · $0.00` right — `↑` is *total* input (uncached + cache read + cache write, `totalInputTokens`), so it tracks the context bar's `416k` rather than `usage.input` alone; cache is still never a footer segment (top bar's `c 85.3%` only), no `#` in center.
+- **TUI smoke**: `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — top shows `provider/model · thinking | c 0.0% | 0.0% · 0/1.0M` left and `T1 · 8s · 2 tools` right; bottom shows `TPS 60.6 tok/s · TTFT 2.5s · 8.3s` plus `↑395 · ↓505 · $0.16`. Footer shows `cwd · <git rail> • runtime` left / `↑ 352k · ↓ 505 · $0.00` right — the rail is e.g. `main A2 ! ?3` (clean with counts), `main A2 v ^2 S1` (diverged + stash), `main |MERGING` mid-merge even with the conflicts already staged, or `9f2c1a8b v0.13.0` detached. `↑` is *total* input (uncached + cache read + cache write, `totalInputTokens`), so it tracks the context bar's figure rather than `usage.input` alone; cache is still never a footer segment (top bar's `c 85.3%` only), no `#` in center.
 - **Unit test the bar without TUI**:
 
   ```ts

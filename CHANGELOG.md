@@ -9,8 +9,21 @@
 
 ## [Unreleased]
 
+### Features
+
+* **git:** render in-progress operations in the rail (ADR-0003 ACTION slot)
+* **git:** rail adopts powerlevel10k's composition (ADR-0003)
+* **git:** adopt powerlevel10k's rail composition per ADR-0003, in one porcelain-v2 read (#45)
+* **git:** render in-progress operations — merging, rebasing, cherry-picking, reverting, am, bisecting (#46)
+* **footer:** split the detached sha (identity) from the optional tag (#45b)
+
 ### Bug Fixes
 
+* **git:** harden status acquisition failure modes (#45c review follow-ups)
+* **footer:** split detached identity from decoration (#45b ruling)
+* **pi-tui:** support pi-tui 1.3.0 border, cursor and mouse rendering (#43)
+* **git:** keep the branch name on a diverged or `[gone]` upstream, and show the detached commit (#45)
+* **git:** keep the last-known rail on a transient status read, and degrade an unsupported `--show-stash` to a partial rail (#45c)
 * **editor:** map mouse rows past the prepended token row (#43)
 * **border:** keep pi's scroll hint in every 1.3.0 shape (#43)
 * **cursor:** restore unfocused cursor preview on pi-tui 1.3.0 (#43)
@@ -18,7 +31,12 @@
 
 ### Documentation
 
+* align git-rail specs, AGENTS, README and glossary with ADR-0003
+* **specs:** mark the git state engine spec superseded by ADR-0003
+* **pi-tui:** record the stale-tree signature that mimics 1.3.0 API drift
+* **adr:** adopt powerlevel10k composition for the git rail
 * **reference:** refresh pi-tui internals reference for 1.3.0 (#43)
+* **reference:** record the stale-tree signature that mimics 1.3.0 API drift (#44)
 
 ## [0.13.0] - 2026-09-25
 
