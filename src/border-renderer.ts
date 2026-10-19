@@ -1,13 +1,9 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { isEditorBorderLine, isEditorScrollBorderLine } from "./layout.js";
 import { buildLabel, resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
-}
-
-function isBorderLine(line: string): boolean {
-  const plain = stripAnsi(line);
-  return /^─+$/.test(plain) || /^─── [↑↓] \d+ more/.test(plain);
 }
 
 /**
@@ -135,7 +131,7 @@ function embedTopWithLeftAndRight(
   if (lines.length === 0) return lines;
   const top = lines[0] ?? "";
   const plainTop = stripAnsi(top);
-  if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
+  if (isEditorScrollBorderLine(plainTop)) return lines;
   const leftW = leftText ? visibleWidth(leftText) : 0;
   const rightW = rightText ? visibleWidth(rightText) : 0;
   const maxLeft = rightText ? Math.max(0, width - rightW - 6) : width - 3;
@@ -166,7 +162,7 @@ function embedBottomBorder(
   if ((!leftText && !rightText) || lines.length === 0) return lines;
   let bottomIdx = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (isBorderLine(lines[i] ?? "")) {
+    if (isEditorBorderLine(lines[i] ?? "")) {
       bottomIdx = i;
       break;
     }
@@ -203,7 +199,7 @@ function embedTopRightBorder(
   const top = lines[0] ?? "";
   const plainTop = stripAnsi(top);
   // If top is scroll indicator, don't embed right — keep glow recolor only
-  if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
+  if (isEditorScrollBorderLine(plainTop)) return lines;
   const rightW = visibleWidth(rightText);
   // left label already embedded on the top border — its visible width is width - middle - right
   // We need to truncate right if too wide, preserving at least 10 chars for left

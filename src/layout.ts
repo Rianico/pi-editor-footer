@@ -92,11 +92,19 @@ export function fitSegmentsByPriority(
   return items.filter((it) => it.text !== "").map((it) => it.text);
 }
 
+/**
+ * True for a pi-tui editor scroll border, in either shape it has shipped:
+ * 0.84.2 `─── ↑ 3 more ───…` (left-anchored) and 1.3.0 `────── ↑ 3 more ───`
+ * (centred when the label fits, left-anchored fallback when it does not).
+ */
+export function isEditorScrollBorderLine(line: string): boolean {
+  return /^─*\s*[↑↓]\s+\d+\s+more\s*─*$/.test(stripAnsi(line));
+}
+
 export function isEditorBorderLine(line: string): boolean {
   const plain = stripAnsi(line);
   if (/^─+$/.test(plain)) return true;
-  if (/^─*\s*[↑↓]\s+\d+\s+more\s*─*$/.test(plain)) return true;
-  return false;
+  return isEditorScrollBorderLine(plain);
 }
 
 export function findBottomBorderIndex(lines: string[]): number {
