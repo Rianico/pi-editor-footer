@@ -5,9 +5,11 @@ import {
   type SelectItem,
   type SelectList,
   type TUI,
+  type TuiMouseEvent,
+  type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
-import { BorderRenderer } from "./border-renderer.js";
+import { BorderRenderer, rowsPrependedAboveEditor } from "./border-renderer.js";
 import { CursorPolicy, type CursorStyle } from "./cursor-policy.js";
 
 export interface ChromeSnapshot {
@@ -184,6 +186,26 @@ export class TrackingEditor extends Editor {
       topTokensText: this._chrome.topTokensText,
     });
     return lines;
+  }
+
+  /**
+   * Undo the token row that `render` prepends above the editor's own top border.
+   *
+   * `Editor.handleMouse` (pi-tui 1.3.0) indexes rows relative to its own output —
+   * `[top border][content…][bottom border][autocomplete…]` — so a shifted row would
+   * land the cursor one logical line off, and clicks on the tokens/top-border rows
+   * would be read as the first content line. pi-tui before 1.3.0 has no editor mouse
+   * handling at all, so the base method may be absent at runtime.
+   */
+  override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+    const parentHandleMouse: unknown = super.handleMouse;
+    if (typeof parentHandleMouse !== "function") return undefined;
+    const prependedRows = rowsPrependedAboveEditor({ topTokensText: this._chrome.topTokensText });
+    const shifted = prependedRows === 0 ? event : { ...event, y: event.y - prependedRows };
+    return (parentHandleMouse as (e: TuiMouseEvent) => TuiMouseEventResult | undefined).call(
+      this,
+      shifted,
+    );
   }
 
   override handleInput(data: string): void {

@@ -1,13 +1,23 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { isEditorBorderLine, isEditorScrollBorderLine } from "./layout.js";
 import { buildLabel, resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-function isBorderLine(line: string): boolean {
-  const plain = stripAnsi(line);
-  return /^─+$/.test(plain) || /^─── [↑↓] \d+ more/.test(plain);
+/**
+ * Rows `renderWithBorders` prepends above the editor's own top border.
+ *
+ * The token row is the only one: context/glow/activity embed into the existing
+ * top border, and the bottom only rewrites a row. Editor mouse hit-testing
+ * (`Editor.handleMouse`, pi-tui 1.3.0) indexes rows relative to the editor's own
+ * `[top border][content…][bottom border]` output, so it has to undo this shift —
+ * see `TrackingEditor.handleMouse`. Keep the predicate here so render and
+ * hit-testing can never drift.
+ */
+export function rowsPrependedAboveEditor(opts: { topTokensText?: string }): number {
+  return opts.topTokensText ? 1 : 0;
 }
 
 /**
@@ -84,7 +94,7 @@ export class BorderRenderer {
     if (opts.topTokensText || opts.topRightText) {
       const tokensLeft = opts.topTokensText ?? "";
       const tokensRight = opts.topRightText ?? "";
-      if (tokensLeft) {
+      if (rowsPrependedAboveEditor(opts) > 0) {
         // Use | as separator between ↑/↓ and tool turns (dimmed) per user request
         // SAFETY: pi theme seam — fg is optional theme method
         const themeForTokens = this.getLiveTheme() as unknown as {
@@ -135,7 +145,7 @@ function embedTopWithLeftAndRight(
   if (lines.length === 0) return lines;
   const top = lines[0] ?? "";
   const plainTop = stripAnsi(top);
-  if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
+  if (isEditorScrollBorderLine(plainTop)) return lines;
   const leftW = leftText ? visibleWidth(leftText) : 0;
   const rightW = rightText ? visibleWidth(rightText) : 0;
   const maxLeft = rightText ? Math.max(0, width - rightW - 6) : width - 3;
@@ -166,12 +176,14 @@ function embedBottomBorder(
   if ((!leftText && !rightText) || lines.length === 0) return lines;
   let bottomIdx = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (isBorderLine(lines[i] ?? "")) {
+    if (isEditorBorderLine(lines[i] ?? "")) {
       bottomIdx = i;
       break;
     }
   }
-  if (bottomIdx === -1) return lines;
+  // A scroll indicator owns the bottom border line: pi's `↓ N more` hint survives
+  // unchanged and embedding only applies to non-scrolled borders (issue #39).
+  if (bottomIdx === -1 || isEditorScrollBorderLine(lines[bottomIdx] ?? "")) return lines;
   const leftW = leftText ? visibleWidth(leftText) : 0;
   const rightW = rightText ? visibleWidth(rightText) : 0;
   const maxLeft = rightText ? Math.max(0, width - rightW - 6) : width - 3;
@@ -203,7 +215,7 @@ function embedTopRightBorder(
   const top = lines[0] ?? "";
   const plainTop = stripAnsi(top);
   // If top is scroll indicator, don't embed right — keep glow recolor only
-  if (/^─── [↑↓] \d+ more/.test(plainTop)) return lines;
+  if (isEditorScrollBorderLine(plainTop)) return lines;
   const rightW = visibleWidth(rightText);
   // left label already embedded on the top border — its visible width is width - middle - right
   // We need to truncate right if too wide, preserving at least 10 chars for left

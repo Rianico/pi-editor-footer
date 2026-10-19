@@ -127,7 +127,7 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 ### Dimmed timeline between each agent run — stacked left-aligned permanent
 
-- User wants dimmed timeline **between each agent run**, not single last-run widget hidden on next start. `pi-tui v0.84.2` `ExtensionUIContext.setWidget` only exposes `placement: "aboveEditor" | "belowEditor"` (verified in `docs/reference/pi-tui-internals.md`), so true transcript-interleaved separators would require `sessionManager.addEntry` (exposed to model) — intentionally avoided.
+- User wants dimmed timeline **between each agent run**, not single last-run widget hidden on next start. `pi-tui v1.3.0` `ExtensionUIContext.setWidget` only exposes `placement: "aboveEditor" | "belowEditor"` (verified in `docs/reference/pi-tui-internals.md`), so true transcript-interleaved separators would require `sessionManager.addEntry` (exposed to model) — intentionally avoided.
 - Fix: `wallTimeHistory: string[]` in `src/index.ts` — `makeWallTimeWidget(history)` renders `history.map(dim)` stacked left-aligned `aboveEditor` (between transcript bottom and input), `showWallTimeWidget` pushes and snapshots, `agent_start` no longer hides, `session_shutdown` clears, `onConfigChanged` preserves history. Each `agent_settled` appends one `· wall · ↑·↓·$` (per `timeline.*`) so timeline is visible between each run and permanent.
 
 ### Wall time left aligned, permanent between agent_end and next input
@@ -167,7 +167,7 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 ### Timeline interleaved in chat container, not stacked aboveEditor
 
-- `aboveEditor` widget (`setWidget("wall-time", …, {placement:"aboveEditor"})` with `wallTimeHistory[]` stacked) renders fixed above input (`2026-08-21 …` stacked above `↑·↓|T1` + model border) — does not scroll with transcript, duplicates on rebuild, and is what user reported as weird stacked view. `pi-tui v0.84.2` only exposes `aboveEditor|belowEditor` for `setWidget`, so stacked is the only widget option.
+- `aboveEditor` widget (`setWidget("wall-time", …, {placement:"aboveEditor"})` with `wallTimeHistory[]` stacked) renders fixed above input (`2026-08-21 …` stacked above `↑·↓|T1` + model border) — does not scroll with transcript, duplicates on rebuild, and is what user reported as weird stacked view. `pi-tui v1.3.0` only exposes `aboveEditor|belowEditor` for `setWidget`, so stacked is the only widget option.
 - Fix: use public `pi.appendEntry("timeline", {text})` + `pi.registerEntryRenderer("timeline", (entry,_,theme)=> new Text(dim))` — `type:"custom"` entries are rendered in `chatContainer` transcript order, interleaved `User/Assistant/<dim>` (`2026-08-21 …` / `1 turns…` dim left-aligned), scroll with history, and never sent to LLM (`custom` not in `context`). `src/index.ts` now does this at `agent_settled` via `extensionPi` global (set at `export default` entry) and registers renderer at startup; `src/transcript-timeline.ts` direct `chatContainer.addChild`/`InteractiveMode.prototype` patch (global scan, async `import` race, sync `require` ESM failure) is brittle and deprecated — kept only for `void timeline` compat, not used for rendering.
 
 ### Footer `↑` counted only uncached input — now total input tokens
