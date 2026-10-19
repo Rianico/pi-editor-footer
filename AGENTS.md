@@ -111,7 +111,7 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 ### Git rail — p10k composition (ADR-0003), never-fold branch
 - `renderGitSegment` did `truncateBranch(git.branch, 20)` (`branch.slice(0,17) + "..."`) and `renderFooter` gave git `priority: 4` (same as stats/runtime, below cwd `5`), so long names were always `feature/add-obsidia...` even at 200 cols and omitted before cwd.
-- Fix: never fold branch — the branch part is `theme.fg("mdLink", git.branch)` full, no `truncateBranch`, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped. ADR-0003 kept this rule and `priority: 6` through the rewrite; `truncateBranch` in `src/path-format.ts` now has no non-test callers.
+- Fix: never fold branch — the branch part is `theme.fg("mdLink", git.branch)` full, no truncation helper, `priority: 6` (> cwd) so `fitSegmentsByPriority` drops `timer(1)`/`session(2)`/`runtime(4)`/`stats(4)` before branch; at 200 cols full `feature/very-long-…` is visible, at tight width branch is last to be `truncateToWidth`-clipped. ADR-0003 kept this rule and `priority: 6` through the rewrite, and the now-unused 20-char helper was deleted with its test (#48).
 
 ### Git rail composition and action label (ADR-0003)
 

@@ -224,6 +224,19 @@ export class SessionOrchestrator {
   private readonly liveBorder: LiveBorder;
   private readonly transcriptTimeline: TranscriptTimeline;
   private footerState: FooterState;
+
+  /**
+   * Typed footer-state upsert — the seam the unsafe state casts used to paper over.
+   *
+   * A checked assignment (not an assertion) is what keeps a future field addition honest:
+   * if `FooterState` grows a required field, the spread stops being assignable and this
+   * method is where the compiler says so. See ADR-0003 for the GitStatus shrink that
+   * originally motivated the casts.
+   */
+  private updateFooterState(patch: Partial<FooterState>): void {
+    const next: FooterState = { ...this.footerState, ...patch };
+    this.footerState = next;
+  }
   private agentStartMs: number | null = null;
   private agentBaselineTotals: ReturnType<typeof getUsageTotals> | null = null;
   private currentModelInfo: ModelInfo = {
@@ -455,15 +468,12 @@ export class SessionOrchestrator {
                 // Detection rides alongside the status read: a failed probe is "no action",
                 // so the rail keeps branch and counts and only the label disappears.
                 const gitAction = await readGitAction(cwd);
-                this.footerState = { ...this.footerState, git, gitAction } as FooterState;
+                this.updateFooterState({ git, gitAction });
                 this.renderLiveChrome();
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
                 (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
                 const runtime = await readRuntimeInfo(cwd);
-                this.footerState = {
-                  ...this.footerState,
-                  runtime,
-                } as FooterState;
+                this.updateFooterState({ runtime });
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
                 (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
               } catch (_e) {
@@ -491,12 +501,12 @@ export class SessionOrchestrator {
         const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
         // A failed probe is "no action", never an empty rail.
         const gitAction = await readGitAction(cwd);
-        this.footerState = { ...this.footerState, git, gitAction } as FooterState;
+        this.updateFooterState({ git, gitAction });
         this.renderLiveChrome();
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
         const runtime = await readRuntimeInfo(cwd);
-        this.footerState = { ...this.footerState, runtime } as FooterState;
+        this.updateFooterState({ runtime });
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
       } catch (_e) {

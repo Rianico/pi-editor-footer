@@ -35,7 +35,8 @@
 
 ### Continuous Integration
 
-* **ci:** fail fast when the installed pi packages drift from the pinned versions, and run the changelog ledger floor before a push (#48)
+* **ci:** fail fast when the installed pi packages drift from the pinned versions, run the changelog ledger floor before a push, drop the dead branch-truncation helper, type the footer-state upsert, and pin the apply-backend rebase label against real git state (#48)
+
 ## [0.13.0] - 2026-09-25
 
 ### Features
