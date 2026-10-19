@@ -93,12 +93,31 @@ export function fitSegmentsByPriority(
 }
 
 /**
- * True for a pi-tui editor scroll border, in either shape it has shipped:
- * 0.84.2 `─── ↑ 3 more ───…` (left-anchored) and 1.3.0 `────── ↑ 3 more ───`
- * (centred when the label fits, left-anchored fallback when it does not).
+ * pi-tui puts exactly one non-dash payload on a scroll border, in three shapes:
+ *   0.84.2        `─── ↑ 3 more ─────…`   label left-anchored after three dashes
+ *   1.3.0 wide    `────── ↑ 3 more ────`  label centred when it fits
+ *   1.3.0 narrow  `─── ↑ 3 mo...`         indicator sliced by column + 1–3 dot ellipsis
+ * 1.3.0's left-anchored branch is shadowed by the centred one (its indicator is
+ * exactly three columns wider than the label), so the dash-only truncated forms
+ * (`─── ...`) come from the same narrow path and are recognised too. Every
+ * alternative is grammar-shaped rather than pixel-exact, so both versions and any
+ * label width are covered.
  */
+const SCROLL_DIRECTIONS = "↑↓";
+/** Full label: ` ↑ 3 more ` with the surrounding dashes of either anchor style. */
+const SCROLL_LABEL_FULL = new RegExp(`^[${SCROLL_DIRECTIONS}]\\s+\\d+\\s+more\\s*─*$`);
+/** Truncated label: a prefix of `↑ 3 more ` followed by the ellipsis (`↑ 3 mo...`). */
+const SCROLL_LABEL_TRUNCATED = new RegExp(
+  `^[${SCROLL_DIRECTIONS}]\\s*\\d*\\s*m?o?r?e?\\s*\\.{1,3}$`,
+);
+/** Truncated before the arrow lands (`─── ...`); a plain border is dashes only. */
+const SCROLL_TRUNCATED_BEFORE_ARROW = /^─+\s*\.{1,3}$/;
+
 export function isEditorScrollBorderLine(line: string): boolean {
-  return /^─*\s*[↑↓]\s+\d+\s+more\s*─*$/.test(stripAnsi(line));
+  const plain = stripAnsi(line);
+  if (SCROLL_TRUNCATED_BEFORE_ARROW.test(plain)) return true;
+  const label = plain.replace(/^─* */, "");
+  return SCROLL_LABEL_FULL.test(label) || SCROLL_LABEL_TRUNCATED.test(label);
 }
 
 export function isEditorBorderLine(line: string): boolean {

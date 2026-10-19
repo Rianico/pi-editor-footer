@@ -167,7 +167,9 @@ function embedBottomBorder(
       break;
     }
   }
-  if (bottomIdx === -1) return lines;
+  // A scroll indicator owns the bottom border line: pi's `↓ N more` hint survives
+  // unchanged and embedding only applies to non-scrolled borders (issue #39).
+  if (bottomIdx === -1 || isEditorScrollBorderLine(lines[bottomIdx] ?? "")) return lines;
   const leftW = leftText ? visibleWidth(leftText) : 0;
   const rightW = rightText ? visibleWidth(rightText) : 0;
   const maxLeft = rightText ? Math.max(0, width - rightW - 6) : width - 3;
