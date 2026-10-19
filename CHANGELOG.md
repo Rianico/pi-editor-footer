@@ -9,6 +9,15 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+
+* **cursor:** restore unfocused cursor preview on pi-tui 1.3.0
+* **border:** recognise pi-tui 1.3.0 centred scroll borders
+
+### Documentation
+
+* **reference:** refresh pi-tui internals reference for 1.3.0
+
 ## [0.13.0] - 2026-09-25
 
 ### Features
