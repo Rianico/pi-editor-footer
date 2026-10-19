@@ -16,6 +16,7 @@
  */
 
 import type { GitStatus } from "./git.js";
+import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
 import type { FooterState, UsageTotals } from "./state.js";
 import { getUsageTotals } from "./state.js";
@@ -167,24 +168,7 @@ export function createChromeSnapshot(
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults
   // SAFETY: pi seam
-  const git =
-    (footerState as FooterState | undefined)?.git ??
-    ({
-      branch: undefined,
-      ahead: 0,
-      behind: 0,
-      modified: 0,
-      untracked: 0,
-      staged: 0,
-      stashed: 0,
-      conflicted: 0,
-      renamed: 0,
-      deleted: 0,
-      commit: null,
-      // ast-grep-ignore: require-safety-comment-for-as-unknown-as
-      // SAFETY: intentional unsafe cast — validated at runtime
-      /* SAFETY: intentional unsafe cast — validated at runtime */
-    } as unknown as GitStatus); // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+  const git = (footerState as FooterState | undefined)?.git ?? emptyGitStatus();
   const runtime = (footerState as FooterState | undefined)?.runtime ?? null;
   return {
     cwd,

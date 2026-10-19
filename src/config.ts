@@ -70,7 +70,9 @@ export const DEFAULT_CONFIG: ThemeConfig = {
     sessionName: false,
     gitBranch: true,
     gitStatus: true,
-    gitCommit: false,
+    // On by default: ADR-0003 requires a detached HEAD to show its commit rather than a
+    // bare "HEAD", so the toggle gating that part must default on to be meaningful.
+    gitCommit: true,
     runtime: true,
     context: true,
     tokens: true,
@@ -229,7 +231,7 @@ export const CONFIG_SCHEMA: readonly ConfigDescriptor[] = [
     kind: "boolean",
     label: "Git commit (detached)",
     tab: "footer",
-    default: false,
+    default: true,
   },
   {
     path: "footerSegments.runtime",

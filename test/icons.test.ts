@@ -11,9 +11,16 @@ describe("icons", () => {
   test("resolveGlyphs returns glyphs", () => {
     const nerd = resolveGlyphs("nerd");
     const ascii = resolveGlyphs("ascii");
-    assert.ok(nerd.git);
-    assert.ok(ascii.git);
-    assert.notEqual(nerd.git, ascii.git);
+    assert.ok(nerd.git.length > 0, "nerd keeps the branch icon");
+    // ADR-0003: p10k's ascii set has no branch icon, which also clears the collision
+    // between the old ascii `*` and a dirty marker.
+    assert.equal(ascii.git, "");
+    assert.ok(ascii.staged.length > 0);
+    assert.ok(ascii.unstaged.length > 0);
+    assert.ok(ascii.untracked.length > 0);
+    assert.ok(ascii.ahead.length > 0);
+    assert.ok(ascii.behind.length > 0);
+    assert.ok(ascii.stashed.length > 0);
   });
 
   test("runtimeSymbol returns symbols", () => {
