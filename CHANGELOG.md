@@ -9,8 +9,17 @@
 
 ## [Unreleased]
 
+### Features
+
+* **git:** rail adopts powerlevel10k's composition — one porcelain-v2 read, ordered parts, a part bare at 1, behind before ahead, conflicts colour-only (#49)
+* **git:** render in-progress operations in the rail — merging, rebasing, cherry-picking, reverting, am, bisecting (#49)
+* **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
+
 ### Bug Fixes
 
+* **git:** keep the branch name on a diverged or `[gone]` upstream, and show the detached commit rather than a bare `HEAD` (#49)
+* **git:** keep the last-known rail on a transient status read, and degrade an unsupported `--show-stash` to a partial rail (#49)
+* **pi-tui:** support pi-tui 1.3.0 border, cursor and mouse rendering (#43)
 * **editor:** map mouse rows past the prepended token row (#43)
 * **border:** keep pi's scroll hint in every 1.3.0 shape (#43)
 * **cursor:** restore unfocused cursor preview on pi-tui 1.3.0 (#43)
@@ -18,7 +27,11 @@
 
 ### Documentation
 
+* **adr:** adopt powerlevel10k composition for the git rail (#49)
+* **specs:** mark the git state engine spec superseded by ADR-0003 (#49)
+* align git-rail specs, AGENTS, README and glossary with ADR-0003 (#49)
 * **reference:** refresh pi-tui internals reference for 1.3.0 (#43)
+* **reference:** record the stale-tree signature that mimics 1.3.0 API drift (#44)
 
 ## [0.13.0] - 2026-09-25
 

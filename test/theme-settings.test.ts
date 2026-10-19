@@ -44,7 +44,7 @@ const GOLDEN_ROWS: Record<(typeof TABS)[number], SettingRow[]> = {
     { id: "sessionName", label: "Session name", currentValue: "Off" },
     { id: "gitBranch", label: "Git branch", currentValue: "On" },
     { id: "gitStatus", label: "Git status", currentValue: "On" },
-    { id: "gitCommit", label: "Git commit (detached)", currentValue: "Off" },
+    { id: "gitCommit", label: "Git tag (detached)", currentValue: "Off" },
     { id: "runtime", label: "Runtime", currentValue: "On" },
     { id: "context", label: "Context bar", currentValue: "On" },
     { id: "contextIconBar", label: "Context icon bar", currentValue: "Off" },

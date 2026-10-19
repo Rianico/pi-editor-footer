@@ -15,57 +15,86 @@ import {
 import { basenamePath, formatCwd, truncatePath } from "./path-format.js";
 import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
 
-function renderGitSegment(
-  theme: Theme,
+/**
+ * One rail part: text plus the theme colour token it paints.
+ *
+ * Kept separate from rendering so the composition can be asserted without a theme —
+ * ADR-0003's order/suppression rules are the contract, colour is the presentation.
+ */
+export interface GitRailPart {
+  readonly text: string;
+  readonly color: "mdLink" | "error" | "dim" | "warning" | "success" | "muted";
+}
+
+/**
+ * powerlevel10k's composition (ADR-0003):
+ * `[COMMIT] [BRANCH] [TAG] [STAGED] [UNSTAGED] [UNTRACKED] [BEHIND] [AHEAD] [STASH] [ACTION]`,
+ * single-space separated, no brackets, a count of 1 rendered bare, stash always counted,
+ * and conflicts signalled by colour alone.
+ */
+export function composeGitRail(
   git: GitStatus,
   glyphs: IconGlyphs,
   segments: ThemeConfig["footerSegments"],
-): string {
-  const parts: string[] = [];
+  action = "",
+): GitRailPart[] {
+  const parts: GitRailPart[] = [];
+  const detached = git.commit?.detached === true;
+  const branchIcon = glyphs.git.length > 0 ? `${glyphs.git} ` : "";
+
   if (segments.gitBranch) {
-    if (git.branch) {
-      // Never truncate branch name — full name always shown per user request
-      parts.push(theme.fg("mdLink", git.branch));
-    } else if (git.commit?.detached) {
-      parts.push(theme.fg("warning", "HEAD"));
-      if (git.commit.oid) {
-        const shortHash = git.commit.oid.slice(0, 7);
-        const tag = git.commit.tag ? ` ${git.commit.tag}` : "";
-        parts.push(theme.fg("dim", `${shortHash}${tag}`));
+    if (detached) {
+      // Identity vs decoration (#45b ruling): the sha is the identity part, so gitBranch
+      // gates it; gitCommit stays off by default and decorates it with the tag only.
+      if (git.commit?.oid) parts.push({ text: git.commit.oid.slice(0, 8), color: "dim" });
+      if (segments.gitCommit && git.commit?.tag) {
+        parts.push({ text: git.commit.tag, color: "warning" });
       }
+    } else if (git.branch !== undefined) {
+      // Conflicts are colour-only: no glyph, no count, the branch itself turns red.
+      const color = git.unmerged > 0 ? "error" : "mdLink";
+      parts.push({ text: `${branchIcon}${git.branch}`, color });
     } else {
-      parts.push(theme.fg("dim", "(no git)"));
+      parts.push({ text: "(no git)", color: "dim" });
     }
   }
 
   if (segments.gitStatus) {
-    const statusIcons: string[] = [];
-    const addStatus = (count: number, glyph: string, color: string) => {
-      if (count > 0) statusIcons.push(theme.fg(color, `${glyph}${count}`));
+    if (action.length > 0) {
+      // While an operation is live, the counts are the operation's own churn.
+      // Warning while the operation runs, error while conflicts are still unresolved: the
+      // label is the second half of the signal the colour-only branch could not give.
+      parts.push({
+        text: `|${action.toUpperCase()}`,
+        color: git.unmerged > 0 ? "error" : "warning",
+      });
+      return parts;
+    }
+    const count = (value: number, glyph: string, color: GitRailPart["color"]) => {
+      if (value > 0) parts.push({ text: value === 1 ? glyph : `${glyph}${value}`, color });
     };
-    addStatus(git.conflicted, glyphs.conflicted, "error");
-    addStatus(git.deleted, glyphs.deleted, "error");
-    addStatus(git.modified, glyphs.modified, "warning");
-    addStatus(git.renamed, glyphs.renamed, "warning");
-    addStatus(git.staged, glyphs.staged, "success");
-    addStatus(git.untracked, glyphs.untracked, "muted");
-    addStatus(git.stashed, glyphs.stashed, "muted");
-
-    if (git.ahead > 0 && git.behind > 0) {
-      statusIcons.push(theme.fg("warning", `${glyphs.diverged}${git.ahead}/${git.behind}`));
-    } else if (git.ahead > 0) {
-      statusIcons.push(theme.fg("success", `${glyphs.ahead}${git.ahead}`));
-    } else if (git.behind > 0) {
-      statusIcons.push(theme.fg("warning", `${glyphs.behind}${git.behind}`));
-    }
-
-    const statusBlock = statusIcons.join(" ");
-    if (statusBlock) {
-      parts.push(`${theme.fg("dim", "[")}${statusBlock}${theme.fg("dim", "]")}`);
-    }
+    count(git.staged, glyphs.staged, "success");
+    count(git.unstaged, glyphs.unstaged, "warning");
+    count(git.untracked, glyphs.untracked, "muted");
+    count(git.behind, glyphs.behind, "warning");
+    count(git.ahead, glyphs.ahead, "success");
+    // Stash is the one part that always carries its count, even when it is 1.
+    if (git.stashed > 0) parts.push({ text: `${glyphs.stashed}${git.stashed}`, color: "muted" });
   }
 
-  return parts.join(" ");
+  return parts;
+}
+
+export function renderGitSegment(
+  theme: Theme,
+  git: GitStatus,
+  glyphs: IconGlyphs,
+  segments: ThemeConfig["footerSegments"],
+  action = "",
+): string {
+  return composeGitRail(git, glyphs, segments, action)
+    .map((part) => theme.fg(part.color, part.text))
+    .join(" ");
 }
 
 function renderRuntimeSegment(
@@ -166,7 +195,7 @@ export function renderFooter(
       });
     }
   }
-  const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
+  const gitSeg = renderGitSegment(theme, state.git, glyphs, segments, state.gitAction);
   if (gitSeg) {
     const sep = leftParts.length > 0 ? `${theme.fg("dim", " · ")}` : "";
     // Branch name must never be folded/omitted — keep priority higher than cwd (5)

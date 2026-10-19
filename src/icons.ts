@@ -19,14 +19,10 @@ export interface IconGlyphs {
   extensions: string;
   ahead: string;
   behind: string;
-  diverged: string;
-  conflicted: string;
   stashed: string;
-  modified: string;
   staged: string;
+  unstaged: string;
   untracked: string;
-  renamed: string;
-  deleted: string;
 }
 
 const NERD_GLYPHS: IconGlyphs = {
@@ -48,20 +44,17 @@ const NERD_GLYPHS: IconGlyphs = {
   extensions: "",
   ahead: "↑",
   behind: "↓",
-  diverged: "⇕",
-  conflicted: "=",
   stashed: "$",
-  modified: "!",
   staged: "+",
+  unstaged: "!",
   untracked: "?",
-  renamed: "»",
-  deleted: "✘",
 };
 
 const ASCII_GLYPHS: IconGlyphs = {
   cwd: "@",
   session: "s",
-  git: "*",
+  // p10k's ascii branch set has no icon, which also clears the old `*` vs dirty-marker collision
+  git: "",
   working: "o",
   done: "+",
   context: "#",
@@ -77,14 +70,10 @@ const ASCII_GLYPHS: IconGlyphs = {
   extensions: "&",
   ahead: "^",
   behind: "v",
-  diverged: "^v",
-  conflicted: "=",
   stashed: "S",
-  modified: "!",
   staged: "A",
+  unstaged: "!",
   untracked: "?",
-  renamed: "r",
-  deleted: "x",
 };
 
 const NERD_FONT_TERMINALS = new Set([

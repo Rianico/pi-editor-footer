@@ -29,7 +29,7 @@ describe("footer", () => {
         ...emptyGitStatus(),
         branch: "feature/very-long-branch-name-that-exceeds",
         staged: 2,
-        modified: 3,
+        unstaged: 3,
       },
       runtime: { name: "nodejs", version: "20.0.0" },
     });

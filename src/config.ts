@@ -70,6 +70,9 @@ export const DEFAULT_CONFIG: ThemeConfig = {
     sessionName: false,
     gitBranch: true,
     gitStatus: true,
+    // Off by default, and it gates only the tag: the detached sha is identity and rides on
+    // gitBranch, so leaving this off hides decoration, not the commit you are parked on
+    // (#45b ruling). Keeping the stored default means no config migration is needed.
     gitCommit: false,
     runtime: true,
     context: true,
@@ -227,7 +230,7 @@ export const CONFIG_SCHEMA: readonly ConfigDescriptor[] = [
   {
     path: "footerSegments.gitCommit",
     kind: "boolean",
-    label: "Git commit (detached)",
+    label: "Git tag (detached)",
     tab: "footer",
     default: false,
   },
