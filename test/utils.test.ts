@@ -6,22 +6,14 @@ import {
   formatCwd,
   formatDuration,
   fmtTokens,
-  truncateBranch,
   truncatePath,
 } from "../src/utils.js";
-
-const theme = { fg: (_s: string, t: string) => t };
 
 describe("utils", () => {
   test("basenamePath extracts last segment", () => {
     assert.equal(basenamePath("/a/b/c"), "c");
     assert.equal(basenamePath("~/.pi/agent"), "agent");
     assert.equal(basenamePath("single"), "single");
-  });
-
-  test("truncateBranch keeps prefix", () => {
-    assert.equal(truncateBranch("fix/login", 20), "fix/login");
-    assert.equal(truncateBranch("a".repeat(30), 10), "a".repeat(7) + "...");
   });
 
   test("truncatePath keeps head and tail", () => {

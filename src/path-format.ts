@@ -18,12 +18,6 @@ export function basenamePath(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }
 
-export function truncateBranch(branch: string, maxLen: number): string {
-  if (branch.length <= maxLen) return branch;
-  if (maxLen <= 3) return "...".slice(0, maxLen);
-  return `${branch.slice(0, maxLen - 3)}...`;
-}
-
 export function truncatePath(path: string, maxLen: number): string {
   if (path.length <= maxLen) return path;
   if (maxLen <= 3) return "...".slice(0, maxLen);

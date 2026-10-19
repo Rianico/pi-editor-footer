@@ -66,3 +66,27 @@ EOF
   fi
   rm -f "$tmp"
 done
+
+# Ledger floor (#48a) — the same deterministic gate changelog-check.yml runs, available
+# before a push instead of only on the PR.
+#
+# With a PR number the check is exact. Before the PR exists the attribution rule cannot pass
+# yet (entries must name the PR that will carry them), so that case warns instead of
+# deadlocking the first push of a branch; CI still enforces it on the pull request.
+if command -v python3 >/dev/null 2>&1 && [ -f scripts/changelog-gate.py ]; then
+  _pr=""
+  if command -v gh >/dev/null 2>&1; then
+    _pr=$(gh pr view --json number -q .number 2>/dev/null || true)
+  fi
+  if [ -n "$_pr" ]; then
+    if ! python3 scripts/changelog-gate.py ledger --pr "$_pr" >/dev/null 2>&1; then
+      echo "[pre-push] changelog ledger floor failed for PR #$_pr — blocking push" >&2
+      python3 scripts/changelog-gate.py ledger --pr "$_pr" >&2 || true
+      echo "Fix the [Unreleased] attribution above, then re-run the push." >&2
+      exit 1
+    fi
+  elif ! python3 scripts/changelog-gate.py ledger >/dev/null 2>&1; then
+    echo "[pre-push] note: changelog ledger floor is not satisfiable yet (no PR to check against)." >&2
+    echo "  It must pass before review: python3 scripts/changelog-gate.py ledger --pr <N>" >&2
+  fi
+fi

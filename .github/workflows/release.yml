@@ -15,7 +15,9 @@ jobs:
         with: { run_install: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0  # zizmor: ignore[cache-poisoning]
         with: { node-version: 26, cache: pnpm }
-      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
+      # Fail fast on a stale node_modules: a drifted pi-tui looks exactly like API breakage (#44).
+      - run: node --import tsx scripts/check-pinned-versions.ts
       - run: pnpm audit --audit-level high
       - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
   release:
@@ -38,7 +40,7 @@ jobs:
       - name: Retire the migration baselines
         run: |
           python scripts/changelog-gate.py ledger --update-baseline
-      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
       - run: pnpm exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
