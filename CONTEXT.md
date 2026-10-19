@@ -35,3 +35,11 @@ _Avoid_: agent session, agent round (round ≡ turn confusion)
 **Turn**:
 One `turn_start` → `turn_end` = one LLM call inside an **Agent run**. `TTFT`/`TPS` are per-turn; wall time is per-agent-run.
 _Avoid_: round, iteration
+
+**Git rail**:
+The footer's git segment, immediately right of the cwd: branch glyph + branch, then powerlevel10k's ordered parts — staged, unstaged, untracked, behind, ahead, stash — space separated with no brackets, a part rendered bare when its count is 1 (ADR-0003).
+_Avoid_: git status block, branch segment, git widget
+
+**Git action**:
+An in-progress git operation the **Git rail** reports instead of the change counts — `|MERGING`, `|REBASE 2/7`, `|CHERRY-PICKING`, `|REVERTING`, `|AM`, `|BISECTING`. Read from `git rev-parse --git-path` marker paths, never from `git status` output, and live until the operation commits or aborts.
+_Avoid_: repo state, git state (gitstatus calls the concept "state")
