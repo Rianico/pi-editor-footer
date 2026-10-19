@@ -14,6 +14,8 @@ import {
 
 export interface FooterState {
   git: GitStatus;
+  /** In-progress git operation label ("MERGING", "REBASE 2/7"); empty when none runs. */
+  gitAction: string;
   runtime: RuntimeInfo | null;
   sessionStartEpoch: number;
   workingSince: number | undefined;
@@ -108,6 +110,7 @@ export function invalidateUsageCache(): void {
 export function createInitialState(): FooterState {
   return {
     git: emptyGitStatus(),
+    gitAction: "",
     runtime: null,
     sessionStartEpoch: Date.now(),
     workingSince: undefined,

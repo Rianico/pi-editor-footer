@@ -34,6 +34,7 @@ import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
 import { createRunActivityTracker } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
 import { mergeGitStatus, readGitStatus } from "./git.js";
+import { readGitAction } from "./git-action.js";
 import { readRuntimeInfo } from "./runtime.js";
 import { DetailChrome } from "./detail-chrome.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
@@ -451,7 +452,10 @@ export class SessionOrchestrator {
                 // A transient failure yields null: keep the last known rail instead of
                 // flickering to `(no git)` on every timeout.
                 const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
-                this.footerState = { ...this.footerState, git } as FooterState;
+                // Detection rides alongside the status read: a failed probe is "no action",
+                // so the rail keeps branch and counts and only the label disappears.
+                const gitAction = await readGitAction(cwd);
+                this.footerState = { ...this.footerState, git, gitAction } as FooterState;
                 this.renderLiveChrome();
                 // SAFETY: pi seam — intentional unsafe cast, validated at runtime
                 (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
@@ -485,7 +489,9 @@ export class SessionOrchestrator {
         // A transient failure yields null: keep the last known rail instead of flickering
         // to `(no git)` on every timeout.
         const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
-        this.footerState = { ...this.footerState, git } as FooterState;
+        // A failed probe is "no action", never an empty rail.
+        const gitAction = await readGitAction(cwd);
+        this.footerState = { ...this.footerState, git, gitAction } as FooterState;
         this.renderLiveChrome();
         // SAFETY: pi seam — intentional unsafe cast, validated at runtime
         (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();

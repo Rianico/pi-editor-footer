@@ -62,7 +62,12 @@ export function composeGitRail(
   if (segments.gitStatus) {
     if (action.length > 0) {
       // While an operation is live, the counts are the operation's own churn.
-      parts.push({ text: `|${action.toUpperCase()}`, color: "warning" });
+      // Warning while the operation runs, error while conflicts are still unresolved: the
+      // label is the second half of the signal the colour-only branch could not give.
+      parts.push({
+        text: `|${action.toUpperCase()}`,
+        color: git.unmerged > 0 ? "error" : "warning",
+      });
       return parts;
     }
     const count = (value: number, glyph: string, color: GitRailPart["color"]) => {
@@ -190,7 +195,7 @@ export function renderFooter(
       });
     }
   }
-  const gitSeg = renderGitSegment(theme, state.git, glyphs, segments);
+  const gitSeg = renderGitSegment(theme, state.git, glyphs, segments, state.gitAction);
   if (gitSeg) {
     const sep = leftParts.length > 0 ? `${theme.fg("dim", " · ")}` : "";
     // Branch name must never be folded/omitted — keep priority higher than cwd (5)

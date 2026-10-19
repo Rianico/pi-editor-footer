@@ -82,7 +82,7 @@ export type GitExecResult =
 /** Subprocess seam: tests assert the spawn count and the failure kind through it. */
 export type GitExec = (args: string[], cwd: string) => Promise<GitExecResult>;
 
-async function gitExec(args: string[], cwd: string): Promise<GitExecResult> {
+export async function gitExec(args: string[], cwd: string): Promise<GitExecResult> {
   try {
     const { stdout } = await execFileAsync("git", args, {
       cwd,
