@@ -12,7 +12,6 @@
 ### Features
 
 * **git:** adopt powerlevel10k's composition for the footer git rail (#49)
-* **git:** rail adopts powerlevel10k's composition — one porcelain-v2 read, ordered parts, a part bare at 1, behind before ahead, conflicts colour-only (#49)
 * **git:** render in-progress operations in the rail — merging, rebasing, cherry-picking, reverting, am, bisecting (#49)
 * **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
 
@@ -28,6 +27,7 @@
 
 ### Documentation
 
+* **changelog:** attribute the #48 entry to PR #50 and drop the duplicate rail bullet (#50)
 * **adr:** adopt powerlevel10k composition for the git rail (#49)
 * **specs:** mark the git state engine spec superseded by ADR-0003 (#49)
 * align git-rail specs, AGENTS, README and glossary with ADR-0003 (#49)
@@ -36,7 +36,7 @@
 
 ### Continuous Integration
 
-* **ci:** fail fast when the installed pi packages drift from the pinned versions, run the changelog ledger floor before a push, drop the dead branch-truncation helper, type the footer-state upsert, and pin the apply-backend rebase label against real git state (#48)
+* **ci:** fail fast when the installed pi packages drift from the pinned versions, run the changelog ledger floor before a push, drop the dead branch-truncation helper, type the footer-state upsert, and pin the apply-backend rebase label against real git state (#50)
 
 ## [0.13.0] - 2026-09-25
 
