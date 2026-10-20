@@ -76,7 +76,7 @@ export class BorderRenderer {
       topRightText?: string;
       topContextText?: string;
       topTokensText?: string;
-      /** Already-styled working segment (spinner + message); leftmost on the usage row. */
+      /** Already-styled status segment — `⠋ Working` while running, `● Ready` once it settles; leftmost on the usage row. */
       workingText?: string;
       /** Already-styled pi status we do not embed (retry…); rendered above the usage row. */
       statusLineText?: string;

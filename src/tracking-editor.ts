@@ -9,6 +9,7 @@ import {
   type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
 import { resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
+import { planStatusSlot } from "./status-slot.js";
 import {
   BorderRenderer,
   EDITOR_FRAME_CHROME,
@@ -151,6 +152,11 @@ export class TrackingEditor extends Editor {
     return `${indicator.renderSpinnerInBorder(width)} ${painted}`;
   }
 
+  /** `● Ready` — the idle counterpart of `⠋ Working`, in the same slot so the status never vanishes. */
+  private readyStatusText(): string {
+    return this.getLiveTheme().fg("success", "● Ready");
+  }
+
   /** Non-working indicators (retry/compaction/…) stay above the editor, as pi placed them. */
   private statusRowText(width: number): string {
     const indicator = this.statusIndicator;
@@ -246,7 +252,18 @@ export class TrackingEditor extends Editor {
     const plan = editorFramePlan(width);
     let lines = this.renderBody(plan.bodyWidth);
     if (lines.length === 0) return lines;
-    const workingText = this.workingStatusText(width);
+    const indicator = this.statusIndicator;
+    const statusSlot = planStatusSlot({
+      hasIndicator: Boolean(indicator),
+      indicatorIsWorking: Boolean(indicator && isWorkingIndicator(indicator)),
+      hasUsageRow: Boolean(this._chrome.topTokensText || this._chrome.topRightText),
+    });
+    const workingText =
+      statusSlot === "working"
+        ? this.workingStatusText(width)
+        : statusSlot === "ready"
+          ? this.readyStatusText()
+          : "";
     const statusLineText = this.statusRowText(width);
     this.lastPrependedRows = rowsPrependedAboveEditor({
       statusRow: statusLineText !== "",

@@ -26,6 +26,14 @@ Status: accepted
   ```
 
   No elapsed time is carried — the run-activity section already reports duration, and two clocks on two lines invite disagreement. The footer's own `working Ns` segment is deleted. Because that line is otherwise conditional on having tokens or activity to show, the working segment must be able to bring the line into existence on its own. **Every indicator kind is handed to the editor** — pi's `showStatusIndicator` has no kind filter (`interactive-mode.js:1776-1793`), so retry and compaction indicators are embedded too. Non-working kinds are therefore rendered by the editor as their own row above the chrome and never swallowed; `Working` is the only kind that joins the usage row. Verified live by forcing a provider error: `Retrying (1/3 … 3/3)` renders on its own row.
+
+  **The slot is a state, not a decoration.** When the run settles the slot does not empty — it switches to `● Ready`, atelier's idle counterpart to `◆ Working` (`pi-atelier/src/sidebar.ts:164`), in the same place so the status never vanishes or moves to a second line:
+
+  ```
+   ● Ready · ↑ 89 · ↓ 10 | 1 turns · 4s · 0 tools
+  ```
+
+  Two limits keep that honest: `Ready` renders only where the usage row already exists, so a fresh session does not grow a line just to announce idleness; and a non-working indicator (retry, compaction) leaves the slot **empty** rather than claiming Ready — retrying is not ready.
 - **The `esc to interrupt` hint is not carried over.** The indicator becomes one section of a status line; a keyboard affordance belongs in pi's own hint surface, and the embedding API drops that line anyway (`renderInBorder` returns the spinner/message line only).
 - **Separators.** One rule: `|` between fields, `·` between sections inside a field. `•` is retired from the chrome entirely.
   - Top rule: `provider/model · thinking` (one field) `|` `c 98.1% · 14.6% · 146k/1.0M` (the context field, its three sections joined by `·` — cache is a section of context, not a field of its own).
