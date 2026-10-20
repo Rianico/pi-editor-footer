@@ -13,8 +13,14 @@ import { planStatusSlot } from "../src/status-slot.js";
 
 describe("status slot planner", () => {
   test("the working indicator owns the slot, with or without a usage row", () => {
-    assert.equal(planStatusSlot({ hasIndicator: true, indicatorIsWorking: true, hasUsageRow: true }), "working");
-    assert.equal(planStatusSlot({ hasIndicator: true, indicatorIsWorking: true, hasUsageRow: false }), "working");
+    assert.equal(
+      planStatusSlot({ hasIndicator: true, indicatorIsWorking: true, hasUsageRow: true }),
+      "working",
+    );
+    assert.equal(
+      planStatusSlot({ hasIndicator: true, indicatorIsWorking: true, hasUsageRow: false }),
+      "working",
+    );
   });
 
   test("a non-working indicator leaves the slot empty — retry has its own row", () => {

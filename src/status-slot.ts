@@ -27,7 +27,11 @@ export interface StatusSlotInput {
   hasUsageRow: boolean;
 }
 
-export function planStatusSlot({ hasIndicator, indicatorIsWorking, hasUsageRow }: StatusSlotInput): StatusSlot {
+export function planStatusSlot({
+  hasIndicator,
+  indicatorIsWorking,
+  hasUsageRow,
+}: StatusSlotInput): StatusSlot {
   if (hasIndicator) return indicatorIsWorking ? "working" : "none";
   return hasUsageRow ? "ready" : "none";
 }
