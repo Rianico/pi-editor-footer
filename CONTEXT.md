@@ -43,3 +43,15 @@ _Avoid_: git status block, branch segment, git widget
 **Git action**:
 An in-progress git operation the **Git rail** reports instead of the change counts — `|MERGING`, `|REBASE 2/7`, `|REBASE-i 2/7`, `|CHERRY-PICKING`, `|REVERTING`, `|AM`, `|BISECTING`. Read from `git rev-parse --git-path` marker paths, never from `git status` output, and live until the operation commits or aborts. While it is live the counts are suppressed, and the label is painted `warning` — or `error` while conflicts remain unresolved; it is the signal that survives after resolved conflicts are staged (`unmerged` back to 0).
 _Avoid_: repo state, git state (gitstatus calls the concept "state")
+
+**Editor frame**:
+The rounded border wrapped around the input editor — `╭─ … ─╮` top rule, `│` rails with one column of inner padding, `╰─ … ─╯` bottom rule — always in box-drawing glyphs, never `+ - |`, with the body rendered at `width - 4` (ADR-0004). The top rule carries the model field and run activity; the bottom rule carries turn telemetry.
+_Avoid_: editor border, box, outline
+
+**Working indicator**:
+pi's live run indicator (`⠋ Working`) rendered at the leftmost of the usage group on the stats line via the editor's `embedWorkingStatus` protocol, so pi never adds its own component above the editor. Carries no elapsed time — duration belongs to the run-activity section.
+_Avoid_: spinner, loader, progress bar
+
+**Field**:
+A group of related chrome values, separated from other groups by `|`; its own values are joined by `·`. The glyph choice is semantics, not decoration (ADR-0004). Not the same thing as a footer **segment**, which is a user-toggleable slice of the footer.
+_Avoid_: segment, group, block
