@@ -16,6 +16,7 @@ import { DEFAULT_CONFIG } from "../src/config.js";
 import { renderFooter } from "../src/footer.js";
 import { emptyGitStatus } from "../src/git.js";
 import { createInitialState } from "../src/state.js";
+import { stripAnsi } from "../src/format.js";
 import { TrackingEditor, type EmbeddableStatusIndicator } from "../src/tracking-editor.js";
 
 const WIDTH = 100;
@@ -90,8 +91,9 @@ type RowsOpts = Omit<Parameters<BorderRenderer["renderWithBorders"]>[2], "glowEn
   glowEnabled?: boolean;
 };
 
+/** A real editor block: `[top border][content][bottom border]`, so the frame has a body. */
 function renderRows(opts: RowsOpts) {
-  return renderer().renderWithBorders(["hello"], WIDTH, {
+  return renderer().renderWithBorders(["─".repeat(WIDTH), "hello", "─".repeat(WIDTH)], WIDTH, {
     ...opts,
     glowEnabled: opts.glowEnabled ?? true,
   });
@@ -127,7 +129,7 @@ describe("usage row composition (BorderRenderer)", () => {
       topRightText: ACTIVITY,
     });
     assert.equal(content(lines[0]), `⠋ Working · ${TOKENS} | ${ACTIVITY}`);
-    assert.equal(lines.length, 2, "the prepended usage row plus the single content row");
+    assert.equal(lines.length, 4, "usage row + framed top rule, body row, bottom rule");
   });
 
   test("tokens off: working and activity are two fields", () => {
@@ -145,7 +147,8 @@ describe("usage row composition (BorderRenderer)", () => {
     const lines = renderRows({});
     assert.equal(rowsPrependedAboveEditor({ statusRow: false, usageRow: false }), 0);
     assert.ok(!lines[0]?.includes("Working"));
-    assert.equal(lines.length, 1, "the single content row, no chrome");
+    assert.match(stripAnsi(lines[0] ?? ""), /^╭─/, "the frame is the first row");
+    assert.equal(lines.length, 3);
   });
 
   test("idle with tokens/activity only: the row keeps exactly its previous contents", () => {

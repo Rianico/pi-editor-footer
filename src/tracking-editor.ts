@@ -9,7 +9,12 @@ import {
   type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
 import { resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
-import { BorderRenderer, rowsPrependedAboveEditor } from "./border-renderer.js";
+import {
+  BorderRenderer,
+  EDITOR_FRAME_CHROME,
+  editorFramePlan,
+  rowsPrependedAboveEditor,
+} from "./border-renderer.js";
 import { CursorPolicy, type CursorStyle } from "./cursor-policy.js";
 
 /**
@@ -221,7 +226,7 @@ export class TrackingEditor extends Editor {
     ).autocompleteList; // SAFETY: private pi-tui interior seam
   }
 
-  private renderBase(width: number): string[] {
+  private renderBody(width: number): string[] {
     const lines = super.render(width);
     const isFocused =
       // SAFETY: focused is private Editor state read-only for cursor policy; fallback false preserves behavior
@@ -235,7 +240,11 @@ export class TrackingEditor extends Editor {
   }
 
   override render(width: number): string[] {
-    let lines = this.renderBase(width);
+    // The frame spends EDITOR_FRAME_CHROME columns on rails + inner padding, so the
+    // body is rendered at bodyWidth — wrapping, the caret and the scroll window are
+    // all computed against the columns the text actually gets.
+    const plan = editorFramePlan(width);
+    let lines = this.renderBody(plan.bodyWidth);
     if (lines.length === 0) return lines;
     const workingText = this.workingStatusText(width);
     const statusLineText = this.statusRowText(width);
@@ -269,7 +278,17 @@ export class TrackingEditor extends Editor {
     const parentHandleMouse: unknown = super.handleMouse;
     if (typeof parentHandleMouse !== "function") return undefined;
     const prependedRows = this.lastPrependedRows;
-    const shifted = prependedRows === 0 ? event : { ...event, y: event.y - prependedRows };
+    const prepared = (event: { y: number; x: number; width: number }): TuiMouseEvent => {
+      const plan = editorFramePlan(event.width);
+      const railColumns = plan.framed ? EDITOR_FRAME_CHROME / 2 : 0;
+      return {
+        ...event,
+        x: event.x - railColumns,
+        width: plan.bodyWidth,
+        y: event.y - prependedRows,
+      } as TuiMouseEvent;
+    };
+    const shifted = prepared(event);
     return (parentHandleMouse as (e: TuiMouseEvent) => TuiMouseEventResult | undefined).call(
       this,
       shifted,

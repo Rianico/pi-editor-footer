@@ -45,7 +45,7 @@ An in-progress git operation the **Git rail** reports instead of the change coun
 _Avoid_: repo state, git state (gitstatus calls the concept "state")
 
 **Editor frame**:
-The rounded border wrapped around the input editor — `╭─ … ─╮` top rule, `│` rails with one column of inner padding, `╰─ … ─╯` bottom rule — always in box-drawing glyphs, never `+ - |`, with the body rendered at `width - 4` (ADR-0004). The top rule carries the model field and run activity; the bottom rule carries turn telemetry.
+The rounded border wrapped around the input editor — `╭─ … ─╮` top rule, `│` rails with one column of inner padding, `╰─ … ─╯` bottom rule — always in box-drawing glyphs, never `+ - |`, with the body rendered at `width - 4` so wrapping and the caret belong to the body, not the frame (ADR-0004). The top rule carries the model field then the context field, and run activity when the row above is absent; the bottom rule carries turn telemetry (and `bottomLeftText`, when set) right-aligned. The usage/status row above the frame is not part of it and must stay byte-identical. Below 30 columns the frame is not drawn at all and pi's own rows pass through.
 _Avoid_: editor border, box, outline
 
 **Working indicator**:

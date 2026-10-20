@@ -14,7 +14,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { Editor } from "@earendil-works/pi-tui";
+import { Editor, visibleWidth } from "@earendil-works/pi-tui";
 import { BorderRenderer } from "../src/border-renderer.js";
 import { stripAnsi } from "../src/format.js";
 import { isEditorScrollBorderLine } from "../src/layout.js";
@@ -61,27 +61,28 @@ function legacyScrollBorder(dir: "↑" | "↓", n: number): string {
 const TELEMETRY = "TPS 60.0 tok/s";
 
 describe("BorderRenderer × pi-tui scroll borders", () => {
-  test("1.3.0 centred top scroll border is left untouched", () => {
+  test("1.3.0 centred top scroll border becomes a label in the frame rule", () => {
     const border = centredScrollBorder("↑", 3);
     const out = renderer().renderWithBorders([border, "typed text", bar()], WIDTH, {
       glowEnabled: true,
       topContextText: "39.6% · 416k/1.0M",
     });
     assert.match(stripAnsi(out[0] ?? ""), /↑ 3 more/, "pi's scroll hint must survive");
-    assert.doesNotMatch(stripAnsi(out[0] ?? ""), /39\.6%/, "top border must not be embedded over");
+    assert.match(stripAnsi(out[0] ?? ""), /39\.6%/, "the context field joins the same rule");
+    assert.match(stripAnsi(out[0] ?? ""), /^╭─.*╮$/, "one frame rule carries both");
   });
 
-  test("legacy left-anchored top scroll border is still left untouched", () => {
+  test("legacy left-anchored top scroll border is read the same way", () => {
     const border = legacyScrollBorder("↑", 3);
     const out = renderer().renderWithBorders([border, "typed text", bar()], WIDTH, {
       glowEnabled: true,
       topContextText: "39.6% · 416k/1.0M",
     });
     assert.match(stripAnsi(out[0] ?? ""), /↑ 3 more/);
-    assert.doesNotMatch(stripAnsi(out[0] ?? ""), /39\.6%/);
+    assert.match(stripAnsi(out[0] ?? ""), /^╭─.*╮$/);
   });
 
-  test("1.3.0 centred bottom scroll border keeps pi's hint", () => {
+  test("1.3.0 centred bottom scroll border keeps pi's hint in the rule", () => {
     const out = renderer().renderWithBorders(
       [bar(), "typed text", centredScrollBorder("↓", 2)],
       WIDTH,
@@ -91,10 +92,15 @@ describe("BorderRenderer × pi-tui scroll borders", () => {
       },
     );
     assert.match(stripAnsi(out[out.length - 1] ?? ""), /↓ 2 more/);
-    assert.doesNotMatch(stripAnsi(out[out.length - 1] ?? ""), /TPS/);
+    assert.match(stripAnsi(out[out.length - 1] ?? ""), /TPS 60\.0 tok\/s/);
+    assert.match(
+      stripAnsi(out[out.length - 1] ?? ""),
+      /^╰─.*╯$/,
+      "hint and telemetry share the rule",
+    );
   });
 
-  test("legacy left-anchored bottom scroll border keeps pi's hint", () => {
+  test("legacy left-anchored bottom scroll border keeps pi's hint in the rule", () => {
     const out = renderer().renderWithBorders(
       [bar(), "typed text", legacyScrollBorder("↓", 2)],
       WIDTH,
@@ -104,7 +110,12 @@ describe("BorderRenderer × pi-tui scroll borders", () => {
       },
     );
     assert.match(stripAnsi(out[out.length - 1] ?? ""), /↓ 2 more/);
-    assert.doesNotMatch(stripAnsi(out[out.length - 1] ?? ""), /TPS/);
+    assert.match(stripAnsi(out[out.length - 1] ?? ""), /TPS 60\.0 tok\/s/);
+    assert.match(
+      stripAnsi(out[out.length - 1] ?? ""),
+      /^╰─.*╯$/,
+      "hint and telemetry share the rule",
+    );
   });
 });
 
@@ -166,8 +177,15 @@ describe("pi-tui 1.3.0 scroll-border shape matrix (real renderer)", () => {
         topContextText: "39.6% · 416k/1.0M",
       });
 
-      assert.equal(out[0], top, "pi's scroll hint must survive byte-for-byte");
-      assert.doesNotMatch(stripAnsi(out[0] ?? ""), /39\.6%/);
+      if (width > 30) {
+        // Framed: the hint is re-read as a label, so the rule is ours but the hint lives.
+        const rule = stripAnsi(out[0] ?? "");
+        assert.match(rule, /^╭─.*╮$/, `framed top rule at ${width}: ${rule}`);
+        assert.match(rule, /↑ \d+ more/, "pi's scroll hint must survive inside the frame");
+        assert.equal(visibleWidth(rule), width, "the rule spans exactly the width");
+      } else {
+        assert.equal(out[0], top, "below the framing width pi's rows pass through byte-for-byte");
+      }
     });
   }
 
@@ -181,8 +199,15 @@ describe("pi-tui 1.3.0 scroll-border shape matrix (real renderer)", () => {
         telemetryText: TELEMETRY,
       });
 
-      assert.equal(out[out.length - 1], bottom, "pi's ↓ hint must survive byte-for-byte");
-      assert.doesNotMatch(stripAnsi(out[out.length - 1] ?? ""), /TPS/);
+      if (width > 30) {
+        const rule = stripAnsi(out[out.length - 1] ?? "");
+        assert.match(rule, /^╰─.*╯$/, `framed bottom rule at ${width}: ${rule}`);
+        assert.match(rule, /↓ \d+ more/, "pi's ↓ hint must survive inside the frame");
+        assert.match(rule, /TPS 60\.0 tok\/s/);
+      } else {
+        assert.equal(out[out.length - 1], bottom, "below the framing width pi's rows pass through");
+        assert.doesNotMatch(stripAnsi(out[out.length - 1] ?? ""), /TPS/);
+      }
     });
   }
 
@@ -199,6 +224,8 @@ describe("pi-tui 1.3.0 scroll-border shape matrix (real renderer)", () => {
     assert.doesNotMatch(stripAnsi(out[0] ?? ""), /↑|↓/);
     assert.match(stripAnsi(out[out.length - 1] ?? ""), /TPS 60\.0 tok\/s/);
     assert.doesNotMatch(stripAnsi(out[out.length - 1] ?? ""), /↑|↓/);
+    assert.match(stripAnsi(out[0] ?? ""), /^╭─.*╮$/, "plain borders are framed");
+    assert.match(stripAnsi(out[out.length - 1] ?? ""), /^╰─.*╯$/);
   });
 });
 
