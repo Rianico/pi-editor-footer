@@ -11,7 +11,7 @@
 
 ### Features
 
-* **editor:** switch the status slot to Ready when the run settles (#59)
+* **editor:** switch the status slot to Ready when the run settles (#59) (#59)
 * **git:** adopt powerlevel10k's composition for the footer git rail (#49)
 * **git:** render in-progress operations in the rail — merging, rebasing, cherry-picking, reverting, am, bisecting (#49)
 * **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
@@ -22,6 +22,7 @@
 
 ### Bug Fixes
 
+* **deps:** pin patched transitives and unblock the release audit
 * **pi-tui:** support pi-tui 1.3.0 border, cursor and mouse rendering (#43)
 * **git:** keep the branch name on a diverged or `[gone]` upstream, and show the detached commit rather than a bare `HEAD` (#49)
 * **git:** keep the last-known rail on a transient status read, and degrade an unsupported `--show-stash` to a partial rail (#49)

@@ -1,3 +1,11 @@
+# pnpm 12 reads overrides and build policy from here (the package.json `pnpm`
+# field is no longer consulted).
+overrides:
+  brace-expansion@>=5.0.0 <5.0.12: 5.0.12
+  fast-uri@<3.1.8: 3.1.8
+  handlebars@<4.7.10: 4.7.10
+  source-map-js@<1.2.2: 1.2.2
+
 allowBuilds:
   '@google/genai': true
   esbuild: true
