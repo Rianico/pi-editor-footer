@@ -73,7 +73,12 @@ export function buildLabel(
   level: string,
   _contextWindow: number,
 ): string {
-  const providerPart = provider === "" ? "" : theme.fg("dim", `${provider}/`);
+  // ADR-0004: the provider is part of the model's identity, not a dim prefix —
+  // it joins the accent+bold run while the "/" between them stays dim. An absent
+  // provider renders nothing at all, never a dangling separator.
+  const providerPart = provider
+    ? `${theme.fg("accent", theme.bold(provider))}${theme.fg("dim", "/")}`
+    : "";
   const modelPart = theme.fg("accent", theme.bold(modelId === "" ? "unknown" : modelId));
   const levelPart = theme.getThinkingBorderColor(level)(level);
   return `${providerPart}${modelPart}${theme.fg("dim", " · ")}${levelPart}`;

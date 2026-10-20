@@ -14,6 +14,7 @@
 * **git:** adopt powerlevel10k's composition for the footer git rail (#49)
 * **git:** render in-progress operations in the rail — merging, rebasing, cherry-picking, reverting, am, bisecting (#49)
 * **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
+* **model:** render the provider with the model's accent styling instead of a dim prefix (#52)
 
 ### Bug Fixes
 
