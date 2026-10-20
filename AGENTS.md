@@ -38,6 +38,12 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - `TurnTelemetryTracker` only summed `turn.messages` (filled at `message_end`), so `peekLive()` returned `outputTokens 0` → `tps null` → `TPS — | ↓ 0` until `turn_end`.
 - Fix: track `liveDeltaChars`/`liveEstimatedTokens` on every `message_update` via `estimateMessageTokens()` (`~4 chars/token` fallback when `pi-coding-agent`'s `estimateTokens` is unavailable) and let `peekLive()` fall back to that estimate. Wired with `refreshLiveTelemetry()` on every `agent/turn/message/tool` event plus a 1 s `liveTickTimer` (`src/index.ts:refreshLiveTelemetry`, `src/telemetry.ts:peekLive`). Verify with `pi --no-session -nc -ne -ns -nt -nbt -e src/index.ts` — before fix: `> TPS — | ~ TTFT 2.6s | + 8.6s | ↑ 0 | ↓ 0 | $ $0.16/M`.
 
+### Working indicator rides the usage row, never the footer
+
+- ADR-0004 rev 2: `TrackingEditor` claims pi's `embedWorkingStatus` + `setWorkingStatusIndicator`, so pi stops pushing its own component above the editor. The segment is the LEFTMOST section of the existing row (`⠋ Working · ↑ 14M · ↓ 89k · $0.15 | T1 · 8s · 2 tools`), built in `src/tracking-editor.ts:workingStatusText` from pi's `renderSpinnerInBorder` plus the indicator's own `message` — `setWorkingMessage("Compacting…")` shows `⠋ Compacting…`, never a hardcoded "Working". While working the row exists even with tokens off and no activity (`⠋ Working | T1 · …`, or `⠋ Working` alone), and `setWorkingStatusIndicator(undefined)` returns it to exactly its previous shape.
+- pi hands the setter **every** indicator kind (no `instanceof` filter, no fallback once the claim is made), so `statusRowText` renders retry/compaction/branch-summary as their own row above the chrome; dropping them would swallow `Retrying (1/3) …`.
+- The footer's own working segment is deleted (`renderTimerSegment`, `glyphs.working`, `FooterState.workingSince`); `lastDoneIn`/timeline state is untouched.
+- Verify with a real interactive pty (`pty.fork` + `TIOCSWINSZ`); `script -q … </dev/null` renders pi's own chrome and silently proves nothing.
 ### Context bar `362/1.0M` missing unit / location
 
 - `footer` used `fmtTokens` (`362k/1.0M` correct) but top border `model-info.ts:formatContextWindow` returned `1m` lowercase no decimal for `1M`. Fixed to `` `${(tokens/1_000_000).toFixed(1)}M` `` → `1.0M` (capital `M`, one decimal) so `362k/1.0M` is consistent.

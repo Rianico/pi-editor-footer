@@ -9,15 +9,22 @@ function stripAnsi(s: string): string {
 /**
  * Rows `renderWithBorders` prepends above the editor's own top border.
  *
- * The token row is the only one: context/glow/activity embed into the existing
- * top border, and the bottom only rewrites a row. Editor mouse hit-testing
- * (`Editor.handleMouse`, pi-tui 1.3.0) indexes rows relative to the editor's own
+ * Two at most, in this order: a **status row** (a pi status indicator we cannot
+ * embed — retry/compaction/branch-summary — rendered above the chrome because pi
+ * hands every indicator to `setWorkingStatusIndicator` once the editor claims
+ * `embedWorkingStatus`), then the **usage row** (working spinner + tokens + run
+ * activity). Context/glow embed into the existing top border, and the bottom
+ * only rewrites a row. Editor mouse hit-testing (`Editor.handleMouse`, pi-tui
+ * 1.3.0) indexes rows relative to the editor's own
  * `[top border][content…][bottom border]` output, so it has to undo this shift —
  * see `TrackingEditor.handleMouse`. Keep the predicate here so render and
  * hit-testing can never drift.
  */
-export function rowsPrependedAboveEditor(opts: { topTokensText?: string }): number {
-  return opts.topTokensText ? 1 : 0;
+export function rowsPrependedAboveEditor(opts: {
+  statusRow?: boolean;
+  usageRow?: boolean;
+}): number {
+  return (opts.statusRow ? 1 : 0) + (opts.usageRow ? 1 : 0);
 }
 
 /**
@@ -41,6 +48,10 @@ export class BorderRenderer {
       topRightText?: string;
       topContextText?: string;
       topTokensText?: string;
+      /** Already-styled working segment (spinner + message); leftmost on the usage row. */
+      workingText?: string;
+      /** Already-styled pi status we do not embed (retry…); rendered above the usage row. */
+      statusLineText?: string;
     },
   ): string[] {
     let out = [...lines];
@@ -48,7 +59,9 @@ export class BorderRenderer {
 
     // Top: model info left, context bar right of it, run-activity far right
     const hasTop =
-      opts.glowEnabled || opts.topContextText || (!opts.topTokensText && opts.topRightText);
+      opts.glowEnabled ||
+      opts.topContextText ||
+      (!opts.topTokensText && !opts.workingText && opts.topRightText);
     if (hasTop) {
       const theme = this.getLiveTheme();
       const info = this.getModelInfo();
@@ -56,7 +69,7 @@ export class BorderRenderer {
       const glowFor = resolveThinkingGlow(theme);
       const glow = (s: string): string => (glowFor ? glowFor(info.level, s) : s);
       // When tokens line exists, right moves to that line (one padding) — don't duplicate on top
-      const topRightForTop = opts.topTokensText ? "" : opts.topRightText;
+      const topRightForTop = opts.topTokensText || opts.workingText ? "" : opts.topRightText;
       if (opts.glowEnabled) {
         // Build left label; if context bar present, append it to the right of model info with pipe separator
         let leftLabel = buildLabel(
@@ -90,21 +103,31 @@ export class BorderRenderer {
       }
     }
 
-    // Tokens above model info — left aligned, no border; right moved close to tokens with | separator per user request
-    if (opts.topTokensText || opts.topRightText) {
-      const tokensLeft = opts.topTokensText ?? "";
-      const tokensRight = opts.topRightText ?? "";
-      if (rowsPrependedAboveEditor(opts) > 0) {
-        // Use | as separator between ↑/↓ and tool turns (dimmed) per user request
-        // SAFETY: pi theme seam — fg is optional theme method
-        const themeForTokens = this.getLiveTheme() as unknown as {
-          fg: (c: string, t: string) => string;
-        }; // SAFETY: intentional unsafe cast — validated at runtime
-        const fg = themeForTokens.fg;
-        const dimPipe = typeof fg === "function" ? fg.call(themeForTokens, "dim", " | ") : " | ";
-        const combined = tokensRight ? `${tokensLeft}${dimPipe}${tokensRight}` : tokensLeft;
-        out = embedTokensAbove(out, width, combined);
-      }
+    // Rows above the top border — left aligned, no border.
+    // Usage row: the working spinner is the leftmost SECTION (ADR-0004 rev 2), so it
+    // joins the tokens with `·`; run activity is a separate FIELD after ` | `.
+    // Status row: pi indicators we cannot embed keep rendering above the editor.
+    const statusLineText = opts.statusLineText ?? "";
+    const usageParts = [opts.workingText ?? "", opts.topTokensText ?? ""].filter(Boolean);
+    const tokensRight = opts.topRightText ?? "";
+    const usageRow = usageParts.length > 0 || tokensRight !== "";
+    if (usageRow || statusLineText) {
+      // SAFETY: pi theme seam — fg is optional theme method
+      const themeForRows = this.getLiveTheme() as unknown as {
+        fg: (c: string, t: string) => string;
+      }; // SAFETY: intentional unsafe cast — validated at runtime
+      const fg = themeForRows.fg;
+      const dimSection = typeof fg === "function" ? fg.call(themeForRows, "dim", " · ") : " · ";
+      const dimField = typeof fg === "function" ? fg.call(themeForRows, "dim", " | ") : " | ";
+      const usage = usageParts.join(dimSection);
+      const usageText = usage
+        ? tokensRight
+          ? `${usage}${dimField}${tokensRight}`
+          : usage
+        : tokensRight;
+      // embedTokensAbove prepends, so emit bottom-up: usage first, status ends up on top.
+      if (usageText) out = embedTokensAbove(out, width, usageText);
+      if (statusLineText) out = embedTokensAbove(out, width, statusLineText);
     }
 
     // Bottom embedding (telemetry left/right)

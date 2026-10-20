@@ -4,7 +4,6 @@ export interface IconGlyphs {
   cwd: string;
   session: string;
   git: string;
-  working: string;
   done: string;
   context: string;
   model: string;
@@ -29,7 +28,6 @@ const NERD_GLYPHS: IconGlyphs = {
   cwd: "",
   session: "",
   git: "",
-  working: "",
   done: "",
   context: "",
   model: "",
@@ -55,7 +53,6 @@ const ASCII_GLYPHS: IconGlyphs = {
   session: "s",
   // p10k's ascii branch set has no icon, which also clears the old `*` vs dirty-marker collision
   git: "",
-  working: "o",
   done: "+",
   context: "#",
   model: "M",

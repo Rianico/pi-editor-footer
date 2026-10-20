@@ -16,6 +16,7 @@
 * **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
 * **model:** render the provider with the model's accent styling instead of a dim prefix (#52)
 * **chrome:** apply one separator rule — `|` between fields, `·` within a field, retiring `•` (#53)
+* **editor:** embed the working indicator as the leftmost section of the usage row above the top rule, and drop the footer's own working segment (#55)
 
 ### Bug Fixes
 
