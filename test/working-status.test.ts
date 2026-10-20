@@ -246,3 +246,33 @@ describe("footer carries no working segment", () => {
     assert.ok(!/working/i.test(line), "the working segment belongs to the editor usage row");
   });
 });
+
+describe("status switches to Ready when the run settles", () => {
+  test("idle after a run keeps the slot and reads Ready", () => {
+    const editor = makeEditor({ topTokensText: TOKENS, topRightText: ACTIVITY });
+    assert.equal(content(editor.render(WIDTH)[0]), `● Ready · ${TOKENS} | ${ACTIVITY}`);
+  });
+
+  test("a fresh session grows no row just to say Ready", () => {
+    const editor = makeEditor();
+    const lines = editor.render(WIDTH);
+    assert.ok(!lines.some((line) => line.includes("Ready")), "no row before the first run");
+  });
+
+  test("retrying is not Ready: its own row above, no status claim in the slot", () => {
+    const editor = makeEditor({ topTokensText: TOKENS });
+    editor.setWorkingStatusIndicator(indicator({ kind: "retry", border: "Retrying (1/3) …" }));
+    const lines = editor.render(WIDTH);
+    assert.equal(content(lines[0]), "Retrying (1/3) …");
+    assert.equal(content(lines[1]), TOKENS);
+    assert.ok(!lines.some((line) => line.includes("Ready")));
+  });
+
+  test("the status flips Working → Ready across one run", () => {
+    const editor = makeEditor({ topTokensText: TOKENS });
+    editor.setWorkingStatusIndicator(indicator({ kind: "working", message: "Working" }));
+    assert.equal(content(editor.render(WIDTH)[0]), `⠋ Working · ${TOKENS}`);
+    editor.setWorkingStatusIndicator(undefined);
+    assert.equal(content(editor.render(WIDTH)[0]), `● Ready · ${TOKENS}`);
+  });
+});

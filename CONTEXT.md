@@ -49,7 +49,7 @@ The rounded border wrapped around the input editor — `╭─ … ─╮` top r
 _Avoid_: editor border, box, outline
 
 **Working indicator**:
-pi's live run indicator (`⠋ Working`) rendered at the leftmost of the usage group on the stats line via the editor's `embedWorkingStatus` protocol, so pi never adds its own component above the editor. Carries no elapsed time — duration belongs to the run-activity section.
+pi's live run indicator (`⠋ Working`) rendered at the leftmost of the usage group on the stats line via the editor's `embedWorkingStatus` protocol, so pi never adds its own component above the editor. Carries no elapsed time — duration belongs to the run-activity section. When the run settles the slot does not empty: it switches to `● Ready` (atelier's idle counterpart), so the status never vanishes or moves; a fresh session grows no row just to say it is idle, and a non-working indicator (retry) leaves the slot empty rather than claiming Ready.
 _Avoid_: spinner, loader, progress bar
 
 **Field**:
