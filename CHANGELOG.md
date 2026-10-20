@@ -15,6 +15,7 @@
 * **git:** render in-progress operations in the rail — merging, rebasing, cherry-picking, reverting, am, bisecting (#49)
 * **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
 * **model:** render the provider with the model's accent styling instead of a dim prefix (#52)
+* **chrome:** apply one separator rule — `|` between fields, `·` within a field, retiring `•` (#53)
 
 ### Bug Fixes
 

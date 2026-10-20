@@ -117,7 +117,7 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
               {
                 title: "Context Cache Graph",
                 getTitle: () => `Context Cache Graph — ${graphViewLabel(currentView)}`,
-                helpText: "1/2/3 view • r refresh • v cycle • ↑/↓ scroll • PgUp/PgDn • q/Esc close",
+                helpText: "1/2/3 view · r refresh · v cycle · ↑/↓ scroll · PgUp/PgDn · q/Esc close",
                 renderBody: (innerWidth) =>
                   renderGraphBody(
                     theme,
@@ -160,7 +160,7 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
             theme,
             {
               title: "Context Cache Stats",
-              helpText: "r refresh • ↑/↓ scroll • PgUp/PgDn • q/Esc close",
+              helpText: "r refresh · ↑/↓ scroll · PgUp/PgDn · q/Esc close",
               renderBody: (innerWidth) => renderStatsBody(theme, metrics, innerWidth),
               onKey: (data) => {
                 if (data === "r") {

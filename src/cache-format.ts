@@ -29,13 +29,14 @@ export function promptTokensOfTotals(
 }
 
 export function formatTotalsLine(label: string, totals: CacheUsageTotals): string {
-  return [
-    `${label}:`,
+  // Label owns the colon+space; the sections that follow are one field, so they
+  // join with `·` — never `label: · first`.
+  return `${label}: ${[
     `${formatInt(totals.assistantMessages)} turns`,
     `prompt ${formatInt(promptTokensOfTotals(totals))}`,
     `received ${formatInt(totals.output)}`,
     `cache hit ${formatInt(totals.cacheRead)}`,
     `cache write ${formatInt(totals.cacheWrite)}`,
     `hit rate ${formatPercent(summarizeHitPercent(totals))}`,
-  ].join(" • ");
+  ].join(" · ")}`;
 }
