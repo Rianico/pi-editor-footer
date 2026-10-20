@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-20
+
 ### Features
 
 * **editor:** switch the status slot to Ready when the run settles (#59) (#59)

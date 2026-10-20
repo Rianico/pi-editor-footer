@@ -1,2 +1,1 @@
 # Legacy unattributed baseline
-**imports:** use .js extensions for NodeNext module resolution
