@@ -14,10 +14,10 @@
 * **git:** adopt powerlevel10k's composition for the footer git rail (#49)
 * **git:** render in-progress operations in the rail — merging, rebasing, cherry-picking, reverting, am, bisecting (#49)
 * **footer:** split the detached sha (identity) from the optional tag (decoration) (#49)
-* **model:** render the provider with the model's accent styling instead of a dim prefix (#52)
-* **chrome:** apply one separator rule — `|` between fields, `·` within a field, retiring `•` (#53)
-* **editor:** embed the working indicator as the leftmost section of the usage row above the top rule, and drop the footer's own working segment (#55)
-* **editor:** frame the input with rounded rails, rendering the body at `width - 4` so wrapping and the caret stay inside the frame (#54)
+* **model:** render the provider with the model's accent styling instead of a dim prefix (#58)
+* **chrome:** apply one separator rule — `|` between fields, `·` within a field, retiring `•` (#58)
+* **editor:** embed the working indicator as the leftmost section of the usage row above the top rule, and drop the footer's own working segment (#58)
+* **editor:** frame the input with rounded rails, rendering the body at `width - 4` so wrapping and the caret stay inside the frame (#58)
 
 ### Bug Fixes
 
@@ -31,6 +31,8 @@
 
 ### Documentation
 
+* **adr:** correct the indicator premise — every kind reaches the editor (#54)
+* **adr:** frame the editor and unify chrome separators (#52)
 * **changelog:** attribute the #48 entry to PR #50 and drop the duplicate rail bullet (#50)
 * **adr:** adopt powerlevel10k composition for the git rail (#49)
 * **specs:** mark the git state engine spec superseded by ADR-0003 (#49)

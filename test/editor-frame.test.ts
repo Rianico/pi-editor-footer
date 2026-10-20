@@ -12,10 +12,12 @@ import { describe, test } from "node:test";
 import {
   BorderRenderer,
   EDITOR_FRAME_CHROME,
+  FRAME_GLYPHS,
   MIN_FRAMED_WIDTH,
   editorFramePlan,
   rowsPrependedAboveEditor,
 } from "../src/border-renderer.js";
+import { resolveGlyphs } from "../src/icons.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { stripAnsi } from "../src/format.js";
 
@@ -93,6 +95,32 @@ describe("frame compositor", () => {
       );
       assert.equal(rows[1], "hello");
     }
+  });
+
+  // `icons.mode` swaps icon *sets*; box drawing is chrome, not an icon, so the frame
+  // must be identical in both modes. The resolvers are consulted here (not the raw
+  // constant) so the test also proves the two modes really do differ — otherwise the
+  // assertion would hold vacuously.
+  test("box drawing is mode-independent: ascii glyph resolution does not touch the frame", () => {
+    const ascii = resolveGlyphs("ascii");
+    const nerd = resolveGlyphs("nerd");
+    assert.notDeepEqual(ascii, nerd, "the two modes must differ, or the pin is vacuous");
+    assert.notEqual(ascii.git, nerd.git, "the modes really do swap glyphs");
+    assert.equal(ascii.git, "", "ascii drops the nerd icon rather than substituting a box glyph");
+
+    // The frame never reads the glyph set — it is the same rows either way.
+    const rows = plain(
+      renderer().renderWithBorders(body("hello"), 60, {
+        glowEnabled: false,
+        topContextText: "14.6% · 146k",
+      }),
+    );
+    assert.match(rows[0] ?? "", /^╭─/);
+    assert.match(rows[0] ?? "", /╮$/);
+    assert.match(rows[1] ?? "", /^│ .* │$/);
+    assert.match(rows[2] ?? "", /^╰─+╯$/);
+    for (const glyph of Object.values(FRAME_GLYPHS)) assert.ok(glyph.length === 1);
+    assert.deepEqual(Object.values(FRAME_GLYPHS), ["╭", "╮", "╰", "╯", "│", "─"]);
   });
 
   test("top rule carries the model field then the context field, bottom the telemetry", () => {
