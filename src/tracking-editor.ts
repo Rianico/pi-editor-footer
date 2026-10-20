@@ -8,9 +8,31 @@ import {
   type TuiMouseEvent,
   type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
-import type { ModelInfo, ThemeLike } from "./model-info.js";
-import { BorderRenderer, rowsPrependedAboveEditor } from "./border-renderer.js";
+import { resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
+import {
+  BorderRenderer,
+  EDITOR_FRAME_CHROME,
+  editorFramePlan,
+  rowsPrependedAboveEditor,
+} from "./border-renderer.js";
 import { CursorPolicy, type CursorStyle } from "./cursor-policy.js";
+
+/**
+ * Structural slice of pi's `StatusIndicator` (status-indicator.js, pi 1.3.0) that
+ * the editor needs. Kept structural so this extension never imports pi internals.
+ * `message` is private on pi's `Loader` type but is a runtime field — the working
+ * segment must echo the indicator's message, never a hardcoded "Working".
+ */
+export interface EmbeddableStatusIndicator {
+  readonly kind?: string;
+  readonly message?: string;
+  renderInBorder(width: number): string;
+  renderSpinnerInBorder(width: number): string;
+}
+
+function isWorkingIndicator(indicator: EmbeddableStatusIndicator): boolean {
+  return indicator.kind === "working";
+}
 
 export interface ChromeSnapshot {
   modelInfo: ModelInfo;
@@ -79,11 +101,23 @@ export class TrackingEditor extends Editor {
   private readonly cursorPolicy: CursorPolicy;
   private readonly borderRenderer: BorderRenderer;
 
+  /**
+   * pi's `embedWorkingStatus` contract (CustomEditor parity, pi 1.3.0): claiming it
+   * makes pi hand every status indicator to `setWorkingStatusIndicator` instead of
+   * pushing its own component above the editor. Working rides the usage row; any
+   * other kind is rendered by us as a row above the chrome — never swallowed.
+   */
+  readonly embedWorkingStatus = true;
+
+  private statusIndicator?: EmbeddableStatusIndicator;
+  /** Rows `render` prepended last call — `handleMouse` undoes exactly this shift. */
+  private lastPrependedRows = 0;
+
   constructor(
     tui: TUI,
     theme: EditorTheme,
     keybindings: KeybindingsLike,
-    getLiveTheme: () => ThemeLike,
+    private readonly getLiveTheme: () => ThemeLike,
     options?: EditorOptions,
   ) {
     super(tui, theme, options);
@@ -91,6 +125,37 @@ export class TrackingEditor extends Editor {
     this.cursorPolicy = new CursorPolicy(tui);
     this.borderRenderer = new BorderRenderer(getLiveTheme, () => this._chrome.modelInfo);
     this.patchApplyAutocompleteSuggestions();
+  }
+
+  /**
+   * pi seam: last indicator wins, `undefined`/`null` clears it (pi calls this with
+   * `undefined` on every `clearStatusIndicator`). pi ignores a return value here,
+   * so the editor renders non-working kinds itself below.
+   */
+  setWorkingStatusIndicator(indicator?: EmbeddableStatusIndicator | null): void {
+    this.statusIndicator = indicator ?? undefined;
+    this.tui.requestRender();
+  }
+
+  /** `⠋ Working` — pi's spinner glyph plus the indicator's own message (ADR-0004 rev 2). */
+  private workingStatusText(width: number): string {
+    const indicator = this.statusIndicator;
+    if (!indicator || !isWorkingIndicator(indicator)) return "";
+    const message = typeof indicator.message === "string" ? indicator.message : "";
+    if (!message) return indicator.renderInBorder(width).trim();
+    const glowFor = resolveThinkingGlow(this.getLiveTheme());
+    // pi colours an embedded indicator with the editor border colour (thinking glow)
+    const painted = glowFor
+      ? glowFor(this._chrome.modelInfo.level, message)
+      : this.getLiveTheme().fg("muted", message);
+    return `${indicator.renderSpinnerInBorder(width)} ${painted}`;
+  }
+
+  /** Non-working indicators (retry/compaction/…) stay above the editor, as pi placed them. */
+  private statusRowText(width: number): string {
+    const indicator = this.statusIndicator;
+    if (!indicator || isWorkingIndicator(indicator)) return "";
+    return indicator.renderInBorder(width).trim();
   }
 
   onAction(action: string, handler: () => void): void {
@@ -161,7 +226,7 @@ export class TrackingEditor extends Editor {
     ).autocompleteList; // SAFETY: private pi-tui interior seam
   }
 
-  private renderBase(width: number): string[] {
+  private renderBody(width: number): string[] {
     const lines = super.render(width);
     const isFocused =
       // SAFETY: focused is private Editor state read-only for cursor policy; fallback false preserves behavior
@@ -175,8 +240,18 @@ export class TrackingEditor extends Editor {
   }
 
   override render(width: number): string[] {
-    let lines = this.renderBase(width);
+    // The frame spends EDITOR_FRAME_CHROME columns on rails + inner padding, so the
+    // body is rendered at bodyWidth — wrapping, the caret and the scroll window are
+    // all computed against the columns the text actually gets.
+    const plan = editorFramePlan(width);
+    let lines = this.renderBody(plan.bodyWidth);
     if (lines.length === 0) return lines;
+    const workingText = this.workingStatusText(width);
+    const statusLineText = this.statusRowText(width);
+    this.lastPrependedRows = rowsPrependedAboveEditor({
+      statusRow: statusLineText !== "",
+      usageRow: Boolean(workingText || this._chrome.topTokensText || this._chrome.topRightText),
+    });
     lines = this.borderRenderer.renderWithBorders(lines, width, {
       glowEnabled: this._chrome.glowEnabled,
       telemetryText: this._chrome.telemetryText,
@@ -184,6 +259,8 @@ export class TrackingEditor extends Editor {
       topRightText: this._chrome.topRightText,
       topContextText: this._chrome.topContextText,
       topTokensText: this._chrome.topTokensText,
+      workingText,
+      statusLineText,
     });
     return lines;
   }
@@ -200,8 +277,18 @@ export class TrackingEditor extends Editor {
   override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
     const parentHandleMouse: unknown = super.handleMouse;
     if (typeof parentHandleMouse !== "function") return undefined;
-    const prependedRows = rowsPrependedAboveEditor({ topTokensText: this._chrome.topTokensText });
-    const shifted = prependedRows === 0 ? event : { ...event, y: event.y - prependedRows };
+    const prependedRows = this.lastPrependedRows;
+    const prepared = (event: { y: number; x: number; width: number }): TuiMouseEvent => {
+      const plan = editorFramePlan(event.width);
+      const railColumns = plan.framed ? EDITOR_FRAME_CHROME / 2 : 0;
+      return {
+        ...event,
+        x: event.x - railColumns,
+        width: plan.bodyWidth,
+        y: event.y - prependedRows,
+      } as TuiMouseEvent;
+    };
+    const shifted = prepared(event);
     return (parentHandleMouse as (e: TuiMouseEvent) => TuiMouseEventResult | undefined).call(
       this,
       shifted,

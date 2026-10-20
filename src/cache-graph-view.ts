@@ -347,7 +347,7 @@ export function renderGraphBody(
         `Min: ${formatPercent(minHitPercent(messages))}`,
         `Max: ${formatPercent(maxHitPercent(messages))}`,
         `Turns: ${formatInt(messages.length)}`,
-      ].join(" • "),
+      ].join(" · "),
     );
   } else {
     lines.push(`Turns: ${formatInt(messages.length)}`);

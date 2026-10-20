@@ -58,10 +58,10 @@ function buildCumulativeSummary(theme: CacheTheme, metrics: CacheSessionMetrics)
     theme.fg("accent", theme.bold("Cumulative totals")),
     formatTotalsLine("Active branch", metrics.activeBranchTotals),
     formatTotalsLine("Whole tree", metrics.treeTotals),
-    `Delta (tree - branch): prompt ${formatInt(promptTokensOfTotals(metrics.treeTotals) - promptTokensOfTotals(metrics.activeBranchTotals))} • ` +
-      `received ${formatInt(metrics.treeTotals.output - metrics.activeBranchTotals.output)} • ` +
-      `cache hit ${formatInt(metrics.treeTotals.cacheRead - metrics.activeBranchTotals.cacheRead)} • ` +
-      `cache write ${formatInt(metrics.treeTotals.cacheWrite - metrics.activeBranchTotals.cacheWrite)} • ` +
+    `Delta (tree - branch): prompt ${formatInt(promptTokensOfTotals(metrics.treeTotals) - promptTokensOfTotals(metrics.activeBranchTotals))} · ` +
+      `received ${formatInt(metrics.treeTotals.output - metrics.activeBranchTotals.output)} · ` +
+      `cache hit ${formatInt(metrics.treeTotals.cacheRead - metrics.activeBranchTotals.cacheRead)} · ` +
+      `cache write ${formatInt(metrics.treeTotals.cacheWrite - metrics.activeBranchTotals.cacheWrite)} · ` +
       `hit-rate spread ${formatPercent(treeHitRate - branchHitRate)}`,
   ];
 }

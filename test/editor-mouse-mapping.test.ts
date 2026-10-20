@@ -122,10 +122,12 @@ async function renderWithAutocomplete(topTokensText: string): Promise<{
 }
 
 describe("editor mouse mapping with/without the tokens row", () => {
-  test("rowsPrependedAboveEditor mirrors BorderRenderer's extra row", () => {
+  test("rowsPrependedAboveEditor mirrors BorderRenderer's extra rows", () => {
     assert.equal(rowsPrependedAboveEditor({}), 0);
-    assert.equal(rowsPrependedAboveEditor({ topTokensText: "" }), 0);
-    assert.equal(rowsPrependedAboveEditor({ topTokensText: TOKENS }), 1);
+    assert.equal(rowsPrependedAboveEditor({ usageRow: false }), 0);
+    assert.equal(rowsPrependedAboveEditor({ usageRow: true }), 1);
+    assert.equal(rowsPrependedAboveEditor({ statusRow: true }), 1);
+    assert.equal(rowsPrependedAboveEditor({ statusRow: true, usageRow: true }), 2);
   });
 
   for (const topTokensText of ["", TOKENS] as const) {

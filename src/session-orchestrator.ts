@@ -296,7 +296,6 @@ export class SessionOrchestrator {
     this.agentLedger.reset();
     this.footerState = {
       ...this.footerState,
-      workingSince: undefined,
       lastDoneIn: undefined,
     };
     this.liveBorder.stopTick();
@@ -681,7 +680,6 @@ export class SessionOrchestrator {
       this.agentStartMs = Date.now();
       this.footerState = {
         ...this.footerState,
-        workingSince: this.agentStartMs,
         lastDoneIn: undefined,
       };
       this.liveBorder.startTick();
@@ -764,15 +762,9 @@ export class SessionOrchestrator {
         settledFromLedger;
       this.runActivityTracker.settle();
       this.liveBorder.stopTick();
-      if (this.agentStartMs === null) {
-        this.footerState = { ...this.footerState, workingSince: undefined };
-      } else {
+      if (this.agentStartMs !== null) {
         const doneIn = Date.now() - this.agentStartMs;
-        this.footerState = {
-          ...this.footerState,
-          workingSince: undefined,
-          lastDoneIn: doneIn,
-        };
+        this.footerState = { ...this.footerState, lastDoneIn: doneIn };
         this.agentStartMs = null;
       }
       try {

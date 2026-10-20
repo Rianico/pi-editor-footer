@@ -18,7 +18,6 @@ export interface FooterState {
   gitAction: string;
   runtime: RuntimeInfo | null;
   sessionStartEpoch: number;
-  workingSince: number | undefined;
   lastDoneIn: number | undefined;
 }
 
@@ -113,7 +112,6 @@ export function createInitialState(): FooterState {
     gitAction: "",
     runtime: null,
     sessionStartEpoch: Date.now(),
-    workingSince: undefined,
     lastDoneIn: undefined,
   };
 }

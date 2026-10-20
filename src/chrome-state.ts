@@ -103,7 +103,7 @@ export function formatContextBar(
     : baseCore;
   const rate = cacheHitRate !== undefined && Number.isFinite(cacheHitRate) ? cacheHitRate : 0;
   const cacheText = `${glyphs.cacheHit} ${rate.toFixed(1)}%`;
-  return `${theme.fg(cacheHitColor(rate), cacheText)} ${theme.fg("dim", "|")} ${base}`;
+  return `${theme.fg(cacheHitColor(rate), cacheText)} ${theme.fg("dim", "·")} ${base}`;
 }
 
 /** Border adapter helper — one call from snapshot + theme/glyphs. */

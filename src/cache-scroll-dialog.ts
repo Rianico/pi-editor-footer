@@ -130,7 +130,7 @@ export class ScrollDialog implements Component {
     lines.push(`${border}${fitLine("", innerWidth)}${border}`);
 
     const helpText =
-      this.options.helpText ?? "↑/↓ scroll • PgUp/PgDn jump • Home/End • q/Esc close";
+      this.options.helpText ?? "↑/↓ scroll · PgUp/PgDn jump · Home/End · q/Esc close";
     lines.push(`${border}${fitLine(this.theme.fg("dim", helpText), innerWidth)}${border}`);
     lines.push(bottomBorder);
 

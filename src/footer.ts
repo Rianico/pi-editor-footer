@@ -13,7 +13,7 @@ import {
   type Theme,
 } from "./layout.js";
 import { basenamePath, formatCwd, truncatePath } from "./path-format.js";
-import { fmtTokens, formatDuration, sanitizeStatus } from "./format.js";
+import { fmtTokens, sanitizeStatus } from "./format.js";
 
 /**
  * One rail part: text plus the theme colour token it paints.
@@ -109,27 +109,6 @@ function renderRuntimeSegment(
   return label;
 }
 
-function renderTimerSegment(
-  theme: Theme,
-  state: FooterState,
-  glyphs: IconGlyphs,
-  totals?: UsageTotals,
-  config?: ThemeConfig,
-): string {
-  // Wall time dim line — never exposed to model, TUI-only
-  // After agent_end: · 8.3s wall · ↑ 1.2k · ↓ 800 · $0.12 (all dim)
-  // During run: working 8.3s (accent)
-  if (state.workingSince !== undefined) {
-    return `${theme.fg("accent", glyphs.working)} ${theme.fg("dim", "working")} ${theme.fg("accent", formatDuration(Date.now() - state.workingSince))}`;
-  }
-  if (state.lastDoneIn !== undefined) {
-    // Wall time after agent_end is now a dim row after last message (aboveEditor widget), not inline footer
-    // Keep footer clean — wall time lives in transcript, not here
-    return "";
-  }
-  return "";
-}
-
 export function renderFooter(
   width: number,
   state: FooterState,
@@ -188,7 +167,7 @@ export function renderFooter(
   if (segments.sessionName) {
     const sessionName = ctx.sessionName;
     if (sessionName) {
-      const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
+      const sep = leftParts.length > 0 ? `${theme.fg("dim", " · ")}` : "";
       leftParts.push({
         text: `${sep}${theme.fg("dim", glyphs.session)} ${theme.fg("text", truncateToWidth(sessionName, 24, theme.fg("dim", "...")))}`,
         priority: 2,
@@ -204,14 +183,9 @@ export function renderFooter(
   if (segments.runtime) {
     const runtimeSeg = renderRuntimeSegment(theme, state.runtime, config.icons.mode);
     if (runtimeSeg) {
-      const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
+      const sep = leftParts.length > 0 ? `${theme.fg("dim", " | ")}` : "";
       leftParts.push({ text: `${sep}${runtimeSeg}`, priority: 4 });
     }
-  }
-  const timerSeg = renderTimerSegment(theme, state, glyphs, totals, config);
-  if (timerSeg) {
-    const sep = leftParts.length > 0 ? `${theme.fg("dim", " • ")}` : "";
-    leftParts.push({ text: `${sep}${timerSeg}`, priority: 1 });
   }
 
   const stats: string[] = [];
