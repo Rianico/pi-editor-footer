@@ -9,6 +9,7 @@ import {
   GIT_STATUS_ARGS,
   mergeGitStatus,
   parseGitStatus,
+  railKey,
   readGitStatus,
 } from "../src/git.js";
 import type { GitExec } from "../src/git.js";
@@ -363,5 +364,26 @@ describe("git — merge keeps the last-known rail", () => {
   test("a successful read replaces it", () => {
     const next = { ...emptyGitStatus(), branch: "feature", ahead: 1 };
     assert.deepEqual(mergeGitStatus(known, next), next);
+  });
+});
+
+describe("git — railKey is the repaint decision", () => {
+  const base = { ...emptyGitStatus(), branch: "main" };
+
+  test("an unchanged rail keeps its key", () => {
+    assert.equal(railKey(base, ""), railKey({ ...base }, ""));
+  });
+
+  test("every drawn field moves the key", () => {
+    const key = railKey(base, "");
+    assert.notEqual(key, railKey({ ...base, staged: 1 }, ""));
+    assert.notEqual(key, railKey({ ...base, branch: "feat/x" }, ""));
+    assert.notEqual(key, railKey({ ...base, ahead: 1 }, ""));
+    assert.notEqual(key, railKey({ ...base, unmerged: 1 }, ""));
+    assert.notEqual(key, railKey(base, "MERGING"));
+    assert.notEqual(
+      key,
+      railKey({ ...base, commit: { oid: "88aea4a2", detached: false, tag: null } }, ""),
+    );
   });
 });

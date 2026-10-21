@@ -111,6 +111,28 @@ export function mergeGitStatus(previous: GitStatus, next: GitStatus | null): Git
 }
 
 /**
+ * Stable identity of everything the rail draws.
+ *
+ * The poll re-reads the rail every second; a repaint is only owed when this key moves,
+ * so an idle repo costs zero renders no matter how often the read runs.
+ */
+export function railKey(status: GitStatus, action: string): string {
+  const commit = status.commit;
+  return [
+    status.branch ?? "",
+    commit === null ? "" : `${commit.oid ?? ""}:${commit.detached ? "d" : "b"}:${commit.tag ?? ""}`,
+    status.staged,
+    status.unstaged,
+    status.untracked,
+    status.stashed,
+    status.behind,
+    status.ahead,
+    status.unmerged,
+    action,
+  ].join("|");
+}
+
+/**
  * Parse `git status --porcelain=v2 -z --branch --show-stash --untracked-files=all`.
  *
  * Headers (`# …`) carry branch, upstream divergence and stash; record types carry the

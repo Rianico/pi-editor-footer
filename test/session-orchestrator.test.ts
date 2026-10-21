@@ -57,6 +57,47 @@ describe("SessionOrchestrator", () => {
     assert.ok(raw.commands.has("model-info"), "model-info command registered");
   });
 
+  test("git rail clock: armed with the footer, nudged by the run settling, stopped on dispose", () => {
+    const calls = { start: 0, request: 0, stop: 0 };
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+      // Without this seam every read spawns real git in the session cwd.
+      createGitRefresher: () => ({
+        start: () => {
+          calls.start++;
+        },
+        request: () => {
+          calls.request++;
+        },
+        stop: () => {
+          calls.stop++;
+        },
+      }),
+    });
+    const raw = fakePi();
+    const pi = raw as unknown as Parameters<SessionOrchestrator["install"]>[0];
+    orch.install(pi);
+    const fire = (name: string, e: unknown): void => {
+      for (const h of raw.handlers.get(name) ?? []) h(e, fakeCtx() as never);
+    };
+
+    fire("session_start", {});
+    assert.equal(calls.start, 1, "the rail clock is armed with the footer");
+
+    fire("tool_execution_end", { toolCallId: "t1", result: { content: [] } });
+    assert.equal(calls.request, 0, "per-tool refreshes are deliberately not wired");
+
+    fire("agent_settled", {});
+    assert.equal(calls.request, 1, "a settled run refreshes the rail");
+
+    fire("agent_settled", { aborted: true });
+    assert.equal(calls.request, 2, "an aborted run settles too, so it refreshes too");
+
+    orch.dispose();
+    assert.equal(calls.stop, 1, "dispose stops the poll");
+  });
+
   test("detailChrome seam is accessible and hasContent reflects item", () => {
     const orch = new SessionOrchestrator({
       loadConfig: () => structuredClone(DEFAULT_CONFIG),

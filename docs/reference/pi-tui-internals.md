@@ -154,6 +154,7 @@ The older fallback (a `globalThis` scan for `InteractiveMode`, patching `addMess
 
 - The completion popup lists slash commands, templates, extension commands, and skills (`skill:<name>`, description = SKILL.md frontmatter, prefixed with source info). **Tools never appear** — they are agent-invoked, not slash-invocable.
 - No catalog lookups needed: the highlighted `SelectItem` carries its own full description.
+- **Footer git events are rename-only.** `FooterDataProvider.onBranchChange` fires from `notifyBranchChange()`, which compares the newly resolved branch against `cachedBranch` and returns silently when they match. The provider does watch `.git/HEAD` (500 ms debounce, plus a `watchFile` poll on repos where `fs.watch` is unreliable and a reftable watch), but a commit, `add` or stash on the same branch changes HEAD's *content*, not its branch name — no callback. Anything counting staged/unstaged/untracked/ahead/behind/stash must be refreshed from some other event — this repo refreshes on `agent_settled` (`src/git-refresh.ts`).
 
 ## Seams: adopted vs still private (1.3.0)
 

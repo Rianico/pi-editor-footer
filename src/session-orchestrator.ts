@@ -33,8 +33,14 @@ import type { FooterState } from "./state.js";
 import { TurnTelemetryTracker, formatTurnTelemetry } from "./telemetry.js";
 import { createRunActivityTracker } from "./run-activity.js";
 import type { RunActivityTracker } from "./run-activity.js";
-import { mergeGitStatus, readGitStatus } from "./git.js";
+import { mergeGitStatus, railKey, readGitStatus } from "./git.js";
 import { readGitAction } from "./git-action.js";
+import {
+  GitRefresher,
+  type GitRailClock,
+  type GitRailSnapshot,
+  type GitRefresherDeps,
+} from "./git-refresh.js";
 import { readRuntimeInfo } from "./runtime.js";
 import { DetailChrome } from "./detail-chrome.js";
 import type { ModelInfo, ThemeLike } from "./model-info.js";
@@ -205,6 +211,8 @@ export interface SessionOrchestratorDeps {
   loadConfig?: () => ThemeConfig;
   saveConfig?: (patch: Partial<ThemeConfig> & Record<string, unknown>) => ThemeConfig;
   createInitialState?: () => FooterState;
+  /** Test seam — without it every rail read spawns real `git` in the session cwd. */
+  createGitRefresher?: (deps: GitRefresherDeps) => GitRailClock;
 }
 
 export class SessionOrchestrator {
@@ -245,6 +253,13 @@ export class SessionOrchestrator {
     level: "off",
     contextWindow: 0,
   };
+  /**
+   * The rail's clock. pi only reports branch *renames*, so status counts need their own
+   * cadence: one read in flight plus one trailing read collapses poll + events.
+   */
+  private readonly gitRefresher: GitRailClock;
+  /** Last rail identity rendered — an unchanged key owes no repaint. */
+  private gitRailKey: string | null = null;
   private watchTimer: ReturnType<typeof setInterval> | null = null;
   private deferredInstallTimer: ReturnType<typeof setTimeout> | null = null;
   private headerCleanupInner: (() => void) | null = null;
@@ -274,6 +289,15 @@ export class SessionOrchestrator {
       telemetryTracker: this.telemetryTracker,
       runActivityTracker: this.runActivityTracker,
       agentLedger: this.agentLedger,
+    });
+    this.gitRefresher = (deps.createGitRefresher ?? ((d) => new GitRefresher(d)))({
+      read: async () => {
+        const cwd = this.sessionCwd();
+        const [status, action] = await Promise.all([readGitStatus(cwd), readGitAction(cwd)]);
+        return { status, action };
+      },
+      apply: (snapshot) => this.applyGitRail(snapshot),
+      render: () => this.renderFooterFrame(),
     });
     assertInternals();
   }
@@ -310,6 +334,7 @@ export class SessionOrchestrator {
       clearTimeout(this.deferredInstallTimer);
       this.deferredInstallTimer = null;
     }
+    this.gitRefresher.stop();
     if (this.watchTimer !== null) {
       clearInterval(this.watchTimer);
       this.watchTimer = null;
@@ -332,6 +357,9 @@ export class SessionOrchestrator {
   }
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
+  }
+  getGitRefresher(): GitRailClock {
+    return this.gitRefresher;
   }
   getTelemetryTracker(): TurnTelemetryTracker {
     return this.telemetryTracker;
@@ -421,6 +449,54 @@ export class SessionOrchestrator {
     this.liveBorder.render();
   }
 
+  // ——— git rail — one read path, one repaint decision ———
+
+  /** The cwd every pi read path agrees on: session cwd, then ctx cwd, then the process. */
+  private sessionCwd(): string {
+    const ctx = this.lastSessionCtx;
+    const cwd =
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      (
+        ctx as unknown as { sessionManager?: { getCwd?: () => string } }
+      )?.sessionManager?.getCwd?.() ??
+      // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      (ctx as unknown as { cwd?: string })?.cwd;
+    return typeof cwd === "string" && cwd.length > 0 ? cwd : process.cwd();
+  }
+
+  /** Repaint the footer through the function `installFooter` handed pi. */
+  private renderFooterFrame(): void {
+    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
+  }
+
+  /**
+   * Commit one rail read. `null` status means "could not answer", so the merge keeps the
+   * last known rail; the key compare then decides whether a repaint is owed at all.
+   */
+  private applyGitRail(snapshot: GitRailSnapshot): boolean {
+    const git = mergeGitStatus(this.footerState.git, snapshot.status);
+    const key = railKey(git, snapshot.action);
+    if (key === this.gitRailKey) return false;
+    this.gitRailKey = key;
+    this.updateFooterState({ git, gitAction: snapshot.action });
+    return true;
+  }
+
+  /**
+   * Runtime identity/version (`node 26.8.1`) costs a spawn and moves only with the
+   * toolchain, so it refreshes on install and branch change — never on the poll.
+   */
+  private async refreshRuntime(): Promise<void> {
+    try {
+      const runtime = await readRuntimeInfo(this.sessionCwd());
+      this.updateFooterState({ runtime });
+      this.renderFooterFrame();
+    } catch {
+      // SAFETY: best-effort UI, ignore recoverable error
+    }
+  }
+
   // ——— footer lifecycle — single path, deduplicated ———
 
   private ensureFooter(ctx: ExtensionContextLike): void {
@@ -447,71 +523,20 @@ export class SessionOrchestrator {
               fn ?? undefined; // SAFETY: pi seam
           },
           scheduleGitRefresh: () => {
-            void (async () => {
-              try {
-                // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                const cwd =
-                  // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                  (
-                    ctx as unknown as {
-                      sessionManager?: { getCwd: () => string };
-                    }
-                  ).sessionManager // SAFETY: pi seam
-                    ?.getCwd?.() ??
-                  // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                  (ctx as unknown as { cwd?: string }).cwd ??
-                  process.cwd();
-                // A transient failure yields null: keep the last known rail instead of
-                // flickering to `(no git)` on every timeout.
-                const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
-                // Detection rides alongside the status read: a failed probe is "no action",
-                // so the rail keeps branch and counts and only the label disappears.
-                const gitAction = await readGitAction(cwd);
-                this.updateFooterState({ git, gitAction });
-                this.renderLiveChrome();
-                // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
-                const runtime = await readRuntimeInfo(cwd);
-                this.updateFooterState({ runtime });
-                // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-                (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
-              } catch (_e) {
-                void _e; // SAFETY: best-effort UI, ignore recoverable error
-              }
-            })();
+            // pi fires this only when the resolved branch *string* changes (checkout,
+            // worktree switch) — commits and adds never fire it, the poll owns those.
+            this.gitRefresher.request();
+            void this.refreshRuntime();
           },
         },
       );
     } catch (_e) {
       void _e; // SAFETY: best-effort UI, ignore recoverable error
     }
-    void (async () => {
-      try {
-        // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        const cwd =
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          (ctx as unknown as { sessionManager?: { getCwd: () => string } }).sessionManager // SAFETY: pi seam
-            ?.getCwd?.() ??
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          (ctx as unknown as { cwd?: string }).cwd ??
-          process.cwd();
-        // A transient failure yields null: keep the last known rail instead of flickering
-        // to `(no git)` on every timeout.
-        const git = mergeGitStatus(this.footerState.git, await readGitStatus(cwd));
-        // A failed probe is "no action", never an empty rail.
-        const gitAction = await readGitAction(cwd);
-        this.updateFooterState({ git, gitAction });
-        this.renderLiveChrome();
-        // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
-        const runtime = await readRuntimeInfo(cwd);
-        this.updateFooterState({ runtime });
-        // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-        (globalThis as unknown as { __footerRender?: () => void }).__footerRender?.();
-      } catch (_e) {
-        void _e; // SAFETY: best-effort UI, ignore recoverable error
-      }
-    })();
+    // First read is immediate; the poll then keeps status + action fresh. Runtime
+    // identity costs its own spawn and only moves with the toolchain.
+    this.gitRefresher.start();
+    void this.refreshRuntime();
     this.installedEditor?.setChrome({
       cursorStyle: this.currentConfig.cursorStyle,
     });
@@ -521,6 +546,7 @@ export class SessionOrchestrator {
   private removeFooter(): void {
     this.footerCleanup?.();
     this.footerCleanup = null;
+    this.gitRefresher.stop();
     // SAFETY: pi seam — intentional unsafe cast, validated at runtime
     (globalThis as unknown as { __footerRender?: () => void }).__footerRender = undefined;
   }
@@ -826,6 +852,9 @@ export class SessionOrchestrator {
           void _e; // SAFETY: best-effort UI, ignore recoverable error
         }
       }
+      // The run ended or was aborted (pi emits agent_settled for both): the rail may
+      // have changed under it, and this is the moment the user reads it.
+      this.gitRefresher.request();
       this.agentLedger.reset();
       this.renderLiveChrome();
     });
