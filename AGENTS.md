@@ -10,7 +10,11 @@ The five canonical triage roles use their default label names (`needs-triage`, `
 
 ### Domain docs
 
-Single-context — one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context — one `GLOSSARY.md` (ubiquitous language) and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Environment
+
+Resolved toolchain/provider snapshot: `docs/agents/env.yaml`. Detected CLI status: `docs/agents/toolchain.md` — note the detector probes `PATH` only, so `oxlint`/`oxfmt` show as missing although they are repo-local devDependencies (`pnpm lint`, `pnpm format`).
 
 ### Contribution
 

@@ -194,4 +194,4 @@ The replacement itself is deliberate — see ADR-0001 (why the popup internals a
 
 ## Glossary / decisions
 
-See `CONTEXT.md` (Completion popup, Candidate, Detail window, Highlight) and `docs/adr/0001-tracking-editor-for-skill-descriptions.md` (accepted) before implementing.
+See `GLOSSARY.md` (Completion popup, Candidate, Detail window, Highlight) and `docs/adr/0001-tracking-editor-for-skill-descriptions.md` (accepted) before implementing.

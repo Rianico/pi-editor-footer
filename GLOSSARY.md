@@ -1,4 +1,4 @@
-# pi-skill-desc
+# pi-editor-footer
 
 A pi coding-agent extension that augments the built-in slash-command completion with a full description preview for the highlighted candidate.
 

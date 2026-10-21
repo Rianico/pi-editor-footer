@@ -2,7 +2,7 @@
  * AgentRunLedger — deep module owning per-Agent-run accounting behind one seam.
  *
  * Domain: Agent run = agent_start → agent_settled, containing one or more Turns
- * (CONTEXT.md). Per-agent totals must use max(input) not sum(input) — each Turn's
+ * (GLOSSARY.md). Per-agent totals must use max(input) not sum(input) — each Turn's
  * input is the full prompt (includes history), so summing double-counts overlapping
  * history (e.g. 50k+60k=110k > window 60k). Output/cost do sum. Live input is window
  * occupancy, capped to contextWindow and session totals.
