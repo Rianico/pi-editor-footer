@@ -18,11 +18,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Fail fast on a stale node_modules: a drifted pi-tui looks exactly like API breakage (#44).
       - run: node --import tsx scripts/check-pinned-versions.ts
-      # `braces@3.0.3` (semantic-release -> micromatch) has no patched release,
-      # so `high` can never pass here. `critical` keeps actionable advisories
-      # blocking. The only `high` left is `braces` (no patched version exists);
-      # it is release tooling, so it is tolerated rather than re-audited weekly.
-      - run: pnpm audit --audit-level critical
+      # The gate is `high`, configured once in `pnpm-workspace.yaml` (`audit.level`)
+      # so this step and a local `pnpm audit` agree. Advisories that cannot be fixed
+      # are named there individually (`audit.ignore`) instead of raising the threshold
+      # for everything else.
+      - run: pnpm audit --audit-level high
       - run: pnpm run lint && pnpm run format && pnpm run typecheck && pnpm test
   release:
     needs: verify
