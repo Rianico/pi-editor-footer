@@ -10,3 +10,18 @@ allowBuilds:
   '@google/genai': true
   esbuild: true
   protobufjs: true
+
+# Audit policy. `level: high` is the gate CI used to soften to `critical` because
+# `braces` had no patch; with every fixable advisory resolved the gate is back on
+# `high`, and the one advisory that genuinely cannot be fixed is named here instead
+# of lowering the bar for everything else (AGENTS.md "Dependency audit").
+audit:
+  level: high
+  ignore:
+    # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm, stack exhaustion on deeply nested
+    # patterns): no patched release exists — 3.0.3 is the latest and micromatch,
+    # its only consumer here, requires ^3.0.3. Reachable only from release tooling
+    # (semantic-release > micromatch) parsing our own commit messages and tags.
+    # Drop this entry once braces ships a fix; `ignorePrune` does it automatically.
+    - GHSA-vfj7-8cjw-p6xm
+  ignorePrune: true
