@@ -1,1 +1,2 @@
 # Legacy unattributed baseline
+**footer:** refresh the git rail when the run settles

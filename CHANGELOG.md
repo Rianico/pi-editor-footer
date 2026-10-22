@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-22
+
 ### Bug Fixes
 
 * **footer:** refresh the git rail when the run settles
