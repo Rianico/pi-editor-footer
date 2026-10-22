@@ -11,7 +11,7 @@
 
 ### Bug Fixes
 
-* **deps:** clear the high advisories and gate the audit at high
+* **deps:** clear the high advisories and gate the audit at high (#60)
 
 ## [0.14.1] - 2026-10-22
 
