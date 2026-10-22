@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-22
+
 ### Bug Fixes
 
 * **deps:** clear the high advisories and gate the audit at high (#60)
