@@ -36,6 +36,10 @@ _Avoid_: agent session, agent round (round ≡ turn confusion)
 One `turn_start` → `turn_end` = one LLM call inside an **Agent run**. `TTFT`/`TPS` are per-turn; wall time is per-agent-run.
 _Avoid_: round, iteration
 
+**Session run time**:
+The cumulative wall time of every **Agent run** in the current **Pi session** — each run's `agent_start` → `agent_settled` duration, tool execution included, aborted runs counted up to the abort, idle time between runs excluded. Rendered as the rightmost field of the editor frame's top rule (e.g. `2h 32m 1s`) and persisted with the **Pi session**, so resuming continues the accumulated count.
+_Avoid_: total duration, turns' time (a **Turn** is one LLM call, not a run), session wall clock
+
 **Git rail**:
 The footer's git segment, immediately right of the cwd: branch glyph (nerd only — p10k's ascii set has none) + branch, or the short commit sha when HEAD is detached (plus the tag when `gitCommit` is on), then powerlevel10k's ordered parts — staged, unstaged, untracked, behind, ahead, stash — space separated with no brackets, a part rendered bare when its count is 1 (stash is the exception and always counts), conflicts shown by colour alone (ADR-0003).
 _Avoid_: git status block, branch segment, git widget
