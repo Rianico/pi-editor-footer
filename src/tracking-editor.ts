@@ -40,6 +40,7 @@ export interface ChromeSnapshot {
   glowEnabled: boolean;
   topRightText: string;
   topContextText: string;
+  topRunTimeText: string;
   topTokensText: string;
   telemetryText: string;
   bottomLeftText: string;
@@ -56,6 +57,7 @@ const DEFAULT_CHROME: ChromeSnapshot = {
   glowEnabled: true,
   topRightText: "",
   topContextText: "",
+  topRunTimeText: "",
   topTokensText: "",
   telemetryText: "",
   bottomLeftText: "",
@@ -177,6 +179,7 @@ export class TrackingEditor extends Editor {
     if (patch.glowEnabled !== undefined) this._chrome.glowEnabled = patch.glowEnabled;
     if (patch.topRightText !== undefined) this._chrome.topRightText = patch.topRightText;
     if (patch.topContextText !== undefined) this._chrome.topContextText = patch.topContextText;
+    if (patch.topRunTimeText !== undefined) this._chrome.topRunTimeText = patch.topRunTimeText;
     if (patch.topTokensText !== undefined) this._chrome.topTokensText = patch.topTokensText;
     if (patch.telemetryText !== undefined) this._chrome.telemetryText = patch.telemetryText;
     if (patch.bottomLeftText !== undefined) this._chrome.bottomLeftText = patch.bottomLeftText;
@@ -275,6 +278,7 @@ export class TrackingEditor extends Editor {
       bottomLeftText: this._chrome.bottomLeftText,
       topRightText: this._chrome.topRightText,
       topContextText: this._chrome.topContextText,
+      topRunTimeText: this._chrome.topRunTimeText,
       topTokensText: this._chrome.topTokensText,
       workingText,
       statusLineText,

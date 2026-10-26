@@ -56,6 +56,15 @@ export function editorFramePlan(width: number): { framed: boolean; bodyWidth: nu
 }
 
 /**
+ * Left-label composition: one dim-pipe-joined FIELD per present input, per the
+ * glossary's Field rule (`|` between fields, `·` within). The join runs over
+ * present fields only, so an absent middle field leaves no dangling separator.
+ */
+function joinLabelFields(fields: (string | undefined)[], dimPipe: string): string {
+  return fields.filter(Boolean).join(dimPipe);
+}
+
+/**
  * BorderRenderer — deep module owning top glow + bottom border embedding.
  * Deduplicates stripAnsi/isBorder logic previously spread between model-info.ts
  * and tracking-editor.ts. Behind a single seam, tested via render().
@@ -75,6 +84,8 @@ export class BorderRenderer {
       bottomLeftText?: string;
       topRightText?: string;
       topContextText?: string;
+      /** Already-styled session run time — the left label's rightmost field (gated by `sessionRunTime` upstream). */
+      topRunTimeText?: string;
       topTokensText?: string;
       /** Already-styled status segment — `⠋ Working` while running, `● Ready` once it settles; leftmost on the usage row. */
       workingText?: string;
@@ -89,6 +100,7 @@ export class BorderRenderer {
     const hasTop =
       opts.glowEnabled ||
       opts.topContextText ||
+      opts.topRunTimeText ||
       (!opts.topTokensText && !opts.workingText && opts.topRightText);
     if (hasTop) {
       const theme = this.getLiveTheme();
@@ -99,17 +111,17 @@ export class BorderRenderer {
       // When tokens line exists, right moves to that line (one padding) — don't duplicate on top
       const topRightForTop = opts.topTokensText || opts.workingText ? "" : opts.topRightText;
       if (opts.glowEnabled) {
-        // Build left label; if context bar present, append it to the right of model info with pipe separator
-        let leftLabel = buildLabel(
-          theme,
-          info.provider,
-          info.modelId,
-          info.level,
-          info.contextWindow,
+        // Build left label: model info, context bar, session run time — present
+        // fields only, dim pipes between them (no dangling separator when the
+        // context bar is toggled off but the run time is on, or vice versa).
+        const leftLabel = joinLabelFields(
+          [
+            buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow),
+            opts.topContextText,
+            opts.topRunTimeText,
+          ],
+          ` ${theme.fg("dim", "|")} `,
         );
-        if (opts.topContextText) {
-          leftLabel = `${leftLabel} ${theme.fg("dim", "|")} ${opts.topContextText}`;
-        }
         // Embed left (model+context) and optional right (run activity) in one pass to avoid double-truncate
         if (topRightForTop) {
           out = embedTopWithLeftAndRight(out, width, leftLabel, topRightForTop, glow);
@@ -117,9 +129,12 @@ export class BorderRenderer {
           // Only left (model+context), no right — reuse embedTopWithLeftAndRight with empty right
           out = embedTopWithLeftAndRight(out, width, leftLabel, "", glow);
         }
-      } else if (opts.topContextText || topRightForTop) {
+      } else if (opts.topContextText || opts.topRunTimeText || topRightForTop) {
         // No glow, but still need top borders for context/run activity
-        const left = opts.topContextText ?? "";
+        const left = joinLabelFields(
+          [opts.topContextText, opts.topRunTimeText],
+          ` ${theme.fg("dim", "|")} `,
+        );
         const right = topRightForTop ?? "";
         if (left && right) {
           out = embedTopWithLeftAndRight(out, width, left, right, glow);
@@ -208,6 +223,7 @@ export class BorderRenderer {
       telemetryText?: string;
       bottomLeftText?: string;
       topContextText?: string;
+      topRunTimeText?: string;
       topTokensText?: string;
       topRightText?: string;
       workingText?: string;
@@ -222,10 +238,16 @@ export class BorderRenderer {
     const glow = (s: string): string => (glowFor ? glowFor(info.level, s) : s);
     const frame = (s: string): string => (opts.glowEnabled ? glow(s) : s);
 
-    let label = buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow);
-    if (opts.topContextText) {
-      label = `${label} ${theme.fg("dim", "|")} ${opts.topContextText}`;
-    }
+    // Same field composition as the plain path: model info | context | run time,
+    // present fields only (no dangling pipe when the context bar is off).
+    const label = joinLabelFields(
+      [
+        buildLabel(theme, info.provider, info.modelId, info.level, info.contextWindow),
+        opts.topContextText,
+        opts.topRunTimeText,
+      ],
+      ` ${theme.fg("dim", "|")} `,
+    );
 
     // Run activity lives on the usage row while that row exists (#55); with no usage
     // row it keeps its old home at the right end of the top rule.

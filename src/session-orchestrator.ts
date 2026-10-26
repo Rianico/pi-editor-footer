@@ -52,6 +52,11 @@ import { resolveGlyphs } from "./icons.js";
 import { TranscriptTimeline } from "./transcript-timeline.js";
 import { LiveBorder } from "./live-border.js";
 import {
+  SESSION_RUN_TIME_ENTRY_TYPE,
+  SessionRunTimeAccumulator,
+  type SessionRunTimeEntryData,
+} from "./session-run-time.js";
+import {
   AgentRunLedger,
   estimateTokensFromText,
   estimateTokensFromChars,
@@ -228,6 +233,7 @@ export class SessionOrchestrator {
   private readonly telemetryTracker: TurnTelemetryTracker;
   private readonly runActivityTracker: RunActivityTracker;
   private readonly agentLedger: AgentRunLedger;
+  private readonly sessionRunTime: SessionRunTimeAccumulator;
   private readonly detailChrome: DetailChrome;
   private readonly liveBorder: LiveBorder;
   private readonly transcriptTimeline: TranscriptTimeline;
@@ -274,6 +280,7 @@ export class SessionOrchestrator {
     this.telemetryTracker = new TurnTelemetryTracker();
     this.runActivityTracker = createRunActivityTracker();
     this.agentLedger = new AgentRunLedger();
+    this.sessionRunTime = new SessionRunTimeAccumulator();
     this.detailChrome = new DetailChrome();
     this.transcriptTimeline = new TranscriptTimeline({
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
@@ -289,6 +296,7 @@ export class SessionOrchestrator {
       telemetryTracker: this.telemetryTracker,
       runActivityTracker: this.runActivityTracker,
       agentLedger: this.agentLedger,
+      getSessionRunTime: () => this.sessionRunTime.snapshot(),
     });
     this.gitRefresher = (deps.createGitRefresher ?? ((d) => new GitRefresher(d)))({
       read: async () => {
@@ -357,6 +365,9 @@ export class SessionOrchestrator {
   }
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
+  }
+  getSessionRunTime(): SessionRunTimeAccumulator {
+    return this.sessionRunTime;
   }
   getGitRefresher(): GitRailClock {
     return this.gitRefresher;
@@ -624,6 +635,29 @@ export class SessionOrchestrator {
     }
   }
 
+  // ——— session run time persistence ———
+
+  /**
+   * Append the cumulative count as a custom entry (last entry wins on restore).
+   * UNCONDITIONAL — data layer, never gated by the `sessionRunTime` display toggle
+   * or `timeline.enabled` (coupling the counter to a toggleable display would lose
+   * history). Best-effort: no pi appendEntry or a throwing seam is ignored.
+   */
+  private appendSessionRunTimeEntry(): void {
+    try {
+      const piAny = this.extensionPi as
+        | { appendEntry?: (type: string, data: SessionRunTimeEntryData) => void }
+        | null
+        | undefined; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      if (typeof piAny?.appendEntry !== "function") return;
+      piAny.appendEntry(SESSION_RUN_TIME_ENTRY_TYPE, {
+        seconds: Math.floor(this.sessionRunTime.settled() / 1000),
+      });
+    } catch {
+      // SAFETY: best-effort persistence, ignore recoverable error
+    }
+  }
+
   // ——— pi event wiring ———
 
   private registerPiHandlers(pi: ExtensionAPILike): void {
@@ -653,6 +687,18 @@ export class SessionOrchestrator {
       this.agentBaselineTotals = null;
       this.agentLedger.setBaseline(null);
       this.agentLedger.reset();
+      // Session run time: re-seed from history on every session start — the scan IS
+      // the reset, so a resumed session keeps its persisted count and a fresh one
+      // starts at 0 (no entries → 0). Never seeded to a hardcoded zero here.
+      try {
+        this.sessionRunTime.restoreFromEntries(
+          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+          (ctx as unknown as { sessionManager?: { getEntries?: () => unknown[] } })?.sessionManager // SAFETY: pi seam
+            ?.getEntries?.(),
+        );
+      } catch {
+        // SAFETY: best-effort, ignore recoverable error
+      }
       this.deferredInstallTimer = setTimeout(() => this.installEditor(ctx.ui), 0);
       this.ensureFooter(ctx);
       if (this.watchTimer !== null) clearInterval(this.watchTimer);
@@ -704,6 +750,9 @@ export class SessionOrchestrator {
         // SAFETY: best-effort, ignore recoverable error
       }
       this.agentStartMs = Date.now();
+      // Same delta the orchestrator measures for lastDoneIn — the accumulator folds
+      // it in at agent_settled (never at agent_end, which also fires per run).
+      this.sessionRunTime.startRun(this.agentStartMs);
       this.footerState = {
         ...this.footerState,
         lastDoneIn: undefined,
@@ -792,6 +841,11 @@ export class SessionOrchestrator {
         const doneIn = Date.now() - this.agentStartMs;
         this.footerState = { ...this.footerState, lastDoneIn: doneIn };
         this.agentStartMs = null;
+        // Accumulate + persist here ONLY: agent_settled is the one per-run hook
+        // (it also fires for aborted runs); agent_end would double-count. The
+        // settleRun no-op guard makes a stray second settle harmless.
+        this.sessionRunTime.settleRun(Date.now());
+        this.appendSessionRunTimeEntry();
       }
       try {
         if (

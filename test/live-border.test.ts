@@ -11,6 +11,7 @@ import { describe, test } from "node:test";
 import { LiveBorder, type LiveBorderDeps } from "../src/live-border.js";
 import { DEFAULT_CONFIG, type ThemeConfig } from "../src/config.js";
 import { stripAnsi } from "../src/format.js";
+import type { SessionRunTimeSnapshot } from "../src/session-run-time.js";
 import type { TurnTelemetry } from "../src/telemetry.js";
 import type { RunActivitySnapshot } from "../src/run-activity.js";
 import type { ChromeSnapshot } from "../src/tracking-editor.js";
@@ -53,6 +54,7 @@ function harness(
     isRunning?: boolean;
     idleDisplay?: TurnTelemetry | null;
     incDisplay?: TurnTelemetry | null;
+    runTime?: SessionRunTimeSnapshot;
     noEditor?: boolean;
     noCtx?: boolean;
   } = {},
@@ -105,6 +107,7 @@ function harness(
         getIdleAuthoritativeDisplay: () => ("idleDisplay" in over ? over.idleDisplay : tel()),
         getIncrementalLiveDisplayTotals: () => ("incDisplay" in over ? over.incDisplay : tel()),
       } as never,
+      getSessionRunTime: () => over.runTime ?? null,
     },
   };
 }
@@ -124,6 +127,7 @@ describe("LiveBorder.render — coalesced draw", () => {
       "telemetryText",
       "topContextText",
       "topRightText",
+      "topRunTimeText",
       "topTokensText",
     ]);
   });
@@ -232,5 +236,45 @@ describe("LiveBorder.render — field branches", () => {
     renderOnce(h);
     const plain = stripAnsi(h.merged.topTokensText!);
     assert.ok(plain.includes("↑~111") || plain.includes("↑ ~"), plain);
+  });
+});
+
+describe("LiveBorder.render — session run time field", () => {
+  test("toggle on → styled duration text reaches the editor chrome", () => {
+    const h = harness({ runTime: { totalMs: 8000, running: false } });
+    renderOnce(h);
+    assert.equal(h.merged.topRunTimeText, "8s");
+  });
+
+  test("toggle off → field cleared entirely (no stale value, no dangling pipe upstream)", () => {
+    const h = harness({
+      runTime: { totalMs: 8000, running: false },
+      config: (c) => void (c.sessionRunTime = false),
+    });
+    renderOnce(h);
+    assert.equal(h.merged.topRunTimeText, "");
+  });
+
+  test("independent of the context bar: renders with footerSegments.context off", () => {
+    const h = harness({
+      runTime: { totalMs: 303_000, running: false },
+      config: (c) => void (c.footerSegments.context = false),
+    });
+    renderOnce(h);
+    assert.equal(h.merged.topContextText, "");
+    assert.equal(h.merged.topRunTimeText, "5m 3s");
+  });
+
+  test("no accumulator dep → field stays empty (wiring bug, not a zero)", () => {
+    const h = harness();
+    delete (h.deps as { getSessionRunTime?: () => unknown }).getSessionRunTime;
+    renderOnce(h);
+    assert.equal(h.merged.topRunTimeText, "");
+  });
+
+  test("live run: the snapshot already folds in the elapsed run (dep contract)", () => {
+    const h = harness({ runTime: { totalMs: 9_121_000, running: true } });
+    renderOnce(h);
+    assert.equal(h.merged.topRunTimeText, "2h 32m 1s");
   });
 });
