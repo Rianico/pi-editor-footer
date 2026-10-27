@@ -31,6 +31,8 @@ import type { RunActivityTracker } from "./run-activity.js";
 import type { AgentRunLedger } from "./agent-run-ledger.js";
 import type { TurnTelemetryTracker } from "./telemetry.js";
 import type { ThemeConfig } from "./config.js";
+import type { SessionRunTimeSnapshot } from "./session-run-time.js";
+import { formatDuration } from "./format.js";
 import type { ChromeSnapshot as EditorChromeSnapshot, TrackingEditor } from "./tracking-editor.js";
 import type { ExtensionContextLike } from "./session-orchestrator.js";
 
@@ -43,6 +45,8 @@ export interface LiveBorderDeps {
   telemetryTracker: TurnTelemetryTracker;
   runActivityTracker: RunActivityTracker;
   agentLedger: AgentRunLedger;
+  /** Session run time accumulator read — absent dep renders no field (wiring bug, not a zero). */
+  getSessionRunTime?: () => SessionRunTimeSnapshot | null;
 }
 
 /** Derived once per (theme identity, icon mode) pair, reused across renders. */
@@ -130,6 +134,7 @@ export class LiveBorder {
     this.applyTopBorder(patch, style);
     this.applyTelemetry(patch, style);
     this.applyContext(patch, style, snapshot);
+    this.applyRunTime(patch, style);
     if (Object.keys(patch).length > 0) {
       try {
         editor.setChrome(patch);
@@ -266,6 +271,30 @@ export class LiveBorder {
       }
       patch.topContextText = contextText;
       patch.topTokensText = tokensText;
+    } catch {
+      // SAFETY: best-effort UI, ignore recoverable error
+    }
+  }
+
+  /**
+   * Session run time — the left label's rightmost FIELD, gated ONLY by its own
+   * toggle (independent of `footerSegments.context`; the border renderer joins
+   * present fields with dim pipes, so either side can be absent cleanly).
+   * Grows live on the 1 Hz tick while a run is in flight (snapshot folds in the
+   * elapsed run), static at the settled accumulation between runs.
+   */
+  private applyRunTime(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
+    const cfg = this.deps.getConfig();
+    try {
+      let runTimeText = "";
+      if (cfg.sessionRunTime) {
+        const snap = this.deps.getSessionRunTime?.();
+        if (snap) {
+          // Same token as the telemetry TTFT segment (telemetry.ts formatTurnTelemetry)
+          runTimeText = style.theme.fg("text", formatDuration(snap.totalMs));
+        }
+      }
+      patch.topRunTimeText = runTimeText;
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }

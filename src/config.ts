@@ -46,6 +46,8 @@ export interface ThemeConfig {
     mode: IconMode;
   };
   contextIconBar: boolean;
+  /** Top-rule rightmost field: cumulative agent-run wall time (see GLOSSARY "Session run time"). */
+  sessionRunTime: boolean;
   telemetry: TelemetryConfig;
   timeline: TimelineConfig;
   footerSegments: FooterSegments;
@@ -65,6 +67,7 @@ export const DEFAULT_CONFIG: ThemeConfig = {
     mode: "auto",
   },
   contextIconBar: false,
+  sessionRunTime: true,
   footerSegments: {
     cwd: true,
     sessionName: false,
@@ -254,6 +257,13 @@ export const CONFIG_SCHEMA: readonly ConfigDescriptor[] = [
     label: "Context icon bar",
     tab: "footer",
     default: false,
+  },
+  {
+    path: "sessionRunTime",
+    kind: "boolean",
+    label: "Session run time",
+    tab: "footer",
+    default: true,
   },
   {
     path: "footerSegments.tokens",
