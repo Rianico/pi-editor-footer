@@ -152,7 +152,10 @@ const tui = {
 };
 
 /** The one patch as a real editor renders it — prepend rows and status slot included. */
-function renderThroughEditor(chrome: Partial<ChromeSnapshot>): string[] {
+function renderThroughEditor(chrome: Partial<ChromeSnapshot>): {
+  editor: TrackingEditor;
+  lines: string[];
+} {
   const editor = new TrackingEditor(
     tui as never,
     editorTheme as never,
@@ -160,7 +163,7 @@ function renderThroughEditor(chrome: Partial<ChromeSnapshot>): string[] {
     () => liveTheme as never,
   );
   editor.setChrome(chrome);
-  return editor.render(80);
+  return { editor, lines: editor.render(80) };
 }
 describe("LiveBorder.render — coalesced draw", () => {
   test("one setChrome per refresh carries every field", () => {
@@ -284,6 +287,26 @@ describe("LiveBorder.render — field branches", () => {
     assert.ok(stripAnsi(stalled.merged.topStallText!).includes("!2×3.3s"));
   });
 
+  test("a stall-only row exists: one row prepended, and mouse compensation counts it", () => {
+    // #63 invariant 4: the stall is its own field, and a stall-only row still exists.
+    // Field *separation* does not prove *existence* — this renders the row and counts it.
+    const h = harness({ ledgerLive: tel({ stallMs: 3300, stallCount: 2 }), atRest: null });
+    renderOnce(h);
+    assert.equal(h.merged.topTokensText, "");
+    assert.equal(h.merged.topRightText, "");
+    assert.ok(stripAnsi(h.merged.topStallText!).includes("!2×3.3s"));
+
+    const bare = renderThroughEditor({});
+    const { editor, lines } = renderThroughEditor(h.merged);
+    const renderedRows = lines.length - bare.lines.length;
+    assert.equal(renderedRows, 1, "the stall alone is exactly one row");
+    assert.equal(rowsPrependedAboveEditor({ usageRow: true }), renderedRows);
+    // handleMouse shifts clicks by the count render actually prepended.
+    const compensated = (editor as unknown as { lastPrependedRows: number }).lastPrependedRows;
+    assert.equal(compensated, renderedRows, "click compensation matches the rendered row");
+    assert.ok(stripAnsi(lines[0]!).includes("!2×3.3s"), "the stall row is above the frame");
+  });
+
   test("stall suppressed when telemetry.stalls off, still bottom-clean", () => {
     const h = harness({
       config: (c) => void (c.telemetry.stalls = false),
@@ -341,7 +364,7 @@ describe("LiveBorder.render — field branches", () => {
     // then rendered through the real prepend/status-slot path.
     assert.equal(h.merged.topRightText, "");
     assert.equal(h.merged.topStallText, "");
-    const lines = renderThroughEditor(h.merged);
+    const { lines } = renderThroughEditor(h.merged);
     assert.equal(rowsPrependedAboveEditor({}), 0, "no row was prepended above the frame");
     assert.match(stripAnsi(lines[0] ?? ""), /^╭─/, "the frame is the first row");
     assert.ok(

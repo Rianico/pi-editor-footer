@@ -59,6 +59,12 @@ describe("composeUsageRow — `status | delta tokens · activity | stall`", () =
     assert.ok(!stalled.includes(`· ${STALL}`), "a condition, not another activity section");
   });
 
+  test("a stall alone is the whole row: no leading `|`, no leading `·`", () => {
+    // #63 invariant 4, existence half: a row can consist of the stall and nothing
+    // else. Any leading separator here would be a field boundary to a missing field.
+    assert.equal(composeUsageRow({ stall: STALL }, theme), STALL);
+  });
+
   test("the delta pair is the stable half: a wider activity never shifts it", () => {
     const narrow = composeUsageRow({ status: STATUS, tokens: TOKENS, activity: "3 tools" }, theme);
     const wide = composeUsageRow(
