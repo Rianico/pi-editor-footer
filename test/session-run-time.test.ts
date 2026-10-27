@@ -187,7 +187,7 @@ describe("restoreSessionRunTimeMs", () => {
 // ———————————————— orchestrator wiring ————————————————
 
 describe("SessionOrchestrator — session run time", () => {
-  let clock: ReturnType<typeof useClock> | null = null;
+  let clock: ReturnType<typeof useClock>;
   // Apply the clock PER TEST: a describe-level stub leaks into the rest of the
   // file, and one shared restore would strip it after the very first test.
   beforeEach(() => {
