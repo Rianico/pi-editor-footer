@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+### Features
+
+* **chrome:** add session run time field
+
+### Documentation
+
+* **glossary:** define Session run time
+
 ## [0.14.2] - 2026-10-22
 
 ### Bug Fixes
