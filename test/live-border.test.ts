@@ -15,7 +15,8 @@ import type { SessionRunTimeSnapshot } from "../src/session-run-time.js";
 import type { TurnTelemetry } from "../src/telemetry.js";
 import { AgentRunLedger } from "../src/agent-run-ledger.js";
 import type { RunActivitySnapshot } from "../src/run-activity.js";
-import type { ChromeSnapshot } from "../src/tracking-editor.js";
+import { TrackingEditor, type ChromeSnapshot } from "../src/tracking-editor.js";
+import { rowsPrependedAboveEditor } from "../src/border-renderer.js";
 
 function tel(over: Partial<TurnTelemetry> = {}): TurnTelemetry {
   return {
@@ -123,6 +124,44 @@ function renderOnce(h: Harness): void {
   new LiveBorder(h.deps).render();
 }
 
+/** Identity theme + a real editor, so the rendered row (not just the fields) is asserted. */
+const identity = (s: string): string => s;
+const liveTheme = {
+  getFgAnsi: () => "",
+  getColorMode: () => "truecolor",
+  getThinkingBorderColor: () => identity,
+  fg: (_style: string, s: string) => s,
+  bold: identity,
+  dim: identity,
+  muted: identity,
+};
+const editorTheme = {
+  borderColor: identity,
+  selectList: {
+    selectedPrefix: identity,
+    selectedText: identity,
+    description: identity,
+    scrollInfo: identity,
+    noMatch: identity,
+  },
+};
+const tui = {
+  requestRender: () => {},
+  setShowHardwareCursor: () => {},
+  terminal: { rows: 24, columns: 80, write: () => {} },
+};
+
+/** The one patch as a real editor renders it — prepend rows and status slot included. */
+function renderThroughEditor(chrome: Partial<ChromeSnapshot>): string[] {
+  const editor = new TrackingEditor(
+    tui as never,
+    editorTheme as never,
+    { matches: () => false },
+    () => liveTheme as never,
+  );
+  editor.setChrome(chrome);
+  return editor.render(80);
+}
 describe("LiveBorder.render — coalesced draw", () => {
   test("one setChrome per refresh carries every field", () => {
     const h = harness({ peekLive: tel({ totalMs: 5000 }), isRunning: true });
@@ -260,10 +299,22 @@ describe("LiveBorder.render — field branches", () => {
     assert.ok(!plain.includes("~"));
   });
 
-  test("before the session's first run the tokens field is empty — the row does not exist", () => {
+  test("before the session's first run the usage row does not exist", () => {
     const h = harness({ ledger: new AgentRunLedger() });
     renderOnce(h);
     assert.equal(h.merged.topTokensText, "");
+    // Carried finding from #62: an empty tokens field must not leave a row alive,
+    // so the two other fields (and therefore the whole row) are pinned too — and
+    // then rendered through the real prepend/status-slot path.
+    assert.equal(h.merged.topRightText, "");
+    assert.equal(h.merged.topStallText, "");
+    const lines = renderThroughEditor(h.merged);
+    assert.equal(rowsPrependedAboveEditor({}), 0, "no row was prepended above the frame");
+    assert.match(stripAnsi(lines[0] ?? ""), /^╭─/, "the frame is the first row");
+    assert.ok(
+      !lines.some((line) => /Ready|Working/.test(stripAnsi(line))),
+      "an empty slot claims nothing, not even Ready",
+    );
   });
 
   test("running tokens use the incremental display (~ estimated)", () => {
