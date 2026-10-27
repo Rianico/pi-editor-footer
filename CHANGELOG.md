@@ -11,18 +11,18 @@
 
 ### Features
 
-* **chrome:** compose the usage row as status | run | stall (#63)
+* **chrome:** compose the usage row as status | run | stall (#65)
 * **chrome:** keep the agent run's own delta tokens at rest (#65)
 * **chrome:** add session run time field (#61)
 
 ### Bug Fixes
 
-* **chrome:** clear the delta-token field on teardown too (#63)
-* **chrome:** report a stall only while the current run is stalled (#63)
+* **chrome:** clear the delta-token field on teardown too (#65)
+* **chrome:** report a stall only while the current run is stalled (#65)
 
 ### Documentation
 
-* **agents:** record the two-scope token contract (#64)
+* **agents:** record the two-scope token contract (#65)
 * **chrome:** record run-scoped delta tokens (ADR-0004 rev 3) (#65)
 * **glossary:** define Session run time (#61)
 
