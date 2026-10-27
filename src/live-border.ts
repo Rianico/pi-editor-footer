@@ -173,6 +173,12 @@ export class LiveBorder {
    * is written as its own field and the row composer separates it with `|`
    * (ADR-0004 rev 3). Keeping them apart is what keeps the stall out of the
    * activity's `·` sections.
+   *
+   * **A stall is reported only while the current run is actually stalled.** It is
+   * therefore read from the ledger's live aggregate alone — no `getLastTelemetry()`
+   * fallback: that tracker keeps the *previous* run's figures until the next turn
+   * starts (it resets on model select, not on `agent_start`), so a fresh, healthy
+   * run would inherit the last run's `!2×`, and so would the idle row.
    */
   private applyTopBorder(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
     const cfg = this.deps.getConfig();
@@ -181,10 +187,9 @@ export class LiveBorder {
       const text = formatRunActivityTopRight(snap, style.theme);
       let stallText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
-        // Deepened via AgentRunLedger — stall is agent-run live, single source
-        const tel =
-          this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive()) ??
-          this.deps.telemetryTracker.getLastTelemetry();
+        // Live-only: null until this run has a turn or a live turn, null again once
+        // it settles. Both are correct — neither is a stall of the current run.
+        const tel = this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive());
         if (tel && tel.stallMs > 0) {
           stallText = style.theme.fg(
             "warning",

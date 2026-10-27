@@ -251,6 +251,39 @@ describe("LiveBorder.render — field branches", () => {
     assert.equal(h.merged.topStallText, "");
   });
 
+  test("a stall is reported only while the current run is actually stalled", () => {
+    // Run 1 stalls and settles; run 2 starts healthy with no turn yet. The stall is a
+    // live condition, so run 1's `!2×` must not be inherited — not even though the
+    // telemetry tracker still holds run 1's figures (it resets only on model select).
+    const settled = new AgentRunLedger(() => 9000);
+    settled.startRun(0);
+    settled.recordTurn(tel({ stallMs: 3300, stallCount: 2 }));
+    settled.settleRun(null, 1_000_000);
+    settled.startRun(9000);
+    const fresh = harness({
+      ledger: settled,
+      lastTel: tel({ stallMs: 3300, stallCount: 2 }),
+      runSnap: idleSnap({ phase: "running" }),
+      isRunning: true,
+    });
+    renderOnce(fresh);
+    assert.equal(fresh.merged.topStallText, "", "run 2 has no stall of its own yet");
+
+    // The same run's own stall does render once it has one, so the rule above is
+    // "live-only", not "a field that can never appear".
+    const stalledLedger = new AgentRunLedger(() => 9000);
+    stalledLedger.startRun(0);
+    stalledLedger.recordTurn(tel({ stallMs: 3300, stallCount: 2 }));
+    const stalled = harness({
+      ledger: stalledLedger,
+      lastTel: null,
+      runSnap: idleSnap({ phase: "running" }),
+      isRunning: true,
+    });
+    renderOnce(stalled);
+    assert.ok(stripAnsi(stalled.merged.topStallText!).includes("!2×3.3s"));
+  });
+
   test("stall suppressed when telemetry.stalls off, still bottom-clean", () => {
     const h = harness({
       config: (c) => void (c.telemetry.stalls = false),
