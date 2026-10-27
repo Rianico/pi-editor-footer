@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { SessionOrchestrator } from "../src/session-orchestrator.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { createInitialState } from "../src/state.js";
+import { TrackingEditor } from "../src/tracking-editor.js";
 
 function fakePi() {
   const handlers = new Map<string, ((e: unknown, ctx: unknown) => void)[]>();
@@ -40,7 +41,23 @@ function fakeCtx(over: Record<string, unknown> = {}) {
     ...over,
   };
 }
-
+/** Minimal pi-tui stand-ins — enough for a real `TrackingEditor` (render + setChrome). */
+const tui = {
+  requestRender: () => {},
+  setShowHardwareCursor: () => {},
+  terminal: { rows: 24, columns: 80, write: () => {} },
+};
+const identity = (s: string): string => s;
+const editorTheme = {
+  borderColor: identity,
+  selectList: {
+    selectedPrefix: identity,
+    selectedText: identity,
+    description: identity,
+    scrollInfo: identity,
+    noMatch: identity,
+  },
+};
 describe("SessionOrchestrator", () => {
   test("install registers session and model handlers", () => {
     const orch = new SessionOrchestrator({
@@ -122,6 +139,48 @@ describe("SessionOrchestrator", () => {
     const state = orch.getFooterState();
     assert.ok(state !== null);
     assert.equal(typeof state.git, "object");
+  });
+
+  test("dispose clears every field that keeps the usage row alive", async () => {
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+      createGitRefresher: () => ({ start: () => {}, request: () => {}, stop: () => {} }),
+    });
+    const raw = fakePi();
+    const pi = raw as unknown as Parameters<SessionOrchestrator["install"]>[0];
+    orch.install(pi);
+    type EditorFactory = (tui: unknown, theme: unknown, keybindings: unknown) => TrackingEditor;
+    const seam: { factory: EditorFactory | null } = { factory: null };
+    const ctx = fakeCtx({
+      ui: {
+        setEditorComponent: (factory: EditorFactory) => {
+          seam.factory = factory;
+        },
+        setWidget: () => {},
+        theme: { fg: (_c: string, s: string) => s, bold: (s: string) => s },
+        notify: () => {},
+      },
+      sessionManager: { getCwd: () => "/tmp", getEntries: () => [] },
+      getContextUsage: () => undefined,
+    });
+    for (const h of raw.handlers.get("session_start") ?? []) h({}, ctx as never);
+    // The editor install is deferred one tick (ADR-0002), so the factory lands after it.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(seam.factory !== null, "the editor factory was installed");
+    const editor = seam.factory(tui as never, editorTheme as never, { matches: () => false });
+    editor.setChrome({
+      topTokensText: "↑ 1.2k · ↓ 800",
+      topRightText: "2 turns",
+      topStallText: "!2×3.3s",
+    });
+    orch.dispose();
+    // Tokens, activity and stall are the row-keeping trio in the editor's own predicate
+    // and in `rowsPrependedAboveEditor`; a stale survivor is a row above a dead session.
+    const chrome = editor.getChrome();
+    assert.equal(chrome.topTokensText, "", "tokens keep the row, so teardown clears them too");
+    assert.equal(chrome.topRightText, "");
+    assert.equal(chrome.topStallText, "");
   });
 
   test("dispose clears timers and state without throwing", () => {

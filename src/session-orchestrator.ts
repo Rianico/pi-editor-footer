@@ -332,7 +332,14 @@ export class SessionOrchestrator {
     };
     this.liveBorder.stopTick();
     this.runActivityTracker.reset();
-    this.installedEditor?.setChrome({ topRightText: "", topStallText: "" });
+    // Every field that keeps the usage row alive: the editor's existence predicate and
+    // `rowsPrependedAboveEditor` both count tokens, activity and stall, so clearing only
+    // two would leave a row (and its click compensation) outliving the session.
+    this.installedEditor?.setChrome({
+      topTokensText: "",
+      topRightText: "",
+      topStallText: "",
+    });
     this.lastSessionCtx = null;
     this.headerCleanupInner?.();
     this.headerCleanupInner = null;
