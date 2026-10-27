@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { SessionOrchestrator } from "../src/session-orchestrator.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { createInitialState } from "../src/state.js";
+import { TrackingEditor } from "../src/tracking-editor.js";
 
 function fakePi() {
   const handlers = new Map<string, ((e: unknown, ctx: unknown) => void)[]>();
@@ -40,7 +41,23 @@ function fakeCtx(over: Record<string, unknown> = {}) {
     ...over,
   };
 }
-
+/** Minimal pi-tui stand-ins — enough for a real `TrackingEditor` (render + setChrome). */
+const tui = {
+  requestRender: () => {},
+  setShowHardwareCursor: () => {},
+  terminal: { rows: 24, columns: 80, write: () => {} },
+};
+const identity = (s: string): string => s;
+const editorTheme = {
+  borderColor: identity,
+  selectList: {
+    selectedPrefix: identity,
+    selectedText: identity,
+    description: identity,
+    scrollInfo: identity,
+    noMatch: identity,
+  },
+};
 describe("SessionOrchestrator", () => {
   test("install registers session and model handlers", () => {
     const orch = new SessionOrchestrator({
@@ -122,6 +139,48 @@ describe("SessionOrchestrator", () => {
     const state = orch.getFooterState();
     assert.ok(state !== null);
     assert.equal(typeof state.git, "object");
+  });
+
+  test("dispose clears every field that keeps the usage row alive", async () => {
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+      createGitRefresher: () => ({ start: () => {}, request: () => {}, stop: () => {} }),
+    });
+    const raw = fakePi();
+    const pi = raw as unknown as Parameters<SessionOrchestrator["install"]>[0];
+    orch.install(pi);
+    type EditorFactory = (tui: unknown, theme: unknown, keybindings: unknown) => TrackingEditor;
+    const seam: { factory: EditorFactory | null } = { factory: null };
+    const ctx = fakeCtx({
+      ui: {
+        setEditorComponent: (factory: EditorFactory) => {
+          seam.factory = factory;
+        },
+        setWidget: () => {},
+        theme: { fg: (_c: string, s: string) => s, bold: (s: string) => s },
+        notify: () => {},
+      },
+      sessionManager: { getCwd: () => "/tmp", getEntries: () => [] },
+      getContextUsage: () => undefined,
+    });
+    for (const h of raw.handlers.get("session_start") ?? []) h({}, ctx as never);
+    // The editor install is deferred one tick (ADR-0002), so the factory lands after it.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(seam.factory !== null, "the editor factory was installed");
+    const editor = seam.factory(tui as never, editorTheme as never, { matches: () => false });
+    editor.setChrome({
+      topTokensText: "↑ 1.2k · ↓ 800",
+      topRightText: "2 turns",
+      topStallText: "!2×3.3s",
+    });
+    orch.dispose();
+    // Tokens, activity and stall are the row-keeping trio in the editor's own predicate
+    // and in `rowsPrependedAboveEditor`; a stale survivor is a row above a dead session.
+    const chrome = editor.getChrome();
+    assert.equal(chrome.topTokensText, "", "tokens keep the row, so teardown clears them too");
+    assert.equal(chrome.topRightText, "");
+    assert.equal(chrome.topStallText, "");
   });
 
   test("dispose clears timers and state without throwing", () => {
@@ -212,5 +271,83 @@ describe("SessionOrchestrator", () => {
     assert.equal(live!.outputTokens, 6);
     assert.ok((live!.ttftProviderMs ?? -1) >= 0, "provider anchor must reach the tracker");
     orch.dispose();
+  });
+
+  test("delta tokens: captured from the run at settle, reset at the next run, cleared on dispose", () => {
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+      createGitRefresher: () => ({ start: () => {}, request: () => {}, stop: () => {} }),
+    });
+    const raw = fakePi();
+    const pi = raw as unknown as Parameters<SessionOrchestrator["install"]>[0];
+    orch.install(pi);
+    const ledger = orch.getAgentLedger();
+    // A resumed Pi session: history carries a large billed prompt the very first
+    // render must NOT show — the row is run-scoped, so it starts absent.
+    const resumed = [
+      { type: "message", id: "m1", message: { role: "user", content: "hello there" } },
+      {
+        type: "message",
+        id: "m2",
+        message: {
+          role: "assistant",
+          usage: { input: 300000, cacheRead: 50000, output: 800, totalTokens: 350800 },
+        },
+      },
+    ];
+    const ctx = fakeCtx({
+      sessionManager: { getEntries: () => resumed },
+      getContextUsage: () => ({ tokens: 120000, contextWindow: 1000000 }),
+    });
+    const fire = (name: string, e: unknown): void => {
+      for (const h of raw.handlers.get(name) ?? []) h(e, ctx as never);
+    };
+    assert.equal(ledger.getAtRestTotals(), null, "no first run → no delta row");
+
+    const msg = {
+      role: "assistant",
+      content: [],
+      usage: {
+        input: 42000,
+        output: 900,
+        totalTokens: 42900,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+    };
+    const runOneTurn = (): void => {
+      fire("agent_start", { type: "agent_start" });
+      fire("turn_start", { type: "turn_start", turnIndex: 0 });
+      fire("message_start", { type: "message_start", message: msg });
+      fire("message_end", { type: "message_end", message: msg });
+      fire("turn_end", { type: "turn_end", turnIndex: 0 });
+      fire("agent_settled", { type: "agent_settled" });
+    };
+    runOneTurn();
+    const atRest = ledger.getAtRestTotals();
+    assert.ok(atRest, "settle keeps the run's delta tokens");
+    assert.equal(atRest.inputTokens, 42000, "the run's prompt, not the 350k session total");
+    assert.equal(atRest.outputTokens, 900);
+    assert.equal(atRest.estimated, false, "authoritative at rest — no ~");
+
+    fire("agent_start", { type: "agent_start" });
+    assert.equal(ledger.getAtRestTotals(), null, "the next run resets the pair");
+
+    // aborted mid-turn: turn_start with no turn_end, so the run completes no turn
+    fire("turn_start", { type: "turn_start", turnIndex: 0 });
+    fire("message_start", { type: "message_start", message: msg });
+    fire("message_update", {
+      type: "message_update",
+      message: msg,
+      assistantMessageEvent: { type: "text_delta", delta: "aborted mid-answer" },
+    });
+    fire("agent_settled", { type: "agent_settled", aborted: true });
+    const aborted = ledger.getAtRestTotals();
+    assert.ok(aborted, "an aborted run keeps a readout too");
+    assert.equal(aborted.estimated, true, "no completed turn → still the live estimate, still ~");
+    assert.ok(aborted.outputTokens > 0, "the unfinished turn's live delta is kept");
+
+    orch.dispose();
+    assert.equal(ledger.getAtRestTotals(), null, "session shutdown clears the ledger");
   });
 });

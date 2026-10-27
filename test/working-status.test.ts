@@ -2,12 +2,13 @@
  * Working indicator placement (ADR-0004 rev 2, #55).
  *
  * pi hands every status indicator to the editor once it claims
- * `embedWorkingStatus`. The working one becomes the LEFTMOST section of the
- * existing usage row above the top rule (`⠋ Working · ↑ … · ↓ … · $… | T1 · …`),
- * the row exists even with no tokens/activity, and it disappears again when the
- * run ends. No new row is invented, nothing lands on the footer, and any
- * non-working kind (retry, compaction) must keep rendering above the editor —
- * pi has no fallback once the claim is made, so swallowing one would hide it.
+ * `embedWorkingStatus`. The working one becomes the LEFT field of the
+ * existing usage row above the top rule (`⠋ Working | ↑ … · ↓ … · T1 · 8s · 2
+ * tools`, ADR-0004 revision 3), the row exists even with no tokens/activity,
+ * and it disappears again when the run ends. No new row is invented, nothing
+ * lands on the footer, and any non-working kind (retry, compaction) must keep
+ * rendering above the editor — pi has no fallback once the claim is made, so
+ * swallowing one would hide it.
  */
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
@@ -22,6 +23,7 @@ import { TrackingEditor, type EmbeddableStatusIndicator } from "../src/tracking-
 const WIDTH = 100;
 const TOKENS = "↑ 14M · ↓ 89k · $0.15";
 const ACTIVITY = "T1 · 8s · 2 tools";
+const STALL = "!2×3.3s";
 
 const identity = (s: string): string => s;
 const liveTheme = {
@@ -122,13 +124,13 @@ function makeEditor(overrides: { topTokensText?: string; topRightText?: string }
 }
 
 describe("usage row composition (BorderRenderer)", () => {
-  test("working is the leftmost section, activity stays behind the field boundary", () => {
+  test("working is its own field; delta tokens lead the run field", () => {
     const lines = renderRows({
       workingText: "⠋ Working",
       topTokensText: TOKENS,
       topRightText: ACTIVITY,
     });
-    assert.equal(content(lines[0]), `⠋ Working · ${TOKENS} | ${ACTIVITY}`);
+    assert.equal(content(lines[0]), `⠋ Working | ${TOKENS} · ${ACTIVITY}`);
     assert.equal(lines.length, 4, "usage row + framed top rule, body row, bottom rule");
   });
 
@@ -151,13 +153,32 @@ describe("usage row composition (BorderRenderer)", () => {
     assert.equal(lines.length, 3);
   });
 
-  test("idle with tokens/activity only: the row keeps exactly its previous contents", () => {
+  test("idle with tokens/activity only: one run field, the delta pair first", () => {
     const lines = renderRows({ topTokensText: TOKENS, topRightText: ACTIVITY });
     assert.equal(rowsPrependedAboveEditor({ usageRow: true }), 1);
-    assert.equal(content(lines[0]), `${TOKENS} | ${ACTIVITY}`);
+    assert.equal(content(lines[0]), `${TOKENS} · ${ACTIVITY}`);
     assert.ok(!lines[0]?.includes("Working"));
   });
 
+  test("a stall is its own field behind the run field", () => {
+    const lines = renderRows({
+      workingText: "⠋ Working",
+      topTokensText: TOKENS,
+      topRightText: ACTIVITY,
+      topStallText: STALL,
+    });
+    assert.equal(content(lines[0]), `⠋ Working | ${TOKENS} · ${ACTIVITY} | ${STALL}`);
+  });
+
+  test("no stall, no stall field: the row ends on the run field", () => {
+    const lines = renderRows({
+      workingText: "⠋ Working",
+      topTokensText: TOKENS,
+      topRightText: ACTIVITY,
+    });
+    assert.ok(!content(lines[0]).includes(STALL));
+    assert.equal(content(lines[0]).split("|").length, 2, "status field + run field only");
+  });
   test("a non-embedded status keeps its own row above the usage row", () => {
     const lines = renderRows({
       statusLineText: "Retrying (1/3) …",
@@ -165,7 +186,7 @@ describe("usage row composition (BorderRenderer)", () => {
       topTokensText: TOKENS,
     });
     assert.equal(content(lines[0]), "Retrying (1/3) …");
-    assert.equal(content(lines[1]), `⠋ Working · ${TOKENS}`);
+    assert.equal(content(lines[1]), `⠋ Working | ${TOKENS}`);
     assert.equal(rowsPrependedAboveEditor({ statusRow: true, usageRow: true }), 2);
   });
 });
@@ -183,12 +204,11 @@ describe("TrackingEditor claims pi's embed contract", () => {
     editor.setWorkingStatusIndicator(working);
 
     const first = editor.render(WIDTH);
-    assert.equal(content(first[0]), `⠋ Working · ${TOKENS} | ${ACTIVITY}`);
+    assert.equal(content(first[0]), `⠋ Working | ${TOKENS} · ${ACTIVITY}`);
     const second = editor.render(WIDTH);
-    assert.equal(content(second[0]), `⠙ Working · ${TOKENS} | ${ACTIVITY}`);
+    assert.equal(content(second[0]), `⠙ Working | ${TOKENS} · ${ACTIVITY}`);
     assert.ok(working.renders >= 2, "the real Loader frame is read on every render");
   });
-
   test("the message is the indicator's own, never hardcoded", () => {
     const editor = makeEditor();
     editor.setWorkingStatusIndicator(indicator({ kind: "working", message: "Compacting…" }));
@@ -199,7 +219,7 @@ describe("TrackingEditor claims pi's embed contract", () => {
     const editor = makeEditor({ topTokensText: TOKENS });
     const before = editor.render(WIDTH);
     editor.setWorkingStatusIndicator(indicator({ kind: "working", message: "Working" }));
-    assert.equal(content(editor.render(WIDTH)[0]), `⠋ Working · ${TOKENS}`);
+    assert.equal(content(editor.render(WIDTH)[0]), `⠋ Working | ${TOKENS}`);
     editor.setWorkingStatusIndicator(undefined);
     const after = editor.render(WIDTH);
     assert.deepEqual(after, before);
@@ -250,9 +270,8 @@ describe("footer carries no working segment", () => {
 describe("status switches to Ready when the run settles", () => {
   test("idle after a run keeps the slot and reads Ready", () => {
     const editor = makeEditor({ topTokensText: TOKENS, topRightText: ACTIVITY });
-    assert.equal(content(editor.render(WIDTH)[0]), `● Ready · ${TOKENS} | ${ACTIVITY}`);
+    assert.equal(content(editor.render(WIDTH)[0]), `● Ready | ${TOKENS} · ${ACTIVITY}`);
   });
-
   test("a fresh session grows no row just to say Ready", () => {
     const editor = makeEditor();
     const lines = editor.render(WIDTH);
@@ -271,8 +290,8 @@ describe("status switches to Ready when the run settles", () => {
   test("the status flips Working → Ready across one run", () => {
     const editor = makeEditor({ topTokensText: TOKENS });
     editor.setWorkingStatusIndicator(indicator({ kind: "working", message: "Working" }));
-    assert.equal(content(editor.render(WIDTH)[0]), `⠋ Working · ${TOKENS}`);
+    assert.equal(content(editor.render(WIDTH)[0]), `⠋ Working | ${TOKENS}`);
     editor.setWorkingStatusIndicator(undefined);
-    assert.equal(content(editor.render(WIDTH)[0]), `● Ready · ${TOKENS}`);
+    assert.equal(content(editor.render(WIDTH)[0]), `● Ready | ${TOKENS}`);
   });
 });

@@ -168,31 +168,37 @@ export class LiveBorder {
     return style;
   }
 
+  /**
+   * Run activity is the run field's second half; the stall is a condition, so it
+   * is written as its own field and the row composer separates it with `|`
+   * (ADR-0004 rev 3). Keeping them apart is what keeps the stall out of the
+   * activity's `·` sections.
+   *
+   * **A stall is reported only while the current run is actually stalled.** It is
+   * therefore read from the ledger's live aggregate alone — no `getLastTelemetry()`
+   * fallback: that tracker keeps the *previous* run's figures until the next turn
+   * starts (it resets on model select, not on `agent_start`), so a fresh, healthy
+   * run would inherit the last run's `!2×`, and so would the idle row.
+   */
   private applyTopBorder(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
     const cfg = this.deps.getConfig();
     try {
       const snap = this.deps.runActivityTracker.getSnapshot();
-      let text = formatRunActivityTopRight(snap, style.theme);
-      // Relocate stall to the right of tool use with pipe separator — agent-run live (option B), not bottom telemetry
+      const text = formatRunActivityTopRight(snap, style.theme);
+      let stallText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
-        // Deepened via AgentRunLedger — stall is agent-run live, single source
-        const tel =
-          this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive()) ??
-          this.deps.telemetryTracker.getLastTelemetry();
+        // Live-only: null until this run has a turn or a live turn, null again once
+        // it settles. Both are correct — neither is a stall of the current run.
+        const tel = this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive());
         if (tel && tel.stallMs > 0) {
-          const stallText = style.theme.fg(
+          stallText = style.theme.fg(
             "warning",
             `${style.glyphs.stall}${tel.stallCount}×${formatTurnDuration(tel.stallMs).trim()}`,
           );
-          if (text) {
-            const pipe = style.theme.fg("dim", " | ");
-            text = `${text}${pipe}${stallText}`;
-          } else {
-            text = stallText;
-          }
         }
       }
       patch.topRightText = text;
+      patch.topStallText = stallText;
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }
@@ -248,12 +254,14 @@ export class LiveBorder {
         const isRunning = this.deps.runActivityTracker.isRunning();
         const contextTokens = snapshot.contextUsage?.tokens;
         if (!isRunning) {
-          // Hybrid Q7 b: idle shows authoritative billed total (no ~), live shows synthetic incremental (~)
-          const display = this.deps.agentLedger.getIdleAuthoritativeDisplay(
-            snapshot.totals,
-            contextTokens,
-          );
-          tokensText = formatTelemetryTokens(display, style.theme, cfg.telemetry, style.glyphs);
+          // Delta tokens at rest: the last Agent run's own figures, frozen by the ledger
+          // at settle (GLOSSARY "Delta tokens"). No session fallback — before the first
+          // run of a fresh *or resumed* session the field stays empty, so the row does
+          // not exist yet.
+          const display = this.deps.agentLedger.getAtRestTotals();
+          if (display) {
+            tokensText = formatTelemetryTokens(display, style.theme, cfg.telemetry, style.glyphs);
+          }
         } else {
           const liveTurn = this.deps.telemetryTracker.peekLive();
           const agentLive =

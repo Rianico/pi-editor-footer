@@ -2,7 +2,7 @@
 
 The editor slot has grown three inconsistencies that only show when you look at the whole chrome rather than one segment: the input is fenced by two horizontal rules and nothing else, so it does not read as a frame; the provider half of the model label is dim while the model half is bold, which makes one identity look like two; and three separators (`·`, `|`, `•`) are used without a rule, so `cwd · git • runtime` mixes two of them inside one line. Separately, pi renders its `WorkingStatusIndicator` as a component **above** the editor even though this chrome already shows a working indicator, duplicating it and costing a line. We adopt pi-atelier's rounded frame for the editor, give the separators one rule (`|` between fields, `·` between sections inside a field), carry the provider into the model label's accent, and implement pi's `embedWorkingStatus` protocol so the indicator moves to the leftmost of the token/cost group on the stats line.
 
-Status: accepted
+Status: accepted (revision 3)
 
 ## Considered Options
 
@@ -16,12 +16,12 @@ Status: accepted
 
 ## Consequences
 
-- **Frame.** `TrackingEditor.render()` frames the editor: top rule `╭─ … ─╮`, body rows `│ <line> │` with one column of padding, bottom rule `╰─ … ─╯`; the editor body is rendered at `width - 4` (`EDITOR_FRAME_CHROME = 4`) and the frame is dropped below a 30-column width, where it would eat the input. **The telemetry status line that already sits above the top rule is preserved exactly as it is** — same line, same left alignment, same contents — and the frame is added *below* it; the frame must not swallow, duplicate, or move that line. The top rule keeps its existing contents (`provider/model · thinking | cache · usage` on the left, run activity on the right) and the bottom rule keeps the turn telemetry, right-aligned. The thinking-level glow now travels all four sides; a frame whose verticals were a different colour from its horizontals would read as a rendering artifact.
+- **Frame.** `TrackingEditor.render()` frames the editor: top rule `╭─ … ─╮`, body rows `│ <line> │` with one column of padding, bottom rule `╰─ … ─╯`; the editor body is rendered at `width - 4` (`EDITOR_FRAME_CHROME = 4`) and the frame is dropped below a 30-column width, where it would eat the input. **The telemetry status line that already sits above the top rule is not part of the frame** — same line, same left alignment — and the frame is added *below* it; the frame must not swallow, duplicate, or move that line. (Revision 1 required that line's *contents* to stay byte-identical; revision 3 composes them — see below.) The top rule keeps its existing contents (`provider/model · thinking | cache · usage` on the left, run activity on the right) and the bottom rule keeps the turn telemetry, right-aligned. The thinking-level glow now travels all four sides; a frame whose verticals were a different colour from its horizontals would read as a rendering artifact.
 - **Provider.** `provider` leaves `dim` and joins the accent+bold run of the model id; the `/` between them stays dim. An empty provider still renders nothing at all, and an unknown model still falls back to `unknown`.
-- **Working indicator.** `TrackingEditor` declares `embedWorkingStatus = true` and implements `setWorkingStatusIndicator()`, so pi stops adding its component above the editor. The indicator renders as `⠋ Working` (pi's spinner frame + pi's message) as the **leftmost section of the telemetry status line that already sits above the editor's top rule** — the left-aligned line carrying `↑ … · ↓ … · $…` and, after the `|`, the run activity:
+- **Working indicator.** `TrackingEditor` declares `embedWorkingStatus = true` and implements `setWorkingStatusIndicator()`, so pi stops adding its component above the editor. The indicator renders as `⠋ Working` (pi's spinner frame + pi's message) as the **leftmost field of the telemetry status line that already sits above the editor's top rule** — the left-aligned line whose second field is the run's delta tokens and activity, followed by a stall field when a stall exists (revision 3):
 
   ```
-   ⠋ Working · ↑ 14M · ↓ 89k · $0.15 | T1 · 8s · 2 tools
+   ⠋ Working | ↑ 14M · ↓ 89k · 2 turns · 8s · 2 tools
    ╭─ opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6% · 146k/1.0M ──────────────╮
   ```
 
@@ -30,7 +30,7 @@ Status: accepted
   **The slot is a state, not a decoration.** When the run settles the slot does not empty — it switches to `● Ready`, atelier's idle counterpart to `◆ Working` (`pi-atelier/src/sidebar.ts:164`), in the same place so the status never vanishes or moves to a second line:
 
   ```
-   ● Ready · ↑ 89 · ↓ 10 | 1 turns · 4s · 0 tools
+   ● Ready | ↑ 89 · ↓ 10 · 1 turns · 4s · 0 tools
   ```
 
   Two limits keep that honest: `Ready` renders only where the usage row already exists, so a fresh session does not grow a line just to announce idleness; and a non-working indicator (retry, compaction) leaves the slot **empty** rather than claiming Ready — retrying is not ready.
@@ -38,8 +38,25 @@ Status: accepted
 - **Separators.** One rule: `|` between fields, `·` between sections inside a field. `•` is retired from the chrome entirely.
   - Top rule: `provider/model · thinking` (one field) `|` `c 98.1% · 14.6% · 146k/1.0M` (the context field, its three sections joined by `·` — cache is a section of context, not a field of its own).
   - Activity and telemetry keep `·` (one field each).
-  - Stats line: `⠋ Working · ↑ 14M · ↓ 89k · $0.15` — one status/usage field.
+  - Usage row above the top rule: `⠋ Working | ↑ 40k · ↓ 8k · 2 turns · 8s · 3 tools | !2×3.3s` — three fields (status slot, run, stall), each `|`-separated, each absent when empty.
   - Footer left: `cwd · git` is one field (where am I), `runtime` another: `@ repo · main [?1] | node 26.8.1`.
-  - The optional tokens-above-top-rule line uses `·`, matching the stats line it duplicates.
+  - Delta tokens and run activity are one field, its sections joined by `·`; a stall is its own field, because a stall is a condition rather than an activity metric.
 - **Sync contract.** `embedWorkingStatus`, `setWorkingStatusIndicator` and the `render()` override join the pi-tui internals checklist: a pi bump can change the indicator protocol, the frame's interaction with cursor reporting, and the editor's own line count.
 - **Verification must be a pty capture, not unit strings.** Rails shift every body column by two and the body is rendered at `width - 4`, so the caret, selection, mid-line edits, completion-popup alignment, wrapped long lines and the `↑ N more` scroll indicator all have to be observed in a real terminal.
+
+## Revision 3 — the usage row is composed, and its tokens are run-scoped
+
+Revisions 1–2 treated the row above the top rule as an inherited passthrough that we only prepended to. It now carries a readout of our own, so its composition is ours to state:
+
+```
+ ● Ready | ↑ 40k · ↓ 8k · 2 turns · 8s · 3 tools | !2×3.3s
+ ╭─ opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6% · 146k/1.0M ──────────────╮
+```
+
+- **Boundaries.** `|` between fields: the status slot, then the run field, then the stall field when a stall exists. A `|` is emitted only when both sides are present, so an empty status slot leaves no dangling separator.
+- **Run field.** Delta tokens and run activity are one field, its sections joined by `·`, delta first: `↑ … · ↓ … · 2 turns · 8s · 3 tools`. The delta pair is the stable half and must not shift when the volatile activity half changes width (`3 tools` → `12 tools (2 running)`).
+- **Delta tokens is run-scoped**, deliberately unlike the footer's session totals. Live it is the synthetic `trigger + Σ turn outputs + Σ tool results + liveΔ` estimate, marked `~`; at settle it becomes authoritative, with input taken as the largest turn prompt — `max`, never `sum`, because every turn re-sends history. It is captured before the ledger resets, so the row holds the last run's delta at rest and resets at the next `agent_start`; a run that never completed a turn keeps its estimate and its `~`. Nothing is reconstructed from the session file, so a fresh or resumed session grows the row with its first run, as revision 2 already required.
+- **No context-window clamp at rest.** The authoritative value cannot exceed the window, so clamping it could only hide a bug; the synthetic live estimate keeps its clamp.
+- **Cost is not in this row.** The `$0.15` in the revision-1 example is stale: cost is a session figure and lives on the timeline row and the footer.
+- **Superseded clause.** Revision 1's "the telemetry status line … is preserved exactly as it is" applies to the line's position and alignment only; its contents are composed as above.
+

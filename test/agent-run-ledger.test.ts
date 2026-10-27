@@ -165,50 +165,78 @@ describe("AgentRunLedger", () => {
     const res = ledger.getPerAgentTotalsForTimeline(null, snap, 10000);
     assert.equal(res.input, 5000);
   });
-  it("getIdleAuthoritativeDisplay shows baseline delta capped to idle", () => {
-    // Live call site: live-border render idle branch (billed total after agent_end).
-    const ledger = new AgentRunLedger();
-    ledger.setBaseline(mkTotals({ input: 100000, output: 100, cost: 0.25 }));
-    const snap = mkTotals({ input: 160000, output: 500, cost: 0.75 });
-    // delta input 60000, context 50000 wins over session total 160000
-    const display = ledger.getIdleAuthoritativeDisplay(snap, 50000);
-    assert.equal(display.inputTokens, 50000);
-    assert.equal(display.outputTokens, 400);
-    assert.equal(display.costUsd, 0.5);
-    assert.equal(display.totalTokens, 50400);
-    // authoritative — never marked as an estimate, no live tps carried
-    assert.equal(display.estimated, false);
-    assert.equal(display.tps, null);
+  it("settle captures the run's authoritative figures — max input, summed output, no clamp", () => {
+    const ledger = new AgentRunLedger(() => 5000);
+    ledger.startRun(0);
+    ledger.recordTurn(mkTel({ inputTokens: 50000, outputTokens: 200 }));
+    ledger.recordTurn(mkTel({ inputTokens: 60000, outputTokens: 300 }));
+    // context window 50000 is deliberately below the authoritative prompt
+    ledger.settleRun(null, 50000);
+    const atRest = ledger.getAtRestTotals();
+    assert.ok(atRest);
+    // max, never sum — turns re-send history, 60k not 110k
+    assert.equal(atRest.inputTokens, 60000);
+    assert.equal(atRest.outputTokens, 500);
+    // no context-window clamp at rest: an authoritative prompt cannot exceed the window,
+    // so clamping could only hide a bug
+    assert.ok(atRest.inputTokens > 50000);
+    assert.equal(atRest.estimated, false);
+    // settle closes the run's accounting
+    assert.equal(ledger.isActive(), false);
+    assert.equal(ledger.getTurnCount(), 0);
   });
-  it("getIdleAuthoritativeDisplay keeps delta when under both caps", () => {
-    const ledger = new AgentRunLedger();
-    ledger.setBaseline(mkTotals({ input: 1000, output: 0, cost: 0 }));
-    const snap = mkTotals({ input: 61000, output: 1000, cost: 0.02 });
-    // delta 60000 < context 70000 and < session total 61000 → uncapped
-    const display = ledger.getIdleAuthoritativeDisplay(snap, 70000);
-    assert.equal(display.inputTokens, 60000);
-    assert.equal(display.outputTokens, 1000);
-    assert.equal(display.totalTokens, 61000);
+
+  it("at rest survives the settle and clears at the next startRun", () => {
+    const ledger = new AgentRunLedger(() => 5000);
+    ledger.startRun(0);
+    ledger.recordTurn(mkTel({ inputTokens: 40000, outputTokens: 8000 }));
+    ledger.settleRun(null, 1_000_000);
+    assert.equal(ledger.getAtRestTotals()?.inputTokens, 40000);
+    // the pair resets when the next Agent run starts, never accumulating across runs
+    ledger.startRun(6000);
+    assert.equal(ledger.getAtRestTotals(), null);
   });
-  it("getIdleAuthoritativeDisplay falls back to session totals when no baseline", () => {
-    const ledger = new AgentRunLedger();
-    const snap = mkTotals({ input: 416000, output: 505, cost: 0.16 });
-    const display = ledger.getIdleAuthoritativeDisplay(snap, 1000000);
-    assert.equal(display.inputTokens, 416000);
-    assert.equal(display.outputTokens, 505);
-    assert.equal(display.costUsd, 0.16);
-    assert.equal(display.totalTokens, 416505);
-    assert.equal(display.estimated, false);
+
+  it("a run that completed no turn keeps its live estimate, still marked ~", () => {
+    const ledger = new AgentRunLedger(() => 5000);
+    ledger.startRun(0);
+    ledger.setTriggerTokens(400);
+    ledger.addToolResultTokens(1200);
+    const liveTurn = mkTel({ inputTokens: 2000, outputTokens: 300, estimated: true });
+    ledger.settleRun(liveTurn, 1_000_000);
+    const atRest = ledger.getAtRestTotals();
+    assert.ok(atRest);
+    // trigger + tool results + the unfinished turn's live delta, exactly what the row showed
+    assert.equal(atRest.inputTokens, 400 + 1200 + 300);
+    assert.equal(atRest.outputTokens, 300);
+    assert.equal(atRest.estimated, true);
   });
-  it("getIdleAuthoritativeDisplay clamps a negative delta to zero", () => {
-    const ledger = new AgentRunLedger();
-    ledger.setBaseline(mkTotals({ input: 100, output: 50, cost: 0.1 }));
-    const snap = mkTotals({ input: 40, output: 10, cost: 0.02 });
-    const display = ledger.getIdleAuthoritativeDisplay(snap, 70000);
-    assert.equal(display.inputTokens, 0);
-    assert.equal(display.outputTokens, 0);
-    assert.equal(display.costUsd, 0);
-    assert.equal(display.totalTokens, 0);
+
+  it("the at-rest estimate keeps the context-window clamp the live row has", () => {
+    const ledger = new AgentRunLedger(() => 5000);
+    ledger.startRun(0);
+    ledger.setTriggerTokens(400);
+    ledger.addToolResultTokens(1200);
+    ledger.settleRun(mkTel({ outputTokens: 300, estimated: true }), 1000);
+    assert.equal(ledger.getAtRestTotals()?.inputTokens, 1000);
+  });
+
+  it("a run that produced nothing leaves no at-rest readout", () => {
+    const ledger = new AgentRunLedger(() => 5000);
+    ledger.startRun(0);
+    ledger.settleRun(null, 1_000_000);
+    // fresh or resumed session alike: no first run, no row
+    assert.equal(ledger.getAtRestTotals(), null);
+  });
+
+  it("reset clears the at-rest readout too (session boundary)", () => {
+    const ledger = new AgentRunLedger(() => 5000);
+    ledger.startRun(0);
+    ledger.recordTurn(mkTel({ inputTokens: 40000, outputTokens: 8000 }));
+    ledger.settleRun(null, 1_000_000);
+    assert.ok(ledger.getAtRestTotals());
+    ledger.reset();
+    assert.equal(ledger.getAtRestTotals(), null);
   });
   it("reset clears state", () => {
     const ledger = new AgentRunLedger(() => 0);

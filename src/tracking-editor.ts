@@ -42,6 +42,7 @@ export interface ChromeSnapshot {
   topContextText: string;
   topRunTimeText: string;
   topTokensText: string;
+  topStallText: string;
   telemetryText: string;
   bottomLeftText: string;
   cursorStyle: CursorStyle;
@@ -59,6 +60,7 @@ const DEFAULT_CHROME: ChromeSnapshot = {
   topContextText: "",
   topRunTimeText: "",
   topTokensText: "",
+  topStallText: "",
   telemetryText: "",
   bottomLeftText: "",
   cursorStyle: "block",
@@ -181,6 +183,7 @@ export class TrackingEditor extends Editor {
     if (patch.topContextText !== undefined) this._chrome.topContextText = patch.topContextText;
     if (patch.topRunTimeText !== undefined) this._chrome.topRunTimeText = patch.topRunTimeText;
     if (patch.topTokensText !== undefined) this._chrome.topTokensText = patch.topTokensText;
+    if (patch.topStallText !== undefined) this._chrome.topStallText = patch.topStallText;
     if (patch.telemetryText !== undefined) this._chrome.telemetryText = patch.telemetryText;
     if (patch.bottomLeftText !== undefined) this._chrome.bottomLeftText = patch.bottomLeftText;
     if (patch.cursorStyle !== undefined) {
@@ -259,7 +262,9 @@ export class TrackingEditor extends Editor {
     const statusSlot = planStatusSlot({
       hasIndicator: Boolean(indicator),
       indicatorIsWorking: Boolean(indicator && isWorkingIndicator(indicator)),
-      hasUsageRow: Boolean(this._chrome.topTokensText || this._chrome.topRightText),
+      hasUsageRow: Boolean(
+        this._chrome.topTokensText || this._chrome.topRightText || this._chrome.topStallText,
+      ),
     });
     const workingText =
       statusSlot === "working"
@@ -270,7 +275,12 @@ export class TrackingEditor extends Editor {
     const statusLineText = this.statusRowText(width);
     this.lastPrependedRows = rowsPrependedAboveEditor({
       statusRow: statusLineText !== "",
-      usageRow: Boolean(workingText || this._chrome.topTokensText || this._chrome.topRightText),
+      usageRow: Boolean(
+        workingText ||
+        this._chrome.topTokensText ||
+        this._chrome.topRightText ||
+        this._chrome.topStallText,
+      ),
     });
     lines = this.borderRenderer.renderWithBorders(lines, width, {
       glowEnabled: this._chrome.glowEnabled,
@@ -280,6 +290,7 @@ export class TrackingEditor extends Editor {
       topContextText: this._chrome.topContextText,
       topRunTimeText: this._chrome.topRunTimeText,
       topTokensText: this._chrome.topTokensText,
+      topStallText: this._chrome.topStallText,
       workingText,
       statusLineText,
     });

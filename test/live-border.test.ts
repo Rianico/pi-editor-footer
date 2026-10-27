@@ -13,8 +13,10 @@ import { DEFAULT_CONFIG, type ThemeConfig } from "../src/config.js";
 import { stripAnsi } from "../src/format.js";
 import type { SessionRunTimeSnapshot } from "../src/session-run-time.js";
 import type { TurnTelemetry } from "../src/telemetry.js";
+import { AgentRunLedger } from "../src/agent-run-ledger.js";
 import type { RunActivitySnapshot } from "../src/run-activity.js";
-import type { ChromeSnapshot } from "../src/tracking-editor.js";
+import { TrackingEditor, type ChromeSnapshot } from "../src/tracking-editor.js";
+import { rowsPrependedAboveEditor } from "../src/border-renderer.js";
 
 function tel(over: Partial<TurnTelemetry> = {}): TurnTelemetry {
   return {
@@ -52,7 +54,9 @@ function harness(
     ledgerLive?: TurnTelemetry | null;
     runSnap?: RunActivitySnapshot;
     isRunning?: boolean;
-    idleDisplay?: TurnTelemetry | null;
+    atRest?: TurnTelemetry | null;
+    atRestThrows?: boolean;
+    ledger?: unknown;
     incDisplay?: TurnTelemetry | null;
     runTime?: SessionRunTimeSnapshot;
     noEditor?: boolean;
@@ -102,11 +106,14 @@ function harness(
         isRunning: () => over.isRunning ?? false,
       } as never,
       // undefined option → plausible display; explicit null pins the throw/skip branch
-      agentLedger: {
+      agentLedger: (over.ledger ?? {
         getLiveTotals: () => over.ledgerLive ?? null,
-        getIdleAuthoritativeDisplay: () => ("idleDisplay" in over ? over.idleDisplay : tel()),
+        getAtRestTotals: () => {
+          if (over.atRestThrows) throw new Error("ledger boom");
+          return "atRest" in over ? over.atRest! : tel();
+        },
         getIncrementalLiveDisplayTotals: () => ("incDisplay" in over ? over.incDisplay : tel()),
-      } as never,
+      }) as never,
       getSessionRunTime: () => over.runTime ?? null,
     },
   };
@@ -117,6 +124,47 @@ function renderOnce(h: Harness): void {
   new LiveBorder(h.deps).render();
 }
 
+/** Identity theme + a real editor, so the rendered row (not just the fields) is asserted. */
+const identity = (s: string): string => s;
+const liveTheme = {
+  getFgAnsi: () => "",
+  getColorMode: () => "truecolor",
+  getThinkingBorderColor: () => identity,
+  fg: (_style: string, s: string) => s,
+  bold: identity,
+  dim: identity,
+  muted: identity,
+};
+const editorTheme = {
+  borderColor: identity,
+  selectList: {
+    selectedPrefix: identity,
+    selectedText: identity,
+    description: identity,
+    scrollInfo: identity,
+    noMatch: identity,
+  },
+};
+const tui = {
+  requestRender: () => {},
+  setShowHardwareCursor: () => {},
+  terminal: { rows: 24, columns: 80, write: () => {} },
+};
+
+/** The one patch as a real editor renders it — prepend rows and status slot included. */
+function renderThroughEditor(chrome: Partial<ChromeSnapshot>): {
+  editor: TrackingEditor;
+  lines: string[];
+} {
+  const editor = new TrackingEditor(
+    tui as never,
+    editorTheme as never,
+    { matches: () => false },
+    () => liveTheme as never,
+  );
+  editor.setChrome(chrome);
+  return { editor, lines: editor.render(80) };
+}
 describe("LiveBorder.render — coalesced draw", () => {
   test("one setChrome per refresh carries every field", () => {
     const h = harness({ peekLive: tel({ totalMs: 5000 }), isRunning: true });
@@ -128,6 +176,7 @@ describe("LiveBorder.render — coalesced draw", () => {
       "topContextText",
       "topRightText",
       "topRunTimeText",
+      "topStallText",
       "topTokensText",
     ]);
   });
@@ -142,9 +191,9 @@ describe("LiveBorder.render — coalesced draw", () => {
   });
 
   test("a throwing ledger island still delivers the other islands' fields in the one patch", () => {
-    // idleDisplay null makes formatTelemetryTokens(undefined) throw inside the context
+    // a throwing at-rest read makes formatTelemetryTokens throw inside the context
     // island — same as before coalescing, top/telemetry fields still land.
-    const h = harness({ idleDisplay: null });
+    const h = harness({ atRestThrows: true });
     renderOnce(h);
     assert.equal(h.calls.length, 1);
     assert.ok("topRightText" in h.merged);
@@ -185,15 +234,77 @@ describe("LiveBorder.render — field branches", () => {
     assert.ok(plain.includes("TTFT"));
   });
 
-  test("stall joins the top-right with a dim pipe when stalls on", () => {
+  test("stall is its own field, never another section of the run activity", () => {
     const h = harness({
       ledgerLive: tel({ stallMs: 1500, stallCount: 2 }),
       runSnap: idleSnap({ phase: "running", turnNumber: 2, durationMs: 12345 }),
     });
     renderOnce(h);
-    const plain = stripAnsi(h.merged.topRightText!);
-    assert.ok(plain.includes("2 turns"), plain);
-    assert.ok(plain.includes(" | !2×1.5s"), plain);
+    const activity = stripAnsi(h.merged.topRightText!);
+    assert.ok(activity.includes("2 turns"), activity);
+    assert.ok(!activity.includes("1.5s"), "a condition is not glued to the activity field");
+    assert.ok(!activity.includes("|"), activity);
+    const stall = stripAnsi(h.merged.topStallText!);
+    assert.ok(stall.includes("!2×1.5s"), stall);
+  });
+
+  test("no stall → no stall field", () => {
+    const h = harness({ runSnap: idleSnap({ phase: "running", turnNumber: 2 }) });
+    renderOnce(h);
+    assert.equal(h.merged.topStallText, "");
+  });
+
+  test("a stall is reported only while the current run is actually stalled", () => {
+    // Run 1 stalls and settles; run 2 starts healthy with no turn yet. The stall is a
+    // live condition, so run 1's `!2×` must not be inherited — not even though the
+    // telemetry tracker still holds run 1's figures (it resets only on model select).
+    const settled = new AgentRunLedger(() => 9000);
+    settled.startRun(0);
+    settled.recordTurn(tel({ stallMs: 3300, stallCount: 2 }));
+    settled.settleRun(null, 1_000_000);
+    settled.startRun(9000);
+    const fresh = harness({
+      ledger: settled,
+      lastTel: tel({ stallMs: 3300, stallCount: 2 }),
+      runSnap: idleSnap({ phase: "running" }),
+      isRunning: true,
+    });
+    renderOnce(fresh);
+    assert.equal(fresh.merged.topStallText, "", "run 2 has no stall of its own yet");
+
+    // The same run's own stall does render once it has one, so the rule above is
+    // "live-only", not "a field that can never appear".
+    const stalledLedger = new AgentRunLedger(() => 9000);
+    stalledLedger.startRun(0);
+    stalledLedger.recordTurn(tel({ stallMs: 3300, stallCount: 2 }));
+    const stalled = harness({
+      ledger: stalledLedger,
+      lastTel: null,
+      runSnap: idleSnap({ phase: "running" }),
+      isRunning: true,
+    });
+    renderOnce(stalled);
+    assert.ok(stripAnsi(stalled.merged.topStallText!).includes("!2×3.3s"));
+  });
+
+  test("a stall-only row exists: one row prepended, and mouse compensation counts it", () => {
+    // #63 invariant 4: the stall is its own field, and a stall-only row still exists.
+    // Field *separation* does not prove *existence* — this renders the row and counts it.
+    const h = harness({ ledgerLive: tel({ stallMs: 3300, stallCount: 2 }), atRest: null });
+    renderOnce(h);
+    assert.equal(h.merged.topTokensText, "");
+    assert.equal(h.merged.topRightText, "");
+    assert.ok(stripAnsi(h.merged.topStallText!).includes("!2×3.3s"));
+
+    const bare = renderThroughEditor({});
+    const { editor, lines } = renderThroughEditor(h.merged);
+    const renderedRows = lines.length - bare.lines.length;
+    assert.equal(renderedRows, 1, "the stall alone is exactly one row");
+    assert.equal(rowsPrependedAboveEditor({ usageRow: true }), renderedRows);
+    // handleMouse shifts clicks by the count render actually prepended.
+    const compensated = (editor as unknown as { lastPrependedRows: number }).lastPrependedRows;
+    assert.equal(compensated, renderedRows, "click compensation matches the rendered row");
+    assert.ok(stripAnsi(lines[0]!).includes("!2×3.3s"), "the stall row is above the frame");
   });
 
   test("stall suppressed when telemetry.stalls off, still bottom-clean", () => {
@@ -202,7 +313,8 @@ describe("LiveBorder.render — field branches", () => {
       ledgerLive: tel({ stallMs: 1500, stallCount: 2 }),
     });
     renderOnce(h);
-    assert.ok(!stripAnsi(h.merged.topRightText!).includes("1.5s"));
+    assert.equal(h.merged.topStallText, "");
+    assert.ok(!stripAnsi(h.merged.topRightText ?? "").includes("1.5s"));
   });
 
   test("context segment off → empty topContextText", () => {
@@ -220,12 +332,45 @@ describe("LiveBorder.render — field branches", () => {
     assert.ok(stripAnsi(on.merged.topContextText!).includes("[#####-----]"));
   });
 
-  test("idle tokens use the authoritative ledger display (no ~)", () => {
-    const h = harness({ idleDisplay: tel({ inputTokens: 3000, outputTokens: 400 }) });
+  test("idle tokens are the last run's authoritative delta (no ~)", () => {
+    const h = harness({ atRest: tel({ inputTokens: 3000, outputTokens: 400 }) });
     renderOnce(h);
     const plain = stripAnsi(h.merged.topTokensText!);
     assert.ok(plain.includes("↑ 3.0k") && plain.includes("↓ 400"), plain);
     assert.ok(!plain.includes("~"));
+  });
+
+  test("idle tokens come from the run ledger, never from session totals", () => {
+    // Real ledger: it holds per-Agent-run accounting only, so a session figure has
+    // no route into this row. Two turns re-sending history settle at max, not sum.
+    const ledger = new AgentRunLedger(() => 9000);
+    ledger.startRun(0);
+    ledger.recordTurn(tel({ inputTokens: 40000, outputTokens: 5000 }));
+    ledger.recordTurn(tel({ inputTokens: 46000, outputTokens: 3000 }));
+    ledger.settleRun(null, 1_000_000);
+    const h = harness({ ledger });
+    renderOnce(h);
+    const plain = stripAnsi(h.merged.topTokensText!);
+    assert.ok(plain.includes("↑ 46k") && plain.includes("↓ 8.0k"), plain);
+    assert.ok(!plain.includes("~"));
+  });
+
+  test("before the session's first run the usage row does not exist", () => {
+    const h = harness({ ledger: new AgentRunLedger() });
+    renderOnce(h);
+    assert.equal(h.merged.topTokensText, "");
+    // Carried finding from #62: an empty tokens field must not leave a row alive,
+    // so the two other fields (and therefore the whole row) are pinned too — and
+    // then rendered through the real prepend/status-slot path.
+    assert.equal(h.merged.topRightText, "");
+    assert.equal(h.merged.topStallText, "");
+    const { lines } = renderThroughEditor(h.merged);
+    assert.equal(rowsPrependedAboveEditor({}), 0, "no row was prepended above the frame");
+    assert.match(stripAnsi(lines[0] ?? ""), /^╭─/, "the frame is the first row");
+    assert.ok(
+      !lines.some((line) => /Ready|Working/.test(stripAnsi(line))),
+      "an empty slot claims nothing, not even Ready",
+    );
   });
 
   test("running tokens use the incremental display (~ estimated)", () => {

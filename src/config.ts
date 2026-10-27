@@ -306,7 +306,7 @@ export const CONFIG_SCHEMA: readonly ConfigDescriptor[] = [
   {
     path: "telemetry.tokens",
     kind: "boolean",
-    label: "Tokens",
+    label: "Delta tokens",
     tab: "telemetry",
     default: true,
   },

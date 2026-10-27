@@ -332,7 +332,14 @@ export class SessionOrchestrator {
     };
     this.liveBorder.stopTick();
     this.runActivityTracker.reset();
-    this.installedEditor?.setChrome({ topRightText: "" });
+    // Every field that keeps the usage row alive: the editor's existence predicate and
+    // `rowsPrependedAboveEditor` both count tokens, activity and stall, so clearing only
+    // two would leave a row (and its click compensation) outliving the session.
+    this.installedEditor?.setChrome({
+      topTokensText: "",
+      topRightText: "",
+      topStallText: "",
+    });
     this.lastSessionCtx = null;
     this.headerCleanupInner?.();
     this.headerCleanupInner = null;
@@ -458,6 +465,18 @@ export class SessionOrchestrator {
 
   private renderLiveChrome(): void {
     this.liveBorder.render();
+  }
+
+  /**
+   * Context-window occupancy in tokens — the clamp the live delta-token estimate is
+   * held to. The at-rest authoritative figure is deliberately never clamped (an
+   * authoritative prompt cannot exceed the window).
+   */
+  private contextUsageTokens(): number | undefined {
+    const ctx = this.lastSessionCtx as
+      | (ExtensionContextLike & { getContextUsage?: () => { tokens?: number } })
+      | null;
+    return ctx?.getContextUsage?.()?.tokens;
   }
 
   // ——— git rail — one read path, one repaint decision ———
@@ -857,12 +876,7 @@ export class SessionOrchestrator {
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
           );
-          // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-          const ctxTokens = (
-            this.lastSessionCtx as ExtensionContextLike & {
-              getContextUsage?: () => { tokens?: number };
-            }
-          )?.getContextUsage?.()?.tokens;
+          const ctxTokens = this.contextUsageTokens();
           const snap = this.runActivityTracker.getSnapshot();
           this.transcriptTimeline.handleAgentSettled(
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
@@ -909,7 +923,9 @@ export class SessionOrchestrator {
       // The run ended or was aborted (pi emits agent_settled for both): the rail may
       // have changed under it, and this is the moment the user reads it.
       this.gitRefresher.request();
-      this.agentLedger.reset();
+      // Freeze this run's delta tokens for the row at rest before its accounting goes:
+      // a run that ended without a completed turn keeps the live estimate it showed.
+      this.agentLedger.settleRun(this.telemetryTracker.peekLive(), this.contextUsageTokens());
       this.renderLiveChrome();
     });
 

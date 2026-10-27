@@ -48,6 +48,12 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 - pi hands the setter **every** indicator kind (no `instanceof` filter, no fallback once the claim is made), so `statusRowText` renders retry/compaction/branch-summary as their own row above the chrome; dropping them would swallow `Retrying (1/3) …`.
 - The footer's own working segment is deleted (`renderTimerSegment`, `glyphs.working`, `FooterState.workingSince`); `lastDoneIn`/timeline state is untouched.
 - Verify with a real interactive pty (`pty.fork` + `TIOCSWINSZ`); `script -q … </dev/null` renders pi's own chrome and silently proves nothing.
+
+### Two token scopes — the usage row is per-run, the footer is session
+
+- The usage row above the frame and the footer carry **deliberately different** `↑`/`↓`. The row is **Delta tokens** for one **Agent run**: `~`-marked synthetic estimate while streaming, authoritative at settle, input = the largest single turn's prompt (per-turn `usage.input`, `max`, never `sum` — every turn re-sends history), reset at `agent_start`, absent until the session's first run. The footer is **session** totals over *billed* input — uncached + cache read + cache write (`totalInputTokens`) — plus output and cost.
+- So `↑ 40k` above `↑ 352k` is correct, not a bug: the row answers *how much this run moved* (and, being uncached-only, reads far *below* the context bar on a cached session), the footer *what the session billed*. Never "reunify" them — feeding session totals to the row, or raw `usage.input` to the footer, is a regression.
+- Contract and seams: ADR-0004 revision 3 ("Delta tokens is run-scoped"), the **Delta tokens** / **Agent run** entries in `GLOSSARY.md`; `src/agent-run-ledger.ts` (`startRun` reset, `settleRun` freeze, `getAtRestTotals`), `src/live-border.ts:applyContext` (row), `src/footer.ts` + `src/state.ts:totalInputTokens` (footer). Prove it with a real pty capture, not unit strings — recipe in `docs/reference/pi-tui-internals.md` ("Sync contract").
 ### Context bar `362/1.0M` missing unit / location
 
 - `footer` used `fmtTokens` (`362k/1.0M` correct) but top border `model-info.ts:formatContextWindow` returned `1m` lowercase no decimal for `1M`. Fixed to `` `${(tokens/1_000_000).toFixed(1)}M` `` → `1.0M` (capital `M`, one decimal) so `362k/1.0M` is consistent.
