@@ -134,6 +134,7 @@ describe("LiveBorder.render — coalesced draw", () => {
       "topContextText",
       "topRightText",
       "topRunTimeText",
+      "topStallText",
       "topTokensText",
     ]);
   });
@@ -191,15 +192,24 @@ describe("LiveBorder.render — field branches", () => {
     assert.ok(plain.includes("TTFT"));
   });
 
-  test("stall joins the top-right with a dim pipe when stalls on", () => {
+  test("stall is its own field, never another section of the run activity", () => {
     const h = harness({
       ledgerLive: tel({ stallMs: 1500, stallCount: 2 }),
       runSnap: idleSnap({ phase: "running", turnNumber: 2, durationMs: 12345 }),
     });
     renderOnce(h);
-    const plain = stripAnsi(h.merged.topRightText!);
-    assert.ok(plain.includes("2 turns"), plain);
-    assert.ok(plain.includes(" | !2×1.5s"), plain);
+    const activity = stripAnsi(h.merged.topRightText!);
+    assert.ok(activity.includes("2 turns"), activity);
+    assert.ok(!activity.includes("1.5s"), "a condition is not glued to the activity field");
+    assert.ok(!activity.includes("|"), activity);
+    const stall = stripAnsi(h.merged.topStallText!);
+    assert.ok(stall.includes("!2×1.5s"), stall);
+  });
+
+  test("no stall → no stall field", () => {
+    const h = harness({ runSnap: idleSnap({ phase: "running", turnNumber: 2 }) });
+    renderOnce(h);
+    assert.equal(h.merged.topStallText, "");
   });
 
   test("stall suppressed when telemetry.stalls off, still bottom-clean", () => {
@@ -208,7 +218,8 @@ describe("LiveBorder.render — field branches", () => {
       ledgerLive: tel({ stallMs: 1500, stallCount: 2 }),
     });
     renderOnce(h);
-    assert.ok(!stripAnsi(h.merged.topRightText!).includes("1.5s"));
+    assert.equal(h.merged.topStallText, "");
+    assert.ok(!stripAnsi(h.merged.topRightText ?? "").includes("1.5s"));
   });
 
   test("context segment off → empty topContextText", () => {

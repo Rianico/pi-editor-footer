@@ -58,7 +58,7 @@ const GOLDEN_ROWS: Record<(typeof TABS)[number], SettingRow[]> = {
     { id: "tps", label: "TPS", currentValue: "On" },
     { id: "ttft", label: "TTFT", currentValue: "On" },
     { id: "duration", label: "Total duration", currentValue: "On" },
-    { id: "tokens", label: "Tokens", currentValue: "On" },
+    { id: "tokens", label: "Delta tokens", currentValue: "On" },
     { id: "stalls", label: "Stall details", currentValue: "On" },
     { id: "cost", label: "Cost rate", currentValue: "On" },
   ],

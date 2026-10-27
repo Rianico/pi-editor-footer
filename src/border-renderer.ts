@@ -1,6 +1,7 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { isEditorBorderLine, isEditorScrollBorderLine } from "./layout.js";
 import { buildLabel, resolveThinkingGlow, type ModelInfo, type ThemeLike } from "./model-info.js";
+import { composeUsageRow } from "./usage-row.js";
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -87,6 +88,8 @@ export class BorderRenderer {
       /** Already-styled session run time — the left label's rightmost field (gated by `sessionRunTime` upstream). */
       topRunTimeText?: string;
       topTokensText?: string;
+      /** Already-styled stall (`!2×3.3s`) — its own field, absent while healthy. */
+      topStallText?: string;
       /** Already-styled status segment — `⠋ Working` while running, `● Ready` once it settles; leftmost on the usage row. */
       workingText?: string;
       /** Already-styled pi status we do not embed (retry…); rendered above the usage row. */
@@ -147,9 +150,8 @@ export class BorderRenderer {
     }
 
     // Rows above the top border — left aligned, no border.
-    // Usage row: the working spinner is the leftmost SECTION (ADR-0004 rev 2), so it
-    // joins the tokens with `·`; run activity is a separate FIELD after ` | `.
-    // Status row: pi indicators we cannot embed keep rendering above the editor.
+    // Usage row: `status | delta tokens · activity | stall` (ADR-0004 rev 3);
+    // status row: pi indicators we cannot embed keep rendering above the editor.
     out = this.prependRows(out, width, opts);
 
     // Bottom embedding (telemetry left/right)
@@ -171,6 +173,8 @@ export class BorderRenderer {
   /**
    * Usage + status rows above the chrome — the line #55 put the working spinner on.
    * Emitted bottom-up because `embedTokensAbove` prepends; the status row ends on top.
+   * The usage row itself is composed by `composeUsageRow` (status | run | stall,
+   * ADR-0004 rev 3); this method only decides whether a row exists and where.
    */
   private prependRows(
     lines: string[],
@@ -178,28 +182,30 @@ export class BorderRenderer {
     opts: {
       topTokensText?: string;
       topRightText?: string;
+      topStallText?: string;
       workingText?: string;
       statusLineText?: string;
     },
   ): string[] {
     const statusLineText = opts.statusLineText ?? "";
-    const usageParts = [opts.workingText ?? "", opts.topTokensText ?? ""].filter(Boolean);
-    const tokensRight = opts.topRightText ?? "";
-    const usageRow = usageParts.length > 0 || tokensRight !== "";
-    if (!usageRow && !statusLineText) return lines;
     // SAFETY: pi theme seam — fg is optional theme method
     const themeForRows = this.getLiveTheme() as unknown as {
-      fg: (c: string, t: string) => string;
+      fg?: (c: string, t: string) => string;
     }; // SAFETY: intentional unsafe cast — validated at runtime
     const fg = themeForRows.fg;
-    const dimSection = typeof fg === "function" ? fg.call(themeForRows, "dim", " · ") : " · ";
-    const dimField = typeof fg === "function" ? fg.call(themeForRows, "dim", " | ") : " | ";
-    const usage = usageParts.join(dimSection);
-    const usageText = usage
-      ? tokensRight
-        ? `${usage}${dimField}${tokensRight}`
-        : usage
-      : tokensRight;
+    const rowTheme =
+      typeof fg === "function"
+        ? { fg: (style: string, text: string) => fg.call(themeForRows, style, text) }
+        : { fg: (_style: string, text: string) => text };
+    const usageText = composeUsageRow(
+      {
+        status: opts.workingText,
+        tokens: opts.topTokensText,
+        activity: opts.topRightText,
+        stall: opts.topStallText,
+      },
+      rowTheme,
+    );
     let out = [...lines];
     if (usageText) out = embedTokensAbove(out, width, usageText);
     if (statusLineText) out = embedTokensAbove(out, width, statusLineText);
@@ -226,6 +232,7 @@ export class BorderRenderer {
       topRunTimeText?: string;
       topTokensText?: string;
       topRightText?: string;
+      topStallText?: string;
       workingText?: string;
       statusLineText?: string;
     },
@@ -251,7 +258,9 @@ export class BorderRenderer {
 
     // Run activity lives on the usage row while that row exists (#55); with no usage
     // row it keeps its old home at the right end of the top rule.
-    const usageRowExists = Boolean(opts.workingText || opts.topTokensText || opts.topRightText);
+    const usageRowExists = Boolean(
+      opts.workingText || opts.topTokensText || opts.topRightText || opts.topStallText,
+    );
     const topRight = usageRowExists ? "" : (opts.topRightText ?? "");
     const out: string[] = [frameTopRule(width, [scrollLabelOf(top), label], topRight, frame)];
     for (const line of body) out.push(frameBodyLine(line, bodyWidth, frame));

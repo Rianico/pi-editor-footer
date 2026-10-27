@@ -168,31 +168,32 @@ export class LiveBorder {
     return style;
   }
 
+  /**
+   * Run activity is the run field's second half; the stall is a condition, so it
+   * is written as its own field and the row composer separates it with `|`
+   * (ADR-0004 rev 3). Keeping them apart is what keeps the stall out of the
+   * activity's `·` sections.
+   */
   private applyTopBorder(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
     const cfg = this.deps.getConfig();
     try {
       const snap = this.deps.runActivityTracker.getSnapshot();
-      let text = formatRunActivityTopRight(snap, style.theme);
-      // Relocate stall to the right of tool use with pipe separator — agent-run live (option B), not bottom telemetry
+      const text = formatRunActivityTopRight(snap, style.theme);
+      let stallText = "";
       if (cfg.telemetry.enabled && cfg.telemetry.stalls) {
         // Deepened via AgentRunLedger — stall is agent-run live, single source
         const tel =
           this.deps.agentLedger.getLiveTotals(this.deps.telemetryTracker.peekLive()) ??
           this.deps.telemetryTracker.getLastTelemetry();
         if (tel && tel.stallMs > 0) {
-          const stallText = style.theme.fg(
+          stallText = style.theme.fg(
             "warning",
             `${style.glyphs.stall}${tel.stallCount}×${formatTurnDuration(tel.stallMs).trim()}`,
           );
-          if (text) {
-            const pipe = style.theme.fg("dim", " | ");
-            text = `${text}${pipe}${stallText}`;
-          } else {
-            text = stallText;
-          }
         }
       }
       patch.topRightText = text;
+      patch.topStallText = stallText;
     } catch {
       // SAFETY: best-effort UI, ignore recoverable error
     }

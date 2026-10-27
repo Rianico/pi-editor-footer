@@ -332,7 +332,7 @@ export class SessionOrchestrator {
     };
     this.liveBorder.stopTick();
     this.runActivityTracker.reset();
-    this.installedEditor?.setChrome({ topRightText: "" });
+    this.installedEditor?.setChrome({ topRightText: "", topStallText: "" });
     this.lastSessionCtx = null;
     this.headerCleanupInner?.();
     this.headerCleanupInner = null;

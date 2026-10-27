@@ -47,7 +47,7 @@ function renderer(): BorderRenderer {
 
 const body = (line = ""): string[] => ["─".repeat(100), line, "─".repeat(100)];
 const plain = (rows: string[]): string[] => rows.map((r) => stripAnsi(r));
-const USAGE = " ⠋ Working · ↑ 14M · ↓ 89k · $0.15 | T1 · 8s · 2 tools";
+const USAGE = " ⠋ Working | ↑ 14M · ↓ 89k · $0.15 · T1 · 8s · 2 tools";
 
 describe("editorFramePlan", () => {
   test("framed widths hand the body width - EDITOR_FRAME_CHROME columns", () => {
@@ -204,12 +204,12 @@ describe("#55 handoff: the usage row above the frame is untouched", () => {
     const unframed = renderer().renderWithBorders(body(), 30, opts);
     const framed = renderer().renderWithBorders(body(), 100, opts);
     assert.equal(unframed[0], framed[0], "the line is byte-identical with and without the frame");
-    assert.equal(framed[0], " ⠋ Working · ↑ 14M");
+    assert.equal(framed[0], " ⠋ Working | ↑ 14M");
     assert.match(stripAnsi(framed[1] ?? ""), /^╭─/, "the frame starts on the next row");
     assert.equal(rowsPrependedAboveEditor({ usageRow: true }), 1);
   });
 
-  test("the full working · tokens | activity row is preserved verbatim", () => {
+  test("the composed status | run | stall row is preserved verbatim", () => {
     const rows = renderer().renderWithBorders(body(), 100, {
       glowEnabled: false,
       topTokensText: "↑ 14M · ↓ 89k · $0.15",
@@ -218,7 +218,6 @@ describe("#55 handoff: the usage row above the frame is untouched", () => {
     });
     assert.equal(stripAnsi(rows[0] ?? ""), USAGE);
   });
-
   test("status row above the usage row, both above the frame", () => {
     const rows = renderer().renderWithBorders(body(), 100, {
       glowEnabled: false,
@@ -227,7 +226,7 @@ describe("#55 handoff: the usage row above the frame is untouched", () => {
       topTokensText: "↑ 14M",
     });
     assert.equal(stripAnsi(rows[0] ?? ""), " Retrying (1/3) …");
-    assert.equal(stripAnsi(rows[1] ?? ""), " ⠋ Working · ↑ 14M");
+    assert.equal(stripAnsi(rows[1] ?? ""), " ⠋ Working | ↑ 14M");
     assert.match(stripAnsi(rows[2] ?? ""), /^╭─/);
     assert.equal(rowsPrependedAboveEditor({ statusRow: true, usageRow: true }), 2);
   });
