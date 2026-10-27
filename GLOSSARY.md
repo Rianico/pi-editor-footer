@@ -49,13 +49,18 @@ An in-progress git operation the **Git rail** reports instead of the change coun
 _Avoid_: repo state, git state (gitstatus calls the concept "state")
 
 **Editor frame**:
-The rounded border wrapped around the input editor — `╭─ … ─╮` top rule, `│` rails with one column of inner padding, `╰─ … ─╯` bottom rule — always in box-drawing glyphs, never `+ - |`, with the body rendered at `width - 4` so wrapping and the caret belong to the body, not the frame (ADR-0004). The top rule carries the model field then the context field, and run activity when the row above is absent; the bottom rule carries turn telemetry (and `bottomLeftText`, when set) right-aligned. The usage/status row above the frame is not part of it and must stay byte-identical. Below 30 columns the frame is not drawn at all and pi's own rows pass through.
+The rounded border wrapped around the input editor — `╭─ … ─╮` top rule, `│` rails with one column of inner padding, `╰─ … ─╯` bottom rule — always in box-drawing glyphs, never `+ - |`, with the body rendered at `width - 4` so wrapping and the caret belong to the body, not the frame (ADR-0004). The top rule carries the model field then the context field, and run activity when the row above is absent; the bottom rule carries turn telemetry (and `bottomLeftText`, when set) right-aligned. The usage row above the frame is not part of it, but is composed by us with `|` between its fields — the status slot, then the run field (**Delta tokens** and run activity joined by `·`), then a stall field when one exists (ADR-0004 revision 3). Below 30 columns the frame is not drawn at all and pi's own rows pass through.
 _Avoid_: editor border, box, outline
 
 **Working indicator**:
-pi's live run indicator (`⠋ Working`) rendered at the leftmost of the usage group on the stats line via the editor's `embedWorkingStatus` protocol, so pi never adds its own component above the editor. Carries no elapsed time — duration belongs to the run-activity section. When the run settles the slot does not empty: it switches to `● Ready` (atelier's idle counterpart), so the status never vanishes or moves; a fresh session grows no row just to say it is idle, and a non-working indicator (retry) leaves the slot empty rather than claiming Ready.
+pi's live run indicator (`⠋ Working`) rendered as the leftmost field of the usage row above the editor frame via the editor's `embedWorkingStatus` protocol, so pi never adds its own component above the editor. Its own field: a `|` separates it from the run field, emitted only when both sides are present. Carries no elapsed time — duration belongs to the run field. When the run settles the slot does not empty: it switches to `● Ready` (atelier's idle counterpart), so the status never vanishes or moves; a fresh session grows no row just to say it is idle, and a non-working indicator (retry) leaves the slot empty rather than claiming Ready.
 _Avoid_: spinner, loader, progress bar
 
 **Field**:
 A group of related chrome values, separated from other groups by `|`; its own values are joined by `·`. The glyph choice is semantics, not decoration (ADR-0004). Not the same thing as a footer **segment**, which is a user-toggleable slice of the footer.
 _Avoid_: segment, group, block
+
+**Delta tokens**:
+The `↑ … · ↓ …` readout on the usage row above the editor frame, scoped to one **Agent run** and deliberately unlike the footer's token pair. While the run streams it is the synthetic estimate `trigger + Σ turn outputs + Σ tool-result sizes + live delta`, marked `~`; at settle it snaps to authoritative values with input taken as the largest turn prompt — `max`, never `sum`, because every turn re-sends history. Captured before the ledger resets, so at rest it holds the last run's figures and it resets at the next `agent_start`, never accumulating across runs.
+_Avoid_: input/output tokens (that names the footer's **Session totals**), usage tokens, telemetry tokens
+
