@@ -248,12 +248,14 @@ export class LiveBorder {
         const isRunning = this.deps.runActivityTracker.isRunning();
         const contextTokens = snapshot.contextUsage?.tokens;
         if (!isRunning) {
-          // Hybrid Q7 b: idle shows authoritative billed total (no ~), live shows synthetic incremental (~)
-          const display = this.deps.agentLedger.getIdleAuthoritativeDisplay(
-            snapshot.totals,
-            contextTokens,
-          );
-          tokensText = formatTelemetryTokens(display, style.theme, cfg.telemetry, style.glyphs);
+          // Delta tokens at rest: the last Agent run's own figures, frozen by the ledger
+          // at settle (GLOSSARY "Delta tokens"). No session fallback — before the first
+          // run of a fresh *or resumed* session the field stays empty, so the row does
+          // not exist yet.
+          const display = this.deps.agentLedger.getAtRestTotals();
+          if (display) {
+            tokensText = formatTelemetryTokens(display, style.theme, cfg.telemetry, style.glyphs);
+          }
         } else {
           const liveTurn = this.deps.telemetryTracker.peekLive();
           const agentLive =

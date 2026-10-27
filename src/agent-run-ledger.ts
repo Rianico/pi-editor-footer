@@ -11,9 +11,10 @@
  * max-vs-sum, the context-bar refresh since moved into live-border (then 70L capping), index.agent_settled 60L
  * baseline fallback) with divergent caps. Bugs required holding 3 sites in one head.
  *
- * Depth: small interface (setBaseline / startRun / recordTurn / getTotals / getLive
- * / cap helpers) hides baseline delta, max-vs-sum, predictive vs authoritative capping,
- * and tps derivation. Two adapters (LiveBorder token bar, index timeline) justify the seam.
+ * Depth: small interface (setBaseline / startRun / recordTurn / settleRun / getAtRest
+ * / getTotals / getLive / cap helpers) hides baseline delta, max-vs-sum, predictive vs
+ * authoritative capping, and tps derivation. Two adapters (LiveBorder token bar, index
+ * timeline) justify the seam.
  * Internal seams (aggregateTurns, capIdle, capLive) stay private.
  *
  * Incremental live input (per-agent_run):
@@ -21,7 +22,10 @@
  *   Each agent_run resets independently. triggerTokens = ceil(triggerChars/4) or 0 if
  *   no user message (Q11 a). Tool results are ceil(chars/4) per tool_result (Q8 a).
  *   Live input is predictive (estimated=true, "~" prefix) and capped only to contextWindow.
- *   Settled/idle input snaps to authoritative deltaFromBaseline (hybrid Q7 b, Q6 a).
+ *   At settle the run's own figures are frozen for the at-rest delta-token row
+ *   (settleRun → getAtRestTotals): authoritative input = max turn prompt, uncapped;
+ *   a run without a completed turn keeps this estimate.
+ *   The dim timeline row still reads settled/baseline-delta figures (getPerAgentTotalsForTimeline).
  */
 
 import type { UsageTotals } from "./state.js";
@@ -169,6 +173,8 @@ export class AgentRunLedger {
   private triggerTokens = 0;
   private accumOutputTokens = 0;
   private accumToolTokens = 0;
+  // Last settled Agent run's delta-token readout, kept for the usage row at rest.
+  private atRest: TurnTelemetry | null = null;
 
   constructor(now: () => number = () => Date.now()) {
     this.now = now;
@@ -189,6 +195,8 @@ export class AgentRunLedger {
     this.triggerTokens = 0;
     this.accumOutputTokens = 0;
     this.accumToolTokens = 0;
+    // The delta-token pair resets with the next run, never accumulating across runs.
+    this.atRest = null;
   }
 
   /** Set trigger message tokens for this agent_run (chars/4, or 0 per Q11 a). */
@@ -261,6 +269,65 @@ export class AgentRunLedger {
   }
 
   /**
+   * Delta tokens at rest: the last settled Agent run's own figures, retained so the
+   * usage row keeps them instead of flipping to session totals when the run ends.
+   * `null` before the session's first run — nothing is reconstructed from the session
+   * file, so a fresh and a resumed session alike grow the row with their first run.
+   */
+  getAtRestTotals(): TurnTelemetry | null {
+    return this.atRest ? { ...this.atRest } : null;
+  }
+
+  /**
+   * Close the Agent run: freeze its delta tokens for the at-rest usage row, then clear
+   * the run's accounting. Nothing about which session entries belonged to a run is
+   * recoverable afterwards, so the freeze has to happen here.
+   *
+   * Input is the largest turn prompt — `max`, never `sum`, because every turn re-sends
+   * the history (aggregateAgentTurns owns that invariant). No context-window or session
+   * cap: an authoritative prompt cannot exceed the window, so clamping it could only
+   * hide a bug.
+   *
+   * A run that completed no turn has no authoritative figures, so it keeps the synthetic
+   * live estimate the row was showing — still marked `~`, still clamped to the window
+   * exactly like the live row.
+   */
+  settleRun(liveTurn: TurnTelemetry | null = null, contextTokens?: number): void {
+    this.atRest = this.buildAtRest(liveTurn, contextTokens);
+    this.clearRun();
+  }
+
+  private buildAtRest(
+    liveTurn: TurnTelemetry | null,
+    contextTokens: number | undefined,
+  ): TurnTelemetry | null {
+    const settled = this.getSettledTotals();
+    if (settled) return settled;
+    const liveDelta =
+      typeof liveTurn?.outputTokens === "number" && liveTurn.outputTokens > 0
+        ? Math.round(liveTurn.outputTokens)
+        : 0;
+    const syntheticInput = this.getSyntheticLiveInput(liveDelta);
+    if (syntheticInput <= 0) return null;
+    const inputTokens = capInputForLive(syntheticInput, contextTokens);
+    return {
+      tps: null,
+      ttftMs: 0,
+      totalMs: 0,
+      inputTokens,
+      outputTokens: liveDelta,
+      stallMs: 0,
+      stallCount: 0,
+      rateUsdPerMTokens: null,
+      generationMs: 0,
+      totalTokens: inputTokens + liveDelta,
+      costUsd: 0,
+      measurementMs: null,
+      estimated: true,
+    };
+  }
+
+  /**
    * Timeline/display totals at agent_settled.
    * Prefers authoritative telemetry (tel) when available; otherwise falls back to
    * baseline delta; otherwise session totals. Caps idle input to context + session total.
@@ -292,46 +359,6 @@ export class AgentRunLedger {
       cost: snapshotTotals.cost,
     };
   }
-
-  /**
-   * Idle authoritative display (hybrid Q7 b): snapshot delta capped, for use when
-   * not running to show billed total without ~ after agent_end.
-   */
-  getIdleAuthoritativeDisplay(
-    snapshotTotals: UsageTotals,
-    contextTokens: number | undefined,
-  ): TurnTelemetry {
-    let displayInput: number;
-    let displayOutput: number;
-    let displayCost: number;
-    if (this.baseline) {
-      const d = deltaFromBaseline(snapshotTotals, this.baseline);
-      displayInput = d.input;
-      displayOutput = d.output;
-      displayCost = d.cost;
-    } else {
-      displayInput = snapshotTotals.input;
-      displayOutput = snapshotTotals.output;
-      displayCost = snapshotTotals.cost;
-    }
-    const cappedInput = capInputForIdle(displayInput, contextTokens, snapshotTotals.input);
-    return {
-      tps: null,
-      ttftMs: 0,
-      totalMs: 0,
-      inputTokens: cappedInput,
-      outputTokens: displayOutput,
-      stallMs: 0,
-      stallCount: 0,
-      rateUsdPerMTokens: null,
-      generationMs: 0,
-      totalTokens: cappedInput + displayOutput,
-      costUsd: displayCost,
-      measurementMs: null,
-      estimated: false,
-    };
-  }
-
   /**
    * Incremental live display (Q1/Q6/Q9): trigger + Σ(outputs+tools) + liveDelta, capped to live.
    * Replaces max(input) with synthetic accumulation, per-agent_run independent.
@@ -375,7 +402,13 @@ export class AgentRunLedger {
     };
   }
 
+  /** Session boundary: drop the run's accounting *and* the at-rest delta readout. */
   reset(): void {
+    this.clearRun();
+    this.atRest = null;
+  }
+
+  private clearRun(): void {
     this.baseline = null;
     this.turns = [];
     this.startMs = null;

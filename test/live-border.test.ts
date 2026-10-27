@@ -13,6 +13,7 @@ import { DEFAULT_CONFIG, type ThemeConfig } from "../src/config.js";
 import { stripAnsi } from "../src/format.js";
 import type { SessionRunTimeSnapshot } from "../src/session-run-time.js";
 import type { TurnTelemetry } from "../src/telemetry.js";
+import { AgentRunLedger } from "../src/agent-run-ledger.js";
 import type { RunActivitySnapshot } from "../src/run-activity.js";
 import type { ChromeSnapshot } from "../src/tracking-editor.js";
 
@@ -52,7 +53,9 @@ function harness(
     ledgerLive?: TurnTelemetry | null;
     runSnap?: RunActivitySnapshot;
     isRunning?: boolean;
-    idleDisplay?: TurnTelemetry | null;
+    atRest?: TurnTelemetry | null;
+    atRestThrows?: boolean;
+    ledger?: unknown;
     incDisplay?: TurnTelemetry | null;
     runTime?: SessionRunTimeSnapshot;
     noEditor?: boolean;
@@ -102,11 +105,14 @@ function harness(
         isRunning: () => over.isRunning ?? false,
       } as never,
       // undefined option → plausible display; explicit null pins the throw/skip branch
-      agentLedger: {
+      agentLedger: (over.ledger ?? {
         getLiveTotals: () => over.ledgerLive ?? null,
-        getIdleAuthoritativeDisplay: () => ("idleDisplay" in over ? over.idleDisplay : tel()),
+        getAtRestTotals: () => {
+          if (over.atRestThrows) throw new Error("ledger boom");
+          return "atRest" in over ? over.atRest! : tel();
+        },
         getIncrementalLiveDisplayTotals: () => ("incDisplay" in over ? over.incDisplay : tel()),
-      } as never,
+      }) as never,
       getSessionRunTime: () => over.runTime ?? null,
     },
   };
@@ -142,9 +148,9 @@ describe("LiveBorder.render — coalesced draw", () => {
   });
 
   test("a throwing ledger island still delivers the other islands' fields in the one patch", () => {
-    // idleDisplay null makes formatTelemetryTokens(undefined) throw inside the context
+    // a throwing at-rest read makes formatTelemetryTokens throw inside the context
     // island — same as before coalescing, top/telemetry fields still land.
-    const h = harness({ idleDisplay: null });
+    const h = harness({ atRestThrows: true });
     renderOnce(h);
     assert.equal(h.calls.length, 1);
     assert.ok("topRightText" in h.merged);
@@ -220,12 +226,33 @@ describe("LiveBorder.render — field branches", () => {
     assert.ok(stripAnsi(on.merged.topContextText!).includes("[#####-----]"));
   });
 
-  test("idle tokens use the authoritative ledger display (no ~)", () => {
-    const h = harness({ idleDisplay: tel({ inputTokens: 3000, outputTokens: 400 }) });
+  test("idle tokens are the last run's authoritative delta (no ~)", () => {
+    const h = harness({ atRest: tel({ inputTokens: 3000, outputTokens: 400 }) });
     renderOnce(h);
     const plain = stripAnsi(h.merged.topTokensText!);
     assert.ok(plain.includes("↑ 3.0k") && plain.includes("↓ 400"), plain);
     assert.ok(!plain.includes("~"));
+  });
+
+  test("idle tokens come from the run ledger, never from session totals", () => {
+    // Real ledger: it holds per-Agent-run accounting only, so a session figure has
+    // no route into this row. Two turns re-sending history settle at max, not sum.
+    const ledger = new AgentRunLedger(() => 9000);
+    ledger.startRun(0);
+    ledger.recordTurn(tel({ inputTokens: 40000, outputTokens: 5000 }));
+    ledger.recordTurn(tel({ inputTokens: 46000, outputTokens: 3000 }));
+    ledger.settleRun(null, 1_000_000);
+    const h = harness({ ledger });
+    renderOnce(h);
+    const plain = stripAnsi(h.merged.topTokensText!);
+    assert.ok(plain.includes("↑ 46k") && plain.includes("↓ 8.0k"), plain);
+    assert.ok(!plain.includes("~"));
+  });
+
+  test("before the session's first run the tokens field is empty — the row does not exist", () => {
+    const h = harness({ ledger: new AgentRunLedger() });
+    renderOnce(h);
+    assert.equal(h.merged.topTokensText, "");
   });
 
   test("running tokens use the incremental display (~ estimated)", () => {

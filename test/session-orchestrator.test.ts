@@ -213,4 +213,82 @@ describe("SessionOrchestrator", () => {
     assert.ok((live!.ttftProviderMs ?? -1) >= 0, "provider anchor must reach the tracker");
     orch.dispose();
   });
+
+  test("delta tokens: captured from the run at settle, reset at the next run, cleared on dispose", () => {
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+      createGitRefresher: () => ({ start: () => {}, request: () => {}, stop: () => {} }),
+    });
+    const raw = fakePi();
+    const pi = raw as unknown as Parameters<SessionOrchestrator["install"]>[0];
+    orch.install(pi);
+    const ledger = orch.getAgentLedger();
+    // A resumed Pi session: history carries a large billed prompt the very first
+    // render must NOT show — the row is run-scoped, so it starts absent.
+    const resumed = [
+      { type: "message", id: "m1", message: { role: "user", content: "hello there" } },
+      {
+        type: "message",
+        id: "m2",
+        message: {
+          role: "assistant",
+          usage: { input: 300000, cacheRead: 50000, output: 800, totalTokens: 350800 },
+        },
+      },
+    ];
+    const ctx = fakeCtx({
+      sessionManager: { getEntries: () => resumed },
+      getContextUsage: () => ({ tokens: 120000, contextWindow: 1000000 }),
+    });
+    const fire = (name: string, e: unknown): void => {
+      for (const h of raw.handlers.get(name) ?? []) h(e, ctx as never);
+    };
+    assert.equal(ledger.getAtRestTotals(), null, "no first run → no delta row");
+
+    const msg = {
+      role: "assistant",
+      content: [],
+      usage: {
+        input: 42000,
+        output: 900,
+        totalTokens: 42900,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+    };
+    const runOneTurn = (): void => {
+      fire("agent_start", { type: "agent_start" });
+      fire("turn_start", { type: "turn_start", turnIndex: 0 });
+      fire("message_start", { type: "message_start", message: msg });
+      fire("message_end", { type: "message_end", message: msg });
+      fire("turn_end", { type: "turn_end", turnIndex: 0 });
+      fire("agent_settled", { type: "agent_settled" });
+    };
+    runOneTurn();
+    const atRest = ledger.getAtRestTotals();
+    assert.ok(atRest, "settle keeps the run's delta tokens");
+    assert.equal(atRest.inputTokens, 42000, "the run's prompt, not the 350k session total");
+    assert.equal(atRest.outputTokens, 900);
+    assert.equal(atRest.estimated, false, "authoritative at rest — no ~");
+
+    fire("agent_start", { type: "agent_start" });
+    assert.equal(ledger.getAtRestTotals(), null, "the next run resets the pair");
+
+    // aborted mid-turn: turn_start with no turn_end, so the run completes no turn
+    fire("turn_start", { type: "turn_start", turnIndex: 0 });
+    fire("message_start", { type: "message_start", message: msg });
+    fire("message_update", {
+      type: "message_update",
+      message: msg,
+      assistantMessageEvent: { type: "text_delta", delta: "aborted mid-answer" },
+    });
+    fire("agent_settled", { type: "agent_settled", aborted: true });
+    const aborted = ledger.getAtRestTotals();
+    assert.ok(aborted, "an aborted run keeps a readout too");
+    assert.equal(aborted.estimated, true, "no completed turn → still the live estimate, still ~");
+    assert.ok(aborted.outputTokens > 0, "the unfinished turn's live delta is kept");
+
+    orch.dispose();
+    assert.equal(ledger.getAtRestTotals(), null, "session shutdown clears the ledger");
+  });
 });
