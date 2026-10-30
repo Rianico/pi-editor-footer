@@ -33,6 +33,8 @@ import { installFooter } from "../src/footer.js";
 import { createInitialState } from "../src/state.js";
 import { LiveBorder } from "../src/live-border.js";
 import { buildTimelineText } from "../src/transcript-timeline.js";
+import { createChromeSnapshot, formatTopContextFromSnapshot } from "../src/chrome-state.js";
+import { resolveGlyphs } from "../src/icons.js";
 import { AgentRunLedger } from "../src/agent-run-ledger.js";
 
 // ———————————————— shared fakes ————————————————
@@ -772,6 +774,110 @@ describe("R2: the two scopes — session totals fold children, the run row does 
     assert.ok(noBaseline.includes("↑ 4.5k"), noBaseline);
     assert.ok(noBaseline.includes("↓ 1.1k"), noBaseline);
     assert.ok(!noBaseline.includes("6.0k"), `folded session totals leaked: ${noBaseline}`);
+  });
+});
+
+describe("scope pin: the top-rule context/cache is parent-scope, toggle-independent", () => {
+  // GLOSSARY "Subagent usage" + ADR-0005: only Session run time and the FOOTER's session totals
+  // fold delegated children. The top rule answers "how full is the parent's window, how much of
+  // its prompt was cached?" — the context readout is the parent window, and the cache rate is
+  // derived from assistant turns only, so a child record must not move a single byte of it.
+  const assistantTurn = {
+    type: "message",
+    id: "a1",
+    message: {
+      role: "assistant",
+      usage: {
+        input: 395,
+        output: 505,
+        cacheRead: 340_000,
+        cacheWrite: 12_000,
+        cost: { total: 0.16 },
+      },
+    },
+  };
+  const childEntry = subagentUsageEntry(
+    [
+      childUsage({
+        key: "run-a#0",
+        input: 1_000,
+        output: 250,
+        cacheRead: 500_000,
+        cacheWrite: 0,
+        cost: 0.125,
+      }),
+    ],
+    "e1",
+  );
+
+  /** Both snapshots read the SAME context usage; only the entries differ (child folded in). */
+  const ctxFor = (entries: unknown[]) =>
+    ({
+      sessionManager: {
+        getCwd: () => "/tmp",
+        getEntries: () => entries,
+        getSessionName: () => undefined,
+      },
+      getContextUsage: () => ({ percent: 39.6, tokens: 396_000, contextWindow: 1_000_000 }),
+      cwd: "/tmp",
+    }) as never;
+
+  const topRule = (entries: unknown[]): string => {
+    invalidateUsageCache();
+    const snapshot = createChromeSnapshot(ctxFor(entries), null, { includeSubagentUsage: true });
+    return formatTopContextFromSnapshot(
+      snapshot,
+      identityTheme as never,
+      resolveGlyphs("ascii"),
+      true,
+      false,
+    );
+  };
+
+  test("a folded child moves the footer figures but not one byte of the top rule", () => {
+    const withoutChild = topRule([assistantTurn]);
+    const withChild = topRule([assistantTurn, childEntry]);
+    assert.equal(withChild, withoutChild, "the top-rule context/cache field folded a child");
+
+    // The pin is refutable: the field still carries the parent rate, computed from assistant
+    // turns only (340 000 / (395 + 340 000 + 12 000) → 96.5%).
+    assert.ok(withoutChild.includes("c 96.5%"), withoutChild);
+    assert.ok(withoutChild.includes("396k/1.0M"), withoutChild);
+
+    // Same session, footer: the child IS folded there, and only there.
+    const footerLine = (entries: unknown[]): string => {
+      invalidateUsageCache();
+      let captured: { render(width: number): string[] } | undefined;
+      installFooter(
+        {
+          ui: {
+            setWidget: (_key: string, content: unknown) => {
+              captured = typeof content === "function" ? (content() as typeof captured) : undefined;
+            },
+          },
+          sessionManager: {
+            getCwd: () => "/tmp",
+            getEntries: () => entries,
+            getSessionName: () => undefined,
+          },
+          model: { provider: "p", id: "m" },
+          getContextUsage: () => undefined,
+        } as never,
+        () => createInitialState(),
+        () => ({ ...structuredClone(DEFAULT_CONFIG), icons: { mode: "ascii" } }),
+        () => ({ provider: "p", model: "m", effort: undefined }),
+        { setRequestRender: () => {}, scheduleGitRefresh: () => {} },
+      );
+      assert.ok(captured, "the fallback widget renderer must be installed");
+      return captured!.render(160)[0] ?? "";
+    };
+    const footerWithoutChild = footerLine([assistantTurn]);
+    const footerWithChild = footerLine([assistantTurn, childEntry]);
+    assert.notEqual(footerWithChild, footerWithoutChild, "the footer did not fold the child");
+    // 352 395 parent + 1 000 child input + 500 000 child cache-read.
+    assert.ok(footerWithChild.includes("↑ 853k"), footerWithChild);
+    assert.ok(footerWithChild.includes("↓ 755"), footerWithChild);
+    assert.ok(footerWithoutChild.includes("↑ 352k"), footerWithoutChild);
   });
 });
 

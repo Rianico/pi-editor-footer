@@ -69,7 +69,7 @@ One subagent run started from the parent prompt through the optional `pi-subagen
 _Avoid_: subagent task, child agent (a child is a run, not a configured agent definition), worker
 
 **Subagent usage**:
-The one toggle (`subagentUsage`, default on) that folds **Delegated child** work into the **session-scoped** figures — **Session run time** and **Session totals** (the footer `↑/↓/$` and the top-rule context/cache field). The **timeline run row** and the usage row's **Delta tokens** stay **Agent run** scope and never fold children, even through their no-telemetry fallback. Off reproduces the parent-only figures; it gates reads, never recording, so history collected while it was off is still there when it is turned back on.
+The one toggle (`subagentUsage`, default on) that folds **Delegated child** work into exactly two rendered figures: **Session run time** (the child's window joins the union) and the footer's **Session totals** `↑/↓/$`. Everything else stays parent-scope and is toggle-independent by construction: the top-rule context readout comes from the parent window's `contextUsage` and the cache figure is `latestCacheHitRate`, derived from assistant turns alone, so a child record cannot move either; the **timeline run row** and the usage row's **Delta tokens** stay **Agent run** scope, even through their no-telemetry fallback. Off reproduces the parent-only figures; it gates reads, never recording, so history collected while it was off is still there when it is turned back on.
 _Avoid_: child usage, delegation mode, subagent tracking
 
 **Session totals**:

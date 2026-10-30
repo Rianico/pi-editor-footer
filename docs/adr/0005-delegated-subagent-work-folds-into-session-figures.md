@@ -78,13 +78,18 @@ Status: accepted (revision 2)
 - **The optional integration stays optional.** `pi.events` may be absent; when it is, nothing is
   subscribed, nothing throws, and the parent-only figures are emitted byte for byte. Subscriptions
   are torn down on dispose, so a session reload cannot leave a listener behind.
-- **The split between the two scopes is one decision, stated once here:** the **footer**
-  (`↑/↓/$`) and the **usage row's cache** answer *what this session billed*, so delegated
-  children are folded in; the **timeline run row** answers *how much this Agent run moved*
-  (ADR-0004 revision 3), so it keeps the run's own figures and excludes delegated usage —
-  a background child is not part of that run at all, and a foreground child's tokens belong
-  to the session's bill. `test/subagent-usage.test.ts` pins both sides of that split on the
-  same session, so it reads as a decision rather than an oversight.
+- **The split between the two scopes is one decision, stated once here:** delegated children
+  fold into exactly two rendered figures — **Session run time** (their windows join the union)
+  and the **footer's session totals** (`↑/↓/$`, *what this session billed*). Everything else
+  stays parent-scope and is toggle-independent by construction: the **top-rule context** comes
+  from the parent window's `contextUsage`, and its **cache** figure is `latestCacheHitRate`,
+  derived from assistant turns alone (`addSubagentRecord` never touches it), so a child record
+  cannot move one byte of that field. The **timeline run row** answers *how much this Agent run
+  moved* (ADR-0004 revision 3) and keeps the run's own figures — a background child is not part
+  of that run at all, and the row's no-telemetry fallback reads parent-scope totals too.
+  `test/subagent-usage.test.ts` pins both sides of that split on the same session — the run row
+  against folded entries, and the top-rule string with and without a folded child — so it reads
+  as a decision rather than an oversight.
 - **The run row's fallback is run-scoped too.** When authoritative telemetry is missing (a run
   aborted before its first turn, a telemetry gap) the row falls back to session totals, and
   those are the folded ones — so the fallback reads a second, parent-only read of the same
