@@ -180,7 +180,13 @@ export class AgentRunLedger {
     this.now = now;
   }
 
-  /** Capture baseline at agent_start. Clone to avoid caller mutation. */
+  /**
+   * Capture the baseline at agent_start. Clone to avoid caller mutation.
+   *
+   * The baseline is expressed in the **Agent-run scope**: session totals WITHOUT delegated
+   * children. Its only consumer is the timeline/usage-row fallback, which answers "how much
+   * did this run move?" — an inclusive baseline would bill a background child to the next run.
+   */
   setBaseline(baseline: UsageTotals | null): void {
     this.baseline = baseline ? { ...baseline } : null;
   }
@@ -332,14 +338,19 @@ export class AgentRunLedger {
    * Prefers authoritative telemetry (tel) when available; otherwise falls back to
    * baseline delta; otherwise session totals. Caps idle input to context + session total.
    * This is the single place that knows the "prefer tel, else delta capped" policy.
+   *
+   * `runScopeTotals` is the session totals **in the Agent-run scope** — delegated children
+   * excluded (ADR-0005). Both fallbacks read it, because the row answers "how much did this
+   * run move?": with the folded figures a run that settled without telemetry (aborted before
+   * its first turn, telemetry gap) would advertise a background child as its own work.
    */
   getPerAgentTotalsForTimeline(
     tel: TurnTelemetry | null | undefined,
-    snapshotTotals: UsageTotals,
+    runScopeTotals: UsageTotals,
     contextTokens: number | undefined,
   ): { input: number; output: number; cost: number } {
     if (tel) {
-      const cappedInput = capInputForIdle(tel.inputTokens, contextTokens, snapshotTotals.input);
+      const cappedInput = capInputForIdle(tel.inputTokens, contextTokens, runScopeTotals.input);
       return {
         input: cappedInput,
         output: tel.outputTokens,
@@ -347,16 +358,16 @@ export class AgentRunLedger {
       };
     }
     if (this.baseline) {
-      const d = deltaFromBaseline(snapshotTotals, this.baseline);
-      const cappedInput = capInputForIdle(d.input, contextTokens, snapshotTotals.input);
+      const d = deltaFromBaseline(runScopeTotals, this.baseline);
+      const cappedInput = capInputForIdle(d.input, contextTokens, runScopeTotals.input);
       return { input: cappedInput, output: d.output, cost: d.cost };
     }
     // No baseline — best effort session totals capped for input
-    const cappedInput = capInputForIdle(snapshotTotals.input, contextTokens, snapshotTotals.input);
+    const cappedInput = capInputForIdle(runScopeTotals.input, contextTokens, runScopeTotals.input);
     return {
       input: cappedInput,
-      output: snapshotTotals.output,
-      cost: snapshotTotals.cost,
+      output: runScopeTotals.output,
+      cost: runScopeTotals.cost,
     };
   }
   /**

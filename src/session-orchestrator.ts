@@ -876,8 +876,11 @@ export class SessionOrchestrator {
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
           this.lastSessionCtx) as unknown as Parameters<typeof getUsageTotals>[0];
         if (baselineCtx?.sessionManager?.getEntries) {
+          // The baseline feeds the run-scoped fallback (timeline/usage row), so it is
+          // captured WITHOUT delegated children — an inclusive baseline would bill a
+          // background child to the next run (review P1).
           this.agentBaselineTotals = getUsageTotals(baselineCtx, {
-            includeSubagentUsage: this.currentConfig.subagentUsage,
+            includeSubagentUsage: false,
           });
           this.agentLedger.setBaseline(this.agentBaselineTotals);
           this.agentLedger.startRun(Date.now());
@@ -1008,6 +1011,16 @@ export class SessionOrchestrator {
             this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
             { includeSubagentUsage: this.currentConfig.subagentUsage },
           );
+          // The run row's fallback must stay run-scoped (review P1). Only read on the
+          // fallback — a run with authoritative telemetry never pays for the second scan,
+          // and when it does, it reuses the `includeSubagentUsage: false` cache entry.
+          const runScopeTotals = effectiveTel
+            ? undefined
+            : getUsageTotals(
+                // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+                this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
+                { includeSubagentUsage: false },
+              );
           const ctxTokens = this.contextUsageTokens();
           const snap = this.runActivityTracker.getSnapshot();
           this.transcriptTimeline.handleAgentSettled(
@@ -1017,6 +1030,7 @@ export class SessionOrchestrator {
             {
               effectiveTel,
               totals,
+              ...(runScopeTotals ? { runScopeTotals } : {}),
               ctxTokens,
               snap,
               config: this.currentConfig,

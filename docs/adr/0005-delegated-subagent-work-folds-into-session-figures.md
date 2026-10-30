@@ -60,7 +60,8 @@ Status: accepted (revision 2)
   backwards for the last *usable* entry: a truncated or foreign-schema payload (missing
   `seconds`, non-numeric or negative, non-array `records`) falls through to the valid
   cumulative entry behind it, so one bad tail write cannot erase a session's history.
-  A well-formed but empty record set is a real empty set, not corruption.
+  An *empty* record array is a real empty set, not corruption; a **non-empty** array whose
+  every element fails sanitization (no key) is corruption and is skipped like any other.
 - **Usage is one record per child, keyed by `<runId>#<index>` (or the sole run id).** Every
   channel that redelivers a child upserts the same key instead of adding, and a record whose
   parent `toolCallId` already carries usage on its `toolResult` session entry is dropped at fold
@@ -84,6 +85,12 @@ Status: accepted (revision 2)
   a background child is not part of that run at all, and a foreground child's tokens belong
   to the session's bill. `test/subagent-usage.test.ts` pins both sides of that split on the
   same session, so it reads as a decision rather than an oversight.
+- **The run row's fallback is run-scoped too.** When authoritative telemetry is missing (a run
+  aborted before its first turn, a telemetry gap) the row falls back to session totals, and
+  those are the folded ones — so the fallback reads a second, parent-only read of the same
+  entries, and the Agent-run baseline captured at `agent_start` is that parent-only figure. A
+  `tel`-present settle therefore pays no second scan; a `tel`-absent settle pays one, cached
+  under its own key.
 - The external contract (channels, payload shapes, the installed version they were verified
   against) is recorded in `docs/reference/pi-subagents-events.md`; that file, not this ADR, is
   what to re-run when `pi-subagents` changes shape.

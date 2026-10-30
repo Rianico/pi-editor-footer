@@ -70,8 +70,15 @@ returns an unsubscribe function). Channels read:
 
 Two custom session entries, both cumulative and last-entry-wins:
 
-- `session-run-time` — `{ seconds }`, the **union** of parent and child intervals;
+- `session-run-time` — `{ seconds, parentSeconds }`: the **union** of parent and child
+  intervals, and the parent-only union. Both scopes ride along because a restored inclusive
+  total cannot be split back into its parts; a reader that finds no `parentSeconds` (an entry
+  written before revision 2 of ADR-0005) falls back to `seconds` for both.
 - `subagent-usage` — `{ records: [{ key, toolCallId?, input, output, cacheRead, cacheWrite, cost }] }`.
+
+Both restores scan backwards for the last *usable* entry, so a truncated tail write cannot
+erase a valid history behind it; an all-junk `records` array counts as corrupt, an empty one
+as a real empty set.
 
 Both are appended unconditionally (the data layer never consults the `subagentUsage`
 display toggle), so history survives a toggle change and a resume.

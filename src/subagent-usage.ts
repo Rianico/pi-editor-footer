@@ -194,6 +194,10 @@ export function restoreSubagentUsageRecords(
       const record = sanitizeRecord(candidate);
       if (record) records.push(record);
     }
+    // A NON-empty array with nothing usable is a corrupt tail too (e.g. `[{input: 999}]`
+    // without a key) — keep scanning. An empty array is a real empty set: the writer only
+    // stores a non-empty list, so `[]` means "restored empty", not "truncated".
+    if (raw.length > 0 && records.length === 0) continue;
     return records;
   }
   return [];

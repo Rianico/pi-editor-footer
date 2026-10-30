@@ -28,7 +28,7 @@ import {
   type SubagentUsageRecord,
 } from "../src/subagent-usage.js";
 import { SessionOrchestrator } from "../src/session-orchestrator.js";
-import { getUsageTotals, invalidateUsageCache } from "../src/state.js";
+import { getUsageTotals, invalidateUsageCache, type UsageTotals } from "../src/state.js";
 import { installFooter } from "../src/footer.js";
 import { createInitialState } from "../src/state.js";
 import { LiveBorder } from "../src/live-border.js";
@@ -437,13 +437,39 @@ describe("SubagentUsageLedger", () => {
         JSON.stringify(entry),
       );
     }
-    // A well-formed but empty record array is a real (empty) set, not corruption.
+    // A well-formed but EMPTY record array is a real (empty) set, not corruption.
     assert.deepEqual(
       restoreSubagentUsageRecords([
         subagentUsageEntry([childUsage()], "e1"),
         subagentUsageEntry([], "e2"),
       ]),
       [],
+    );
+    // P2c: a NON-empty array whose every element fails sanitize (no key) is a corrupt
+    // tail — the valid set behind it must survive.
+    assert.deepEqual(
+      restoreSubagentUsageRecords([
+        subagentUsageEntry([childUsage()], "e1"),
+        {
+          type: "custom",
+          customType: SUBAGENT_USAGE_ENTRY_TYPE,
+          data: { records: [{ input: 999 }] },
+          id: "e2",
+        },
+      ]),
+      [childUsage()],
+    );
+    assert.deepEqual(
+      restoreSubagentUsageRecords([
+        subagentUsageEntry([childUsage()], "e1"),
+        {
+          type: "custom",
+          customType: SUBAGENT_USAGE_ENTRY_TYPE,
+          data: { records: [null, 7] },
+          id: "e2",
+        },
+      ]),
+      [childUsage()],
     );
   });
 });
@@ -680,6 +706,72 @@ describe("R2: the two scopes — session totals fold children, the run row does 
     assert.ok(footer.includes("↑ 5.5k"), footer);
     assert.ok(footer.includes("↓ 1.1k"), footer);
     assert.ok(footer.includes("$0.14"), footer);
+  });
+
+  test("P1: the run row's FALLBACK path is run-scoped (no tel, folded session entries)", () => {
+    // Review P1: with authoritative telemetry absent the policy falls back to session
+    // totals — and those are the FOLDED ones. The run row must not inherit them.
+    const childRecord = subagentUsageEntry(
+      [
+        childUsage({
+          key: "run-a#0",
+          input: 1_000,
+          output: 250,
+          cacheRead: 500,
+          cacheWrite: 0,
+          cost: 0.125,
+        }),
+      ],
+      "e2",
+    );
+    const before = [assistantEntry("a1", 4_000, 800, 0.01)];
+    // The run itself: one more parent turn, while a background child also finishes.
+    const after = [
+      assistantEntry("a1", 4_000, 800, 0.01),
+      assistantEntry("a2", 500, 300, 0.01),
+      childRecord,
+    ];
+    invalidateUsageCache();
+    const sessionTotals = getUsageTotals(totalsCtx(after)); // 6000 / 1350 / 0.145 (child folded)
+    const parentOnlyAfter = getUsageTotals(totalsCtx(after), { includeSubagentUsage: false }); // 4500 / 1100 / 0.02
+    const baselineParent = getUsageTotals(totalsCtx(before), { includeSubagentUsage: false }); // 4000 / 800 / 0.01
+
+    const text = (baseline: UsageTotals | null, runScopeTotals: UsageTotals) => {
+      const ledger = new AgentRunLedger(() => 0);
+      ledger.setBaseline(baseline);
+      ledger.startRun(0);
+      return buildTimelineText({
+        effectiveTel: null, // aborted before the first turn / telemetry gap
+        totals: sessionTotals,
+        runScopeTotals,
+        ctxTokens: 1_000_000,
+        snap: {
+          phase: "settled",
+          turnNumber: 1,
+          activeTools: 0,
+          completedCount: 0,
+          failedCount: 0,
+        },
+        config: { ...structuredClone(DEFAULT_CONFIG), icons: { mode: "ascii" } },
+        lastDoneIn: 8_000,
+        now: new Date("2026-08-25T10:00:00Z"),
+        ledger,
+      });
+    };
+
+    // Baseline captured in the run scope: the row shows this run's delta only.
+    const withBaseline = text(baselineParent, parentOnlyAfter);
+    assert.ok(withBaseline.includes("↑ 500"), withBaseline);
+    assert.ok(withBaseline.includes("↓ 300"), withBaseline);
+    assert.ok(withBaseline.includes("$0.01"), withBaseline);
+    assert.ok(!withBaseline.includes("2.0k"), `folded delta leaked: ${withBaseline}`);
+    assert.ok(!withBaseline.includes("$0.14"), `folded cost leaked: ${withBaseline}`);
+
+    // No baseline: the row shows the parent-only session totals, never the folded ones.
+    const noBaseline = text(null, parentOnlyAfter);
+    assert.ok(noBaseline.includes("↑ 4.5k"), noBaseline);
+    assert.ok(noBaseline.includes("↓ 1.1k"), noBaseline);
+    assert.ok(!noBaseline.includes("6.0k"), `folded session totals leaked: ${noBaseline}`);
   });
 });
 
@@ -954,6 +1046,30 @@ describe("SessionOrchestrator — delegated work", () => {
       legacy.orch.getSessionRunTime().snapshot(5_000, { includeSubagent: false }).totalMs,
       100_000,
     );
+  });
+
+  test("P1: the Agent-run baseline excludes delegated children", () => {
+    // The baseline feeds the run row's fallback path, so it must be captured in the
+    // Agent-run scope; an inclusive baseline would bill the child to the next run.
+    const { orch } = orchestratorWithStubs();
+    const raw = fakePi({ events: fakeEventBus().bus });
+    orch.install(raw as never);
+    const entries = [
+      assistantEntry("a1", 4_000, 800, 0.01),
+      subagentUsageEntry(
+        [childUsage({ key: "run-a#0", input: 1_000, output: 250, cost: 0.125 })],
+        "e1",
+      ),
+    ];
+    const ctx = fakeCtx(entries);
+    fire(raw, "session_start", {}, ctx);
+    clock.set(1_000);
+    fire(raw, "agent_start", {}, ctx);
+
+    const baseline = orch.getAgentLedger().getBaseline();
+    assert.equal(baseline?.input, 4_000);
+    assert.equal(baseline?.output, 800);
+    assert.ok(Math.abs((baseline?.cost ?? 0) - 0.01) < 1e-9);
   });
 
   test("AC6: a pi without an event bus keeps parent figures and never throws", () => {
