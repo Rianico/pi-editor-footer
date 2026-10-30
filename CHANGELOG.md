@@ -11,6 +11,7 @@
 
 ### Features
 
+* **chrome:** fold delegated subagent run time and usage into the session figures (#66)
 * **chrome:** compose the usage row as status | run | stall (#65)
 * **chrome:** keep the agent run's own delta tokens at rest (#65)
 * **chrome:** add session run time field (#61)
@@ -22,6 +23,8 @@
 
 ### Documentation
 
+* **agents:** record the subagent integration contract (#66)
+* **chrome:** record the union/dedupe rules for delegated work (ADR-0005) (#66)
 * **agents:** record the two-scope token contract (#65)
 * **chrome:** record run-scoped delta tokens (ADR-0004 rev 3) (#65)
 * **glossary:** define Session run time (#61)

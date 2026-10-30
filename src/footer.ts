@@ -275,6 +275,7 @@ export function installFooter(
       // ast-grep-ignore: require-safety-comment-for-as-unknown-as
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as UsageTotalsSource,
+      { includeSubagentUsage: config.subagentUsage },
     );
     return renderFooter(width, state, config, themeStub, {
       cwd,
@@ -342,6 +343,7 @@ export function installFooter(
             // ast-grep-ignore: require-safety-comment-for-as-unknown-as
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             /* SAFETY: intentional unsafe cast — validated at runtime */ ctx as unknown as UsageTotalsSource,
+            { includeSubagentUsage: config.subagentUsage },
           );
           return renderFooter(width, state, config, theme, {
             cwd,

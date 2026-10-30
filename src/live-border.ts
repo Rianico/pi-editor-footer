@@ -45,8 +45,11 @@ export interface LiveBorderDeps {
   telemetryTracker: TurnTelemetryTracker;
   runActivityTracker: RunActivityTracker;
   agentLedger: AgentRunLedger;
-  /** Session run time accumulator read — absent dep renders no field (wiring bug, not a zero). */
-  getSessionRunTime?: () => SessionRunTimeSnapshot | null;
+  /**
+   * Session run time read — absent dep renders no field (wiring bug, not a zero).
+   * The argument is the `subagentUsage` toggle: false asks for the parent-only figure.
+   */
+  getSessionRunTime?: (includeSubagent: boolean) => SessionRunTimeSnapshot | null;
 }
 
 /** Derived once per (theme identity, icon mode) pair, reused across renders. */
@@ -126,6 +129,7 @@ export class LiveBorder {
       // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       ctx as unknown as Parameters<typeof createChromeSnapshot>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       undefined,
+      { includeSubagentUsage: this.deps.getConfig().subagentUsage },
     );
     // C3: one patch across the whole pass → one setChrome → one requestRender per refresh.
     // Each island keeps its own try/catch, so a failing island still leaves the others'
@@ -289,14 +293,15 @@ export class LiveBorder {
    * toggle (independent of `footerSegments.context`; the border renderer joins
    * present fields with dim pipes, so either side can be absent cleanly).
    * Grows live on the 1 Hz tick while a run is in flight (snapshot folds in the
-   * elapsed run), static at the settled accumulation between runs.
+   * elapsed run), static at the settled accumulation between runs. Delegated work
+   * joins that figure only while `subagentUsage` is on.
    */
   private applyRunTime(patch: Partial<EditorChromeSnapshot>, style: ChromeStyle): void {
     const cfg = this.deps.getConfig();
     try {
       let runTimeText = "";
       if (cfg.sessionRunTime) {
-        const snap = this.deps.getSessionRunTime?.();
+        const snap = this.deps.getSessionRunTime?.(cfg.subagentUsage);
         if (snap) {
           // Same token as the telemetry TTFT segment (telemetry.ts formatTurnTelemetry)
           runTimeText = style.theme.fg("text", formatDuration(snap.totalMs));

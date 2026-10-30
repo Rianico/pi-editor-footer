@@ -37,7 +37,7 @@ One `turn_start` → `turn_end` = one LLM call inside an **Agent run**. `TTFT`/`
 _Avoid_: round, iteration
 
 **Session run time**:
-The cumulative wall time of every **Agent run** in the current **Pi session** — each run's `agent_start` → `agent_settled` duration, tool execution included, aborted runs counted up to the abort, idle time between runs excluded. Rendered as the rightmost field of the editor frame's top rule (e.g. `2h 32m 1s`) and persisted with the **Pi session**, so resuming continues the accumulated count.
+The cumulative wall time of every **Agent run** in the current **Pi session** — each run's `agent_start` → `agent_settled` duration, tool execution included, aborted runs counted up to the abort, idle time between runs excluded — plus, while **Subagent usage** is on, the windows of **Delegated child** runs that fall outside those (the accumulation is the **union** of the intervals, never their sum). Rendered as the rightmost field of the editor frame's top rule (e.g. `2h 32m 1s`) and persisted with the **Pi session**, so resuming continues the accumulated count.
 _Avoid_: total duration, turns' time (a **Turn** is one LLM call, not a run), session wall clock
 
 **Git rail**:
@@ -64,3 +64,14 @@ _Avoid_: segment, group, block
 The `↑ … · ↓ …` readout on the usage row above the editor frame, scoped to one **Agent run** and deliberately unlike the footer's token pair. While the run streams it is the synthetic estimate `trigger + Σ turn outputs + Σ tool-result sizes + live delta`, marked `~`; at settle it snaps to authoritative values with input taken as the largest turn prompt — `max`, never `sum`, because every turn re-sends history. Captured before the ledger resets, so at rest it holds the last run's figures and it resets at the next `agent_start`, never accumulating across runs.
 _Avoid_: input/output tokens (that names the footer's **Session totals**), usage tokens, telemetry tokens
 
+**Delegated child**:
+One subagent run started from the parent prompt through the optional `pi-subagents` extension, in its own pi session (a separate session file), so its tokens and cost never appear on a parent session entry. A **foreground** child runs as a synchronous tool call inside the parent **Agent run** — its window is already covered by **Session run time**, and only its usage is new information. A **background** child keeps running after the parent run settles; its window extends **Session run time** for exactly the part the parent window did not cover. Identified by its run id; its usage is counted once per child (dedupe key `<runId>#<index>`), and never twice when pi also recorded the aggregate on the tool result.
+_Avoid_: subagent task, child agent (a child is a run, not a configured agent definition), worker
+
+**Subagent usage**:
+The one toggle (`subagentUsage`, default on) that folds **Delegated child** work into the session figures — **Session run time**, **Session totals** `↑/↓/$`, and the timeline row. Off reproduces the parent-only figures byte for byte; it gates reads, never recording, so history collected while it was off is still there when it is turned back on.
+_Avoid_: child usage, delegation mode, subagent tracking
+
+**Session totals**:
+The footer's `↑ … · ↓ … · $ …` pair, scoped to the whole **Pi session** and counting *billed* input (uncached + cache read + cache write), output and cost. Deliberately unlike **Delta tokens**, which answer the per-**Agent run** question; a per-run `↑ 4k` beside a footer `↑ 352k` is the two scopes, not a bug.
+_Avoid_: usage totals, token totals, Delta tokens (that names the run-scoped row)

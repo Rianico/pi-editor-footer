@@ -18,7 +18,7 @@
 import type { GitStatus } from "./git.js";
 import { emptyGitStatus } from "./git.js";
 import type { RuntimeInfo } from "./runtime.js";
-import type { FooterState, UsageTotals } from "./state.js";
+import type { FooterState, UsageTotals, UsageTotalsOptions } from "./state.js";
 import { getUsageTotals } from "./state.js";
 import type { IconGlyphs } from "./icons.js";
 import type { Theme } from "./layout.js";
@@ -148,6 +148,7 @@ export function createChromeSnapshot(
     | null
     | undefined,
   footerState?: FooterState | null | undefined,
+  options: UsageTotalsOptions = {},
 ): ChromeSnapshot {
   const cwd =
     ctx?.sessionManager?.getCwd?.() ??
@@ -165,6 +166,7 @@ export function createChromeSnapshot(
     // SAFETY: pi seam
     /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx ??
       {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    options,
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults
   // SAFETY: pi seam
