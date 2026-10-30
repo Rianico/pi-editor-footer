@@ -37,7 +37,7 @@ One `turn_start` → `turn_end` = one LLM call inside an **Agent run**. `TTFT`/`
 _Avoid_: round, iteration
 
 **Session run time**:
-The cumulative wall time of every **Agent run** in the current **Pi session** — each run's `agent_start` → `agent_settled` duration, tool execution included, aborted runs counted up to the abort, idle time between runs excluded — plus, while **Subagent usage** is on, the windows of **Delegated child** runs that fall outside those (the accumulation is the **union** of the intervals, never their sum). Rendered as the rightmost field of the editor frame's top rule (e.g. `2h 32m 1s`) and persisted with the **Pi session**, so resuming continues the accumulated count.
+The cumulative wall time of every **Agent run** in the current **Pi session** — each run's `agent_start` → `agent_settled` duration, tool execution included, aborted runs counted up to the abort, idle time between runs excluded — plus, while **Subagent usage** is on, the windows of **Delegated child** runs that fall outside those (the accumulation is the **union** of the intervals, never their sum). Rendered as the rightmost field of the editor frame's top rule (e.g. `2h 32m 1s`) and persisted with the **Pi session** as **both scopes** (inclusive and parent-only), so resuming continues the accumulated count and the toggle-off figure survives a resume; an entry written before that pair existed falls back to the inclusive figure for both.
 _Avoid_: total duration, turns' time (a **Turn** is one LLM call, not a run), session wall clock
 
 **Git rail**:

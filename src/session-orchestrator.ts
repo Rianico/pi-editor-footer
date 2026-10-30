@@ -709,8 +709,11 @@ export class SessionOrchestrator {
         | null
         | undefined; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       if (typeof piAny?.appendEntry !== "function") return;
+      // Both scopes: the inclusive total cannot be split back into its parts on restore,
+      // so the parent-only figure rides along in the same entry (#66 rework 1).
       piAny.appendEntry(SESSION_RUN_TIME_ENTRY_TYPE, {
         seconds: Math.floor(this.sessionRunTime.settled() / 1000),
+        parentSeconds: Math.floor(this.sessionRunTime.settledParent() / 1000),
       });
     } catch {
       // SAFETY: best-effort persistence, ignore recoverable error

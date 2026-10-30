@@ -173,9 +173,10 @@ function sanitizeRecord(value: unknown): SubagentUsageRecord | undefined {
 }
 
 /**
- * Restore the record set from session history: the LAST `subagent-usage` entry wins
- * (each stores the cumulative list, same rule as `session-run-time`). A history
- * without the entry (fresh session, or the toggle never on) restores nothing.
+ * Restore the record set from session history: the LAST USABLE `subagent-usage` entry
+ * wins (each stores the cumulative list, same rule as `session-run-time`), and a
+ * malformed payload is skipped so a corrupt tail cannot erase a valid set behind it.
+ * A history without the entry (fresh session, or the toggle never on) restores nothing.
  */
 export function restoreSubagentUsageRecords(
   entries: readonly unknown[] | undefined,
@@ -185,7 +186,9 @@ export function restoreSubagentUsageRecords(
     const entry = asRecord(entries[i]);
     if (entry?.type !== "custom" || entry.customType !== SUBAGENT_USAGE_ENTRY_TYPE) continue;
     const raw = asRecord(entry.data)?.records;
-    if (!Array.isArray(raw)) return [];
+    // A truncated or foreign-schema payload is skipped, not read as "no children": the
+    // valid cumulative entry behind it would otherwise be erased (#66 rework 1, R3).
+    if (!Array.isArray(raw)) continue;
     const records: SubagentUsageRecord[] = [];
     for (const candidate of raw) {
       const record = sanitizeRecord(candidate);

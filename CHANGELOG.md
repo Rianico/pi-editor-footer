@@ -18,6 +18,7 @@
 
 ### Bug Fixes
 
+* **chrome:** keep the parent-only figure through a resume, and restore past a corrupt entry (#66)
 * **chrome:** clear the delta-token field on teardown too (#65)
 * **chrome:** report a stall only while the current run is stalled (#65)
 

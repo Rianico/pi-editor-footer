@@ -8,7 +8,7 @@ child's tokens never appear. The fix is one new toggle (`subagentUsage`, default
 precise rules: wall time is the **union** of intervals, and usage is counted **once per child**
 across the channels that can deliver it.
 
-Status: accepted
+Status: accepted (revision 2)
 
 ## Considered Options
 
@@ -43,6 +43,24 @@ Status: accepted
 - **Only closed intervals are persisted.** `session-run-time` keeps storing cumulative seconds;
   an in-flight window is never written, so a resume cannot double-count a run it could not
   measure. A resumed session seeds from the last entry and continues from there.
+- **The two scopes are rendered, so both are persisted.** `session-run-time` stores
+  `{ seconds, parentSeconds }`. Restoring only the inclusive figure would leave the
+  toggle-off question unanswerable: the accumulated seconds already contain the child
+  windows and cannot be split back into parts. `snapshot(now, { includeSubagent: false })`
+  therefore reads the parent base, `true` reads the inclusive base, and each keeps
+  accumulating its own closed intervals afterwards.
+- **A legacy entry falls back, and the fallback is stated rather than hidden.** Entries
+  written before revision 2 carry `seconds` only. The split is not in the history, so the
+  inclusive figure answers both questions: after such a resume, **toggle off shows the
+  pre-resume figure inclusive of the child windows that were recorded before the resume**.
+  That is the honest reading of incomplete history, not the "off == no-extension" identity,
+  which only holds for sessions whose entries all carry the pair. Fresh sessions, and every
+  entry written from revision 2 on, keep the identity exactly.
+- **A corrupt entry is skipped, never treated as an empty history.** Both restores scan
+  backwards for the last *usable* entry: a truncated or foreign-schema payload (missing
+  `seconds`, non-numeric or negative, non-array `records`) falls through to the valid
+  cumulative entry behind it, so one bad tail write cannot erase a session's history.
+  A well-formed but empty record set is a real empty set, not corruption.
 - **Usage is one record per child, keyed by `<runId>#<index>` (or the sole run id).** Every
   channel that redelivers a child upserts the same key instead of adding, and a record whose
   parent `toolCallId` already carries usage on its `toolResult` session entry is dropped at fold
@@ -59,6 +77,13 @@ Status: accepted
 - **The optional integration stays optional.** `pi.events` may be absent; when it is, nothing is
   subscribed, nothing throws, and the parent-only figures are emitted byte for byte. Subscriptions
   are torn down on dispose, so a session reload cannot leave a listener behind.
+- **The split between the two scopes is one decision, stated once here:** the **footer**
+  (`↑/↓/$`) and the **usage row's cache** answer *what this session billed*, so delegated
+  children are folded in; the **timeline run row** answers *how much this Agent run moved*
+  (ADR-0004 revision 3), so it keeps the run's own figures and excludes delegated usage —
+  a background child is not part of that run at all, and a foreground child's tokens belong
+  to the session's bill. `test/subagent-usage.test.ts` pins both sides of that split on the
+  same session, so it reads as a decision rather than an oversight.
 - The external contract (channels, payload shapes, the installed version they were verified
   against) is recorded in `docs/reference/pi-subagents-events.md`; that file, not this ADR, is
   what to re-run when `pi-subagents` changes shape.

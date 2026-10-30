@@ -32,6 +32,7 @@ import { getUsageTotals, invalidateUsageCache } from "../src/state.js";
 import { installFooter } from "../src/footer.js";
 import { createInitialState } from "../src/state.js";
 import { LiveBorder } from "../src/live-border.js";
+import { buildTimelineText } from "../src/transcript-timeline.js";
 import { AgentRunLedger } from "../src/agent-run-ledger.js";
 
 // ———————————————— shared fakes ————————————————
@@ -422,6 +423,29 @@ describe("SubagentUsageLedger", () => {
     );
     assert.deepEqual(lastSubagentUsageRecords([]), []);
   });
+
+  test("R3: a corrupt LAST entry falls through to the previous valid record set", () => {
+    const corrupt: unknown[] = [
+      { type: "custom", customType: SUBAGENT_USAGE_ENTRY_TYPE, data: "nope" },
+      { type: "custom", customType: SUBAGENT_USAGE_ENTRY_TYPE },
+      { type: "custom", customType: SUBAGENT_USAGE_ENTRY_TYPE, data: { records: 42 } },
+    ];
+    for (const entry of corrupt) {
+      assert.deepEqual(
+        restoreSubagentUsageRecords([subagentUsageEntry([childUsage()], "e1"), entry]),
+        [childUsage()],
+        JSON.stringify(entry),
+      );
+    }
+    // A well-formed but empty record array is a real (empty) set, not corruption.
+    assert.deepEqual(
+      restoreSubagentUsageRecords([
+        subagentUsageEntry([childUsage()], "e1"),
+        subagentUsageEntry([], "e2"),
+      ]),
+      [],
+    );
+  });
 });
 
 // ———————————————— 3 · 4 · 5 — the totals fold ————————————————
@@ -553,6 +577,111 @@ describe("getUsageTotals — delegated child usage", () => {
 });
 
 // ———————————————— 5 — display seams ————————————————
+
+describe("R2: the two scopes — session totals fold children, the run row does not", () => {
+  // The split is a decision (ADR-0004 rev 3, ADR-0005): the footer answers "what did this
+  // session bill?" and folds delegated children; the timeline row answers "how much did this
+  // Agent run move?" and keeps the run's own figures. Pinned so it reads as a decision.
+  const runTelemetry = {
+    tps: 10,
+    ttftMs: 500,
+    totalMs: 8_000,
+    inputTokens: 4_000,
+    outputTokens: 800,
+    stallMs: 0,
+    stallCount: 0,
+    rateUsdPerMTokens: null,
+    generationMs: 7_000,
+    totalTokens: 4_800,
+    costUsd: 0.01,
+    measurementMs: 7_000,
+  };
+  const entitlements = [
+    {
+      type: "message",
+      id: "a1",
+      message: {
+        role: "assistant",
+        usage: { input: 4_000, output: 800, cacheRead: 0, cacheWrite: 0, cost: { total: 0.01 } },
+      },
+    },
+    subagentUsageEntry(
+      [
+        childUsage({
+          key: "run-a#0",
+          input: 1_000,
+          output: 250,
+          cacheRead: 500,
+          cacheWrite: 0,
+          cost: 0.125,
+        }),
+      ],
+      "e1",
+    ),
+  ];
+
+  test("timeline run row keeps Agent-run scope; the footer folds the same session", () => {
+    const ledger = new AgentRunLedger(() => 0);
+    ledger.startRun(0);
+    ledger.recordTurn(runTelemetry);
+    // The totals cache keys on entry count + last entry id (known P3), so a sibling test
+    // with the same shape can seed it; start from a clean read.
+    invalidateUsageCache();
+    const totals = getUsageTotals(totalsCtx(entitlements));
+    const line = buildTimelineText({
+      // What the orchestrator hands over at agent_settled: the run's own settled figures.
+      effectiveTel: runTelemetry,
+      totals,
+      ctxTokens: 1_000_000,
+      snap: {
+        phase: "settled",
+        turnNumber: 1,
+        activeTools: 0,
+        completedCount: 0,
+        failedCount: 0,
+      },
+      config: { ...structuredClone(DEFAULT_CONFIG), icons: { mode: "ascii" } },
+      lastDoneIn: 8_000,
+      now: new Date("2026-08-25T10:00:00Z"),
+      ledger,
+    });
+
+    // Run row: the run's own 4 000 / 800 / $0.01 — never the folded session figures.
+    assert.ok(line.includes("↑ 4.0k"), line);
+    assert.ok(line.includes("↓ 800"), line);
+    assert.ok(line.includes("$0.01"), line);
+    assert.ok(!line.includes("5.0k"), `folded session input leaked into the run row: ${line}`);
+    assert.ok(!line.includes("$0.14"), `folded session cost leaked into the run row: ${line}`);
+
+    // Footer, same session: children folded (4 000 + 1 000 + 500 cache-read, 800 + 250, 0.01 + 0.125).
+    let captured: { render(width: number): string[] } | undefined;
+    installFooter(
+      {
+        ui: {
+          setWidget: (_key: string, content: unknown) => {
+            captured = typeof content === "function" ? (content() as typeof captured) : undefined;
+          },
+        },
+        sessionManager: {
+          getCwd: () => "/tmp",
+          getEntries: () => entitlements,
+          getSessionName: () => undefined,
+        },
+        model: { provider: "p", id: "m" },
+        getContextUsage: () => undefined,
+      } as never,
+      () => createInitialState(),
+      () => ({ ...structuredClone(DEFAULT_CONFIG), icons: { mode: "ascii" } }),
+      () => ({ provider: "p", model: "m", effort: undefined }),
+      { setRequestRender: () => {}, scheduleGitRefresh: () => {} },
+    );
+    assert.ok(captured, "the fallback widget renderer must be installed");
+    const footer = captured!.render(160)[0] ?? "";
+    assert.ok(footer.includes("↑ 5.5k"), footer);
+    assert.ok(footer.includes("↓ 1.1k"), footer);
+    assert.ok(footer.includes("$0.14"), footer);
+  });
+});
 
 describe("display seams honour the subagentUsage toggle", () => {
   test("footer: ↑/↓/$ include child usage, and toggle off is the parent-only line", () => {
@@ -700,7 +829,8 @@ describe("SessionOrchestrator — delegated work", () => {
       ],
     });
     const timeEntries = raw.appended.filter((a) => a.type === SESSION_RUN_TIME_ENTRY_TYPE);
-    assert.deepEqual(timeEntries.at(-1)?.data, { seconds: 19 });
+    // Both scopes: 19 s inclusive (4 s parent ∪ 15 s child), 4 s parent-only.
+    assert.deepEqual(timeEntries.at(-1)?.data, { seconds: 19, parentSeconds: 4 });
   });
 
   test("AC1: a foreground delegation does not move the run time, but reports usage", () => {
@@ -793,6 +923,39 @@ describe("SessionOrchestrator — delegated work", () => {
     assert.equal(totals.output, 301);
   });
 
+  test("R1: a resumed session's toggle-off figure is parent-only", () => {
+    const { orch } = orchestratorWithStubs();
+    const raw = fakePi({ events: fakeEventBus().bus });
+    orch.install(raw as never);
+    // Both scopes persist: 100 s inclusive, 60 s parent-only.
+    const history = [
+      {
+        type: "custom",
+        customType: SESSION_RUN_TIME_ENTRY_TYPE,
+        data: { seconds: 100, parentSeconds: 60 },
+        id: "e1",
+      },
+    ];
+    fire(raw, "session_start", {}, fakeCtx(history));
+    const acc = orch.getSessionRunTime();
+    assert.equal(acc.snapshot(5_000).totalMs, 100_000);
+    assert.equal(
+      acc.snapshot(5_000, { includeSubagent: false }).totalMs,
+      60_000,
+      "toggle-off after resume must not inherit the child windows",
+    );
+
+    // A legacy entry (no parent figure) cannot be split; the fallback is documented.
+    const legacy = orchestratorWithStubs();
+    const rawLegacy = fakePi({ events: fakeEventBus().bus });
+    legacy.orch.install(rawLegacy as never);
+    fire(rawLegacy, "session_start", {}, fakeCtx([runTimeEntry(100, "e1")]));
+    assert.equal(
+      legacy.orch.getSessionRunTime().snapshot(5_000, { includeSubagent: false }).totalMs,
+      100_000,
+    );
+  });
+
   test("AC6: a pi without an event bus keeps parent figures and never throws", () => {
     const { orch } = orchestratorWithStubs();
     const raw = fakePi(); // no `events` member at all — the extension is absent
@@ -808,7 +971,7 @@ describe("SessionOrchestrator — delegated work", () => {
     assert.equal(orch.getSessionRunTime().snapshot(3_000).totalMs, 2_500);
     assert.deepEqual(
       raw.appended.filter((a) => a.type === SESSION_RUN_TIME_ENTRY_TYPE),
-      [{ type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 2 } }],
+      [{ type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 2, parentSeconds: 2 } }],
     );
     assert.deepEqual(
       raw.appended.filter((a) => a.type === SUBAGENT_USAGE_ENTRY_TYPE),
