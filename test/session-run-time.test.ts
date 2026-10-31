@@ -16,7 +16,9 @@ import {
   SESSION_RUN_TIME_ENTRY_TYPE,
   SessionRunTimeAccumulator,
   restoreSessionRunTimeMs,
+  restoreSessionRunTimeScopes,
 } from "../src/session-run-time.js";
+import { SUBAGENT_USAGE_ENTRY_TYPE } from "../src/subagent-usage.js";
 import { SessionOrchestrator } from "../src/session-orchestrator.js";
 import { formatDuration } from "../src/format.js";
 import type { ThemeLike } from "../src/model-info.js";
@@ -33,8 +35,17 @@ const identityTheme: ThemeLike = {
   muted: (text: string) => text,
 };
 
-function runTimeEntry(seconds: number, id: string): Record<string, unknown> {
-  return { type: "custom", customType: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds }, id };
+function runTimeEntry(
+  seconds: number,
+  id: string,
+  parentSeconds?: number,
+): Record<string, unknown> {
+  return {
+    type: "custom",
+    customType: SESSION_RUN_TIME_ENTRY_TYPE,
+    data: parentSeconds === undefined ? { seconds } : { seconds, parentSeconds },
+    id,
+  };
 }
 
 function timelineEntry(id: string): Record<string, unknown> {
@@ -170,17 +181,66 @@ describe("restoreSessionRunTimeMs", () => {
     assert.equal(restoreSessionRunTimeMs(entries), 245_000);
   });
 
-  test("ignores other custom types, message entries, and malformed payloads", () => {
+  test("R3: a malformed LAST entry does not discard the previous valid one", () => {
+    // The writer floors to whole seconds and can be interrupted; a truncated tail entry
+    // must not read as "this session never ran".
+    const corrupt: Array<Record<string, unknown>> = [
+      { type: "custom", customType: SESSION_RUN_TIME_ENTRY_TYPE, data: {} },
+      { type: "custom", customType: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: "10" } },
+      { type: "custom", customType: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: -5 } },
+      { type: "custom", customType: SUBAGENT_USAGE_ENTRY_TYPE, data: { records: [] } },
+    ];
+    for (const entry of corrupt) {
+      assert.equal(
+        restoreSessionRunTimeMs([runTimeEntry(10, "e1"), entry]),
+        10_000,
+        JSON.stringify(entry),
+      );
+    }
+    // Nothing valid anywhere → 0, and other entry types are still skipped.
     assert.equal(restoreSessionRunTimeMs([timelineEntry("e1"), { type: "message" }]), 0);
-    assert.equal(
-      restoreSessionRunTimeMs([
-        runTimeEntry(10, "e1"),
-        { type: "custom", customType: SESSION_RUN_TIME_ENTRY_TYPE, data: {} },
-      ]),
-      0,
-    );
+    assert.equal(restoreSessionRunTimeMs([corrupt[0]!]), 0);
     assert.equal(restoreSessionRunTimeMs(undefined), 0);
     assert.equal(restoreSessionRunTimeMs([]), 0);
+  });
+});
+
+describe("restored scopes (R1)", () => {
+  test("both scopes restore: the toggle-off figure is the parent-only base", () => {
+    const acc = new SessionRunTimeAccumulator();
+    acc.restoreFromEntries([runTimeEntry(100, "e1", 60)]);
+    assert.equal(acc.snapshot(5_000).totalMs, 100_000);
+    assert.equal(acc.snapshot(5_000, { includeSubagent: false }).totalMs, 60_000);
+    assert.deepEqual(restoreSessionRunTimeScopes([runTimeEntry(100, "e1", 60)]), {
+      totalMs: 100_000,
+      parentMs: 60_000,
+    });
+  });
+
+  test("the two restored bases continue to accumulate independently", () => {
+    const acc = new SessionRunTimeAccumulator();
+    acc.restoreFromEntries([runTimeEntry(100, "e1", 60)]);
+    acc.startRun(200_000);
+    acc.settleRun(203_000);
+    acc.startSubagent("child-1", 300_000);
+    acc.settleSubagent("child-1", 310_000);
+    assert.equal(acc.snapshot(400_000).totalMs, 113_000);
+    assert.equal(acc.snapshot(400_000, { includeSubagent: false }).totalMs, 63_000);
+  });
+
+  test("a legacy entry (no parent figure) falls back to the inclusive one", () => {
+    // History written before #66 rework cannot be split — the fallback is honest, not exact.
+    assert.deepEqual(restoreSessionRunTimeScopes([runTimeEntry(100, "e1")]), {
+      totalMs: 100_000,
+      parentMs: 100_000,
+    });
+  });
+
+  test("a faithful pair is preferred over the fallback on the same entry", () => {
+    assert.deepEqual(restoreSessionRunTimeScopes([runTimeEntry(100, "e1", 0)]), {
+      totalMs: 100_000,
+      parentMs: 0,
+    });
   });
 });
 
@@ -236,7 +296,9 @@ describe("SessionOrchestrator — session run time", () => {
     );
     fire(raw, "agent_settled", {}, ctx);
     const timeEntries = raw.appended.filter((a) => a.type === SESSION_RUN_TIME_ENTRY_TYPE);
-    assert.deepEqual(timeEntries, [{ type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 108 } }]);
+    assert.deepEqual(timeEntries, [
+      { type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 108, parentSeconds: 108 } },
+    ]);
     assert.equal(orch.getSessionRunTime().settled(), 108_000);
     orch.dispose();
   });
@@ -259,7 +321,10 @@ describe("SessionOrchestrator — session run time", () => {
     const timeEntries = raw.appended.filter((a) => a.type === SESSION_RUN_TIME_ENTRY_TYPE);
     assert.deepEqual(
       timeEntries.map((a) => a.data),
-      [{ seconds: 8 }, { seconds: 11 }],
+      [
+        { seconds: 8, parentSeconds: 8 },
+        { seconds: 11, parentSeconds: 11 },
+      ],
     );
     assert.equal(orch.getSessionRunTime().settled(), 11_500);
     orch.dispose();
@@ -276,7 +341,9 @@ describe("SessionOrchestrator — session run time", () => {
     clock.set(4_200);
     fire(raw, "agent_settled", { aborted: true }, ctx);
     const timeEntries = raw.appended.filter((a) => a.type === SESSION_RUN_TIME_ENTRY_TYPE);
-    assert.deepEqual(timeEntries, [{ type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 4 } }]);
+    assert.deepEqual(timeEntries, [
+      { type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 4, parentSeconds: 4 } },
+    ]);
     orch.dispose();
   });
 
@@ -292,7 +359,7 @@ describe("SessionOrchestrator — session run time", () => {
     fire(raw, "agent_settled", {}, ctx);
     assert.deepEqual(
       raw.appended.filter((a) => a.type === SESSION_RUN_TIME_ENTRY_TYPE),
-      [{ type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 6 } }],
+      [{ type: SESSION_RUN_TIME_ENTRY_TYPE, data: { seconds: 6, parentSeconds: 6 } }],
     );
     assert.equal(orch.getSessionRunTime().settled(), 6_000);
     orch.dispose();

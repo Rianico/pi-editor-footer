@@ -24,6 +24,8 @@ export interface SessionMessageLike {
   role: string;
   provider?: string;
   model?: string;
+  /** The tool call a `toolResult` message answers — the cross-channel dedupe key. */
+  toolCallId?: string;
   usage?: SessionUsageLike;
 }
 

@@ -57,6 +57,14 @@ import {
   type SessionRunTimeEntryData,
 } from "./session-run-time.js";
 import {
+  SUBAGENT_USAGE_ENTRY_TYPE,
+  SubagentUsageLedger,
+  subagentUsageFromAsyncComplete,
+  subagentUsageFromToolResult,
+  type SubagentUsageEntryData,
+  type SubagentUsageRecord,
+} from "./subagent-usage.js";
+import {
   AgentRunLedger,
   estimateTokensFromText,
   estimateTokensFromChars,
@@ -89,6 +97,11 @@ export interface ExtensionContextLike {
   thinkingLevel?: string;
 }
 export interface ExtensionAPILike {
+  /**
+   * Shared extension event bus. Absent on a stub pi, or when no extension publishes —
+   * which simply means no delegated work, never an error.
+   */
+  events?: { on(channel: string, handler: (data: unknown) => void): () => void };
   on(event: "session_start", handler: (event: unknown, ctx: ExtensionContextLike) => void): void;
   on(event: "model_select", handler: (event: unknown, ctx: ExtensionContextLike) => void): void;
   on(
@@ -108,6 +121,15 @@ export interface ExtensionAPILike {
 }
 
 export const REFRESH_MS = 1000;
+
+/** Run id of a `subagent:async-*` payload — the child's interval and usage identity. */
+function subagentRunId(data: unknown): string | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  // SAFETY: pi-subagents payload seam — only the id string is read, validated below
+  const payload = data as { runId?: unknown; id?: unknown };
+  const candidate = payload.runId ?? payload.id;
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined;
+}
 
 /** Extract text from pi message content (string | array of parts) for token estimation (chars/4). */
 function extractTextFromContent(content: unknown): string {
@@ -234,6 +256,10 @@ export class SessionOrchestrator {
   private readonly runActivityTracker: RunActivityTracker;
   private readonly agentLedger: AgentRunLedger;
   private readonly sessionRunTime: SessionRunTimeAccumulator;
+  /** Delegated-child usage records, restored per session and persisted as one entry. */
+  private readonly subagentUsageLedger = new SubagentUsageLedger();
+  /** Unsubscribers for the optional subagent event channels (emptied on dispose). */
+  private subagentEventUnsubscribes: Array<() => void> = [];
   private readonly detailChrome: DetailChrome;
   private readonly liveBorder: LiveBorder;
   private readonly transcriptTimeline: TranscriptTimeline;
@@ -296,7 +322,8 @@ export class SessionOrchestrator {
       telemetryTracker: this.telemetryTracker,
       runActivityTracker: this.runActivityTracker,
       agentLedger: this.agentLedger,
-      getSessionRunTime: () => this.sessionRunTime.snapshot(),
+      getSessionRunTime: (includeSubagent) =>
+        this.sessionRunTime.snapshot(Date.now(), { includeSubagent }),
     });
     this.gitRefresher = (deps.createGitRefresher ?? ((d) => new GitRefresher(d)))({
       read: async () => {
@@ -317,6 +344,7 @@ export class SessionOrchestrator {
     this.extensionPi = pi;
     this.registerCommands(pi);
     this.registerPiHandlers(pi);
+    this.subscribeSubagentEvents(pi);
   }
 
   /** Teardown timers and state. Called on session_shutdown. */
@@ -350,6 +378,15 @@ export class SessionOrchestrator {
       this.deferredInstallTimer = null;
     }
     this.gitRefresher.stop();
+    for (const unsubscribe of this.subagentEventUnsubscribes.splice(0)) {
+      try {
+        unsubscribe();
+      } catch {
+        // SAFETY: best-effort teardown, ignore recoverable error
+      }
+    }
+    // The next session_start re-seeds from its own history; nothing crosses sessions.
+    this.subagentUsageLedger.clear();
     if (this.watchTimer !== null) {
       clearInterval(this.watchTimer);
       this.watchTimer = null;
@@ -375,6 +412,9 @@ export class SessionOrchestrator {
   }
   getSessionRunTime(): SessionRunTimeAccumulator {
     return this.sessionRunTime;
+  }
+  getSubagentUsage(): SubagentUsageLedger {
+    return this.subagentUsageLedger;
   }
   getGitRefresher(): GitRailClock {
     return this.gitRefresher;
@@ -669,12 +709,87 @@ export class SessionOrchestrator {
         | null
         | undefined; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
       if (typeof piAny?.appendEntry !== "function") return;
+      // Both scopes: the inclusive total cannot be split back into its parts on restore,
+      // so the parent-only figure rides along in the same entry (#66 rework 1).
       piAny.appendEntry(SESSION_RUN_TIME_ENTRY_TYPE, {
         seconds: Math.floor(this.sessionRunTime.settled() / 1000),
+        parentSeconds: Math.floor(this.sessionRunTime.settledParent() / 1000),
       });
     } catch {
       // SAFETY: best-effort persistence, ignore recoverable error
     }
+  }
+
+  /**
+   * Append the cumulative delegated-usage records as a custom entry (last entry wins).
+   * UNCONDITIONAL — same rule as the run time: the data layer never consults the
+   * `subagentUsage` display toggle, so a session that turns the display on later still
+   * has its history. Best-effort: a missing or throwing seam is ignored.
+   */
+  private appendSubagentUsageEntry(): void {
+    try {
+      const piAny = this.extensionPi as
+        | { appendEntry?: (type: string, data: SubagentUsageEntryData) => void }
+        | null
+        | undefined; // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+      if (typeof piAny?.appendEntry !== "function") return;
+      piAny.appendEntry(SUBAGENT_USAGE_ENTRY_TYPE, { records: this.subagentUsageLedger.records() });
+    } catch {
+      // SAFETY: best-effort persistence, ignore recoverable error
+    }
+  }
+
+  /** Admission for every delegated-usage channel: record, persist, repaint. */
+  private recordSubagentUsage(records: readonly SubagentUsageRecord[]): void {
+    if (records.length === 0) return;
+    if (!this.subagentUsageLedger.record(records)) return;
+    this.appendSubagentUsageEntry();
+    this.liveBorder.render();
+  }
+
+  /**
+   * Subscribe to the pi-subagents event channels (external, version-sensitive — see
+   * docs/reference/pi-subagents-events.md). Wall time comes from the async start/complete
+   * pair; usage comes from the completion payload. A pi without an event bus, or without
+   * the subagent extension loaded, never publishes here: nothing to unsubscribe, no error.
+   */
+  private subscribeSubagentEvents(pi: ExtensionAPILike): void {
+    const bus = pi.events;
+    if (typeof bus?.on !== "function") return;
+    const subscribe = (channel: string, handler: (data: unknown) => void): void => {
+      try {
+        const off = bus.on(channel, (data) => {
+          try {
+            handler(data);
+          } catch {
+            // SAFETY: best-effort integration, a bad payload must not break the session
+          }
+        });
+        if (typeof off === "function") this.subagentEventUnsubscribes.push(off);
+      } catch {
+        // SAFETY: best-effort integration, ignore a throwing bus
+      }
+    };
+
+    subscribe("subagent:async-started", (data) => {
+      const runId = subagentRunId(data);
+      if (!runId) return;
+      this.sessionRunTime.startSubagent(runId, Date.now());
+      // A child can outlive the parent run: keep the 1 Hz tick alive so the field grows.
+      this.liveBorder.startTick();
+      this.liveBorder.render();
+    });
+
+    subscribe("subagent:async-complete", (data) => {
+      const runId = subagentRunId(data);
+      if (!runId) return;
+      if (this.sessionRunTime.settleSubagent(runId, Date.now())) {
+        this.appendSessionRunTimeEntry();
+        if (!this.sessionRunTime.hasLiveInterval()) this.liveBorder.stopTick();
+      }
+      this.recordSubagentUsage(subagentUsageFromAsyncComplete(data));
+      this.liveBorder.render();
+    });
   }
 
   // ——— pi event wiring ———
@@ -710,11 +825,14 @@ export class SessionOrchestrator {
       // the reset, so a resumed session keeps its persisted count and a fresh one
       // starts at 0 (no entries → 0). Never seeded to a hardcoded zero here.
       try {
-        this.sessionRunTime.restoreFromEntries(
+        const entries =
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
           (ctx as unknown as { sessionManager?: { getEntries?: () => unknown[] } })?.sessionManager // SAFETY: pi seam
-            ?.getEntries?.(),
-        );
+            ?.getEntries?.();
+        this.sessionRunTime.restoreFromEntries(entries);
+        // Same seam for delegated usage: a resumed session keeps every child it already
+        // reported, so nothing is lost and nothing is counted twice.
+        this.subagentUsageLedger.restoreFromEntries(entries);
       } catch {
         // SAFETY: best-effort, ignore recoverable error
       }
@@ -758,7 +876,12 @@ export class SessionOrchestrator {
           // SAFETY: pi seam — intentional unsafe cast, validated at runtime
           this.lastSessionCtx) as unknown as Parameters<typeof getUsageTotals>[0];
         if (baselineCtx?.sessionManager?.getEntries) {
-          this.agentBaselineTotals = getUsageTotals(baselineCtx);
+          // The baseline feeds the run-scoped fallback (timeline/usage row), so it is
+          // captured WITHOUT delegated children — an inclusive baseline would bill a
+          // background child to the next run (review P1).
+          this.agentBaselineTotals = getUsageTotals(baselineCtx, {
+            includeSubagentUsage: false,
+          });
           this.agentLedger.setBaseline(this.agentBaselineTotals);
           this.agentLedger.startRun(Date.now());
           this.agentLedger.setTriggerTokens(
@@ -832,6 +955,16 @@ export class SessionOrchestrator {
       const text = extractToolResultText(e);
       if (text.length > 0) this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
       this.runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
+      // A foreground delegation reports its children's usage here; the window itself sits
+      // inside the parent run, so the run time is untouched (union, not sum).
+      const event = e as { toolName?: string; result?: unknown };
+      this.recordSubagentUsage(
+        subagentUsageFromToolResult({
+          toolCallId: getToolCallId(e),
+          ...(event.toolName ? { toolName: event.toolName } : {}),
+          result: event.result,
+        }),
+      );
       refreshAllLive();
     });
     pi.on("tool_result", (e) => {
@@ -855,7 +988,8 @@ export class SessionOrchestrator {
         (tel as unknown as import("./telemetry.js").TurnTelemetry | null | undefined) ??
         settledFromLedger;
       this.runActivityTracker.settle();
-      this.liveBorder.stopTick();
+      // A background child can outlive the parent run: its window keeps the field growing.
+      if (!this.sessionRunTime.hasLiveInterval()) this.liveBorder.stopTick();
       if (this.agentStartMs !== null) {
         const doneIn = Date.now() - this.agentStartMs;
         this.footerState = { ...this.footerState, lastDoneIn: doneIn };
@@ -875,7 +1009,18 @@ export class SessionOrchestrator {
           const totals = getUsageTotals(
             // SAFETY: pi seam — intentional unsafe cast, validated at runtime
             this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
+            { includeSubagentUsage: this.currentConfig.subagentUsage },
           );
+          // The run row's fallback must stay run-scoped (review P1). Only read on the
+          // fallback — a run with authoritative telemetry never pays for the second scan,
+          // and when it does, it reuses the `includeSubagentUsage: false` cache entry.
+          const runScopeTotals = effectiveTel
+            ? undefined
+            : getUsageTotals(
+                // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+                this.lastSessionCtx as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam
+                { includeSubagentUsage: false },
+              );
           const ctxTokens = this.contextUsageTokens();
           const snap = this.runActivityTracker.getSnapshot();
           this.transcriptTimeline.handleAgentSettled(
@@ -885,6 +1030,7 @@ export class SessionOrchestrator {
             {
               effectiveTel,
               totals,
+              ...(runScopeTotals ? { runScopeTotals } : {}),
               ctxTokens,
               snap,
               config: this.currentConfig,

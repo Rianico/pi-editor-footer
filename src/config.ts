@@ -48,6 +48,12 @@ export interface ThemeConfig {
   contextIconBar: boolean;
   /** Top-rule rightmost field: cumulative agent-run wall time (see GLOSSARY "Session run time"). */
   sessionRunTime: boolean;
+  /**
+   * Fold delegated (subagent) work into the session figures — run time, tokens, cost.
+   * Off reproduces the parent-only figures byte for byte; it never disables the data
+   * layer, so history keeps accumulating for a later turn-on.
+   */
+  subagentUsage: boolean;
   telemetry: TelemetryConfig;
   timeline: TimelineConfig;
   footerSegments: FooterSegments;
@@ -68,6 +74,7 @@ export const DEFAULT_CONFIG: ThemeConfig = {
   },
   contextIconBar: false,
   sessionRunTime: true,
+  subagentUsage: true,
   footerSegments: {
     cwd: true,
     sessionName: false,
@@ -262,6 +269,13 @@ export const CONFIG_SCHEMA: readonly ConfigDescriptor[] = [
     path: "sessionRunTime",
     kind: "boolean",
     label: "Session run time",
+    tab: "footer",
+    default: true,
+  },
+  {
+    path: "subagentUsage",
+    kind: "boolean",
+    label: "Subagent usage",
     tab: "footer",
     default: true,
   },

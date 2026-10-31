@@ -58,7 +58,14 @@ export function formatDateTimeWithTimezone(d: Date = new Date()): string {
 
 export interface BuildTimelineParams {
   effectiveTel: TurnTelemetry | null | undefined;
+  /** Session totals, delegated children folded in — the cache rate source. */
   totals: UsageTotals;
+  /**
+   * Session totals in the **Agent-run scope** (delegated children excluded), used by the
+   * fallback path when no authoritative telemetry exists. Defaults to `totals` for callers
+   * that have nothing delegated to exclude.
+   */
+  runScopeTotals?: UsageTotals;
   ctxTokens: number | undefined;
   snap: RunActivitySnapshot;
   config: ThemeConfig;
@@ -78,12 +85,15 @@ export interface BuildTimelineParams {
  */
 export function buildTimelineText(params: BuildTimelineParams): string {
   const { effectiveTel, totals, ctxTokens, snap, config, lastDoneIn, now, ledger } = params;
+  // Two scopes on purpose (ADR-0005): the cache rate is a session figure, while the run's
+  // ↑/↓/$ must never inherit delegated children through the fallback path.
+  const runScopeTotals = params.runScopeTotals ?? totals;
   const glyphs = resolveGlyphs(config.icons.mode);
   const dt = formatDateTimeWithTimezone(now ?? new Date());
   const wallDur = formatDuration(lastDoneIn);
   const cacheRate = totals.latestCacheHitRate ?? 0;
   const cacheStr = `${glyphs.cacheHit} ${cacheRate.toFixed(1)}%`;
-  const perAgent = ledger.getPerAgentTotalsForTimeline(effectiveTel, totals, ctxTokens);
+  const perAgent = ledger.getPerAgentTotalsForTimeline(effectiveTel, runScopeTotals, ctxTokens);
   const telInput = perAgent.input;
   const telOutput = perAgent.output;
   const telCost = perAgent.cost;

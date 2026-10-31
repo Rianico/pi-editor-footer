@@ -11,6 +11,7 @@ import {
   type SessionEntryReader,
   type SessionUsageLike,
 } from "./session-entries.js";
+import { lastSubagentUsageRecords, type SubagentUsageRecord } from "./subagent-usage.js";
 
 export interface FooterState {
   git: GitStatus;
@@ -56,8 +57,22 @@ function entriesKey(ctx: UsageTotalsSource): string {
   return `${entries.length}:${String(last?.id ?? "")}:${String(last?.timestamp ?? "")}`;
 }
 
-export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
-  const key = entriesKey(ctx);
+/** Everything a caller may ask the session totals to include or leave out. */
+export interface UsageTotalsOptions {
+  /**
+   * Fold delegated-child usage (the `subagentUsage` toggle). Defaults to on — the
+   * feature's own default — and a caller that owns the config passes it explicitly,
+   * so "off" is a decision, never an omission.
+   */
+  includeSubagentUsage?: boolean;
+}
+
+export function getUsageTotals(
+  ctx: UsageTotalsSource,
+  options: UsageTotalsOptions = {},
+): UsageTotals {
+  const includeSubagentUsage = options.includeSubagentUsage !== false;
+  const key = `${entriesKey(ctx)}:${includeSubagentUsage ? "subagents" : "parent"}`;
   if (usageCache && usageCache.key === key) return usageCache.totals;
 
   const totals: UsageTotals = {
@@ -75,6 +90,8 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
     totals.cacheWrite += usage.cacheWrite ?? 0;
     totals.cost += usage.cost?.total ?? 0;
   };
+  /** Parent tool calls whose aggregate usage pi already put on their result entry. */
+  const countedToolCalls = new Set<string>();
   for (const entry of ctx.sessionManager?.getEntries() ?? []) {
     // Assistant turns carry the cache split the hit rate is derived from; tool results
     // and summaries are usage from nested model calls — billed, so they count toward the
@@ -91,15 +108,40 @@ export function getUsageTotals(ctx: UsageTotalsSource): UsageTotals {
       continue;
     }
     if (isToolResultEntry(entry)) {
-      if (entry.message.usage) addUsage(entry.message.usage);
+      if (entry.message.usage) {
+        addUsage(entry.message.usage);
+        const toolCallId = entry.message.toolCallId;
+        if (toolCallId) countedToolCalls.add(toolCallId);
+      }
       continue;
     }
     if (isSummaryEntry(entry)) {
       if (entry.usage) addUsage(entry.usage);
     }
   }
+
+  if (includeSubagentUsage) {
+    // Delegated children run in their own sessions, so their usage reaches us only
+    // through the subagent-usage entries this extension appends. Only the LAST entry
+    // counts (each stores the cumulative record list), and a record whose parent call
+    // pi already billed on its toolResult entry is dropped — one child, one channel.
+    for (const record of lastSubagentUsageRecords(ctx.sessionManager?.getEntries())) {
+      if (record.toolCallId && countedToolCalls.has(record.toolCallId)) continue;
+      addSubagentRecord(totals, record);
+    }
+  }
+
   usageCache = { key, totals };
   return totals;
+}
+
+/** Add one delegated child's usage — cache split included, hit rate untouched. */
+function addSubagentRecord(totals: UsageTotals, record: SubagentUsageRecord): void {
+  totals.input += record.input;
+  totals.output += record.output;
+  totals.cacheRead += record.cacheRead;
+  totals.cacheWrite += record.cacheWrite;
+  totals.cost += record.cost;
 }
 
 export function invalidateUsageCache(): void {
