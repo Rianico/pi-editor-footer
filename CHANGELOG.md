@@ -11,7 +11,7 @@
 
 ### Features
 
-* **chrome:** fold delegated subagent work into the session figures (#66)
+* **chrome:** fold delegated subagent work into the session figures (#67)
 * **chrome:** scope the usage-row token pair to the agent run (#65)
 * **chrome:** add session run time field (#61)
 * **chrome:** compose the usage row as status | run | stall (#65)
@@ -19,16 +19,16 @@
 
 ### Bug Fixes
 
-* **chrome:** scope the timeline fallback and baseline to the agent run (#66)
-* **chrome:** keep both run-time scopes through a resume, restore past a corrupt entry (#66)
+* **chrome:** scope the timeline fallback and baseline to the agent run (#67)
+* **chrome:** keep both run-time scopes through a resume, restore past a corrupt entry (#67)
 * **chrome:** clear the delta-token field on teardown too (#65)
 * **chrome:** report a stall only while the current run is stalled (#65)
 
 ### Documentation
 
-* **agents:** scope Subagent usage to the two figures it actually moves (#66)
-* **agents:** record the subagent integration contract (#66)
-* **chrome:** record the union/dedupe rules for delegated work (ADR-0005) (#66)
+* **agents:** scope Subagent usage to the two figures it actually moves (#67)
+* **agents:** record the subagent integration contract (#67)
+* **chrome:** record the union/dedupe rules for delegated work (ADR-0005) (#67)
 * **agents:** record the two-scope token contract (#65)
 * **chrome:** record run-scoped delta tokens (ADR-0004 rev 3) (#65)
 * **glossary:** define Session run time (#61)
