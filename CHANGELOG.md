@@ -19,6 +19,7 @@
 
 ### Bug Fixes
 
+* **deps:** force patched undici floors for TLS and DoS advisories
 * **chrome:** scope the timeline fallback and baseline to the agent run (#67)
 * **chrome:** keep both run-time scopes through a resume, restore past a corrupt entry (#67)
 * **chrome:** clear the delta-token field on teardown too (#65)
