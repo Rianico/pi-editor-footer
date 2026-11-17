@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-17
+
 ### Features
 
 * **chrome:** fold delegated subagent work into the session figures (#67)

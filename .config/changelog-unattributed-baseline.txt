@@ -1,1 +1,2 @@
 # Legacy unattributed baseline
+**deps:** force patched undici floors for TLS and DoS advisories
