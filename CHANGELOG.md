@@ -11,12 +11,12 @@
 
 ### Features
 
-* **ui:** report blocked program status from the extension overlays
+* **ui:** report blocked program status from the extension overlays (#72)
 
 ### Bug Fixes
 
-* **editor:** port the 1.5.x autocomplete page-key branch into TrackingEditor
-* **chrome:** fold cache-warm usage entries into session totals
+* **editor:** port the 1.5.x autocomplete page-key branch into TrackingEditor (#72)
+* **chrome:** fold cache-warm usage entries into session totals (#72)
 
 ## [0.15.0] - 2026-11-17
 
