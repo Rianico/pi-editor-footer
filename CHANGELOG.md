@@ -16,7 +16,7 @@
 
 ### Bug Fixes
 
-* **scripts:** read every lockfile resolution in the pinned-version guard
+* **scripts:** read every lockfile resolution in the pinned-version guard (#74)
 * **editor:** port the 1.5.x autocomplete page-key branch into TrackingEditor (#72)
 * **chrome:** fold cache-warm usage entries into session totals (#72)
 
