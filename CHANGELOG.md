@@ -11,10 +11,12 @@
 
 ### Features
 
+* **chrome:** sync with pi 1.5.2 — cache-warm totals, editor page keys, blocked status (#72)
 * **ui:** report blocked program status from the extension overlays (#72)
 
 ### Bug Fixes
 
+* **scripts:** read every lockfile resolution in the pinned-version guard (#74)
 * **editor:** port the 1.5.x autocomplete page-key branch into TrackingEditor (#72)
 * **chrome:** fold cache-warm usage entries into session totals (#72)
 
