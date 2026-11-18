@@ -115,6 +115,15 @@ export function getUsageTotals(
       }
       continue;
     }
+    // pi appends `{ type: "usage", kind: "cache_warm", usage }` whenever it warms a
+    // prompt cache (the default since pi 1.5.1), and pi's own `getSessionStats()` folds
+    // every `type: "usage"` entry. That billed work never rides an assistant turn, so it
+    // belongs in the session totals here. Session-scoped only: `latestCacheHitRate` stays
+    // derived from assistant turns, so a warm entry can never invent a cache-hit figure.
+    if (entry.type === "usage" && entry.usage) {
+      addUsage(entry.usage);
+      continue;
+    }
     if (isSummaryEntry(entry)) {
       if (entry.usage) addUsage(entry.usage);
     }

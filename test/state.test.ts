@@ -133,4 +133,54 @@ describe("getUsageTotals", () => {
     // Same entry set → same totals object out of the cache.
     assert.equal(getUsageTotals(ctxWith(entries)), second);
   });
+
+  test("folds cache-warm usage entries into session totals (never into the hit rate)", () => {
+    invalidateUsageCache();
+    const warmOnly = getUsageTotals(
+      ctxWith([
+        {
+          type: "usage",
+          id: "w1",
+          kind: "cache_warm",
+          usage: usage({
+            input: 100,
+            output: 0,
+            cacheRead: 900,
+            cacheWrite: 0,
+            cost: { total: 0.02 },
+          }),
+        },
+      ]),
+    );
+    assert.equal(warmOnly.input, 100);
+    assert.equal(warmOnly.output, 0);
+    assert.equal(warmOnly.cacheRead, 900);
+    assert.equal(warmOnly.cacheWrite, 0);
+    assert.ok(Math.abs(warmOnly.cost - 0.02) < 1e-9, String(warmOnly.cost));
+    // Warm usage is session-scoped: no assistant prompt, so no invented 0% hit.
+    assert.equal(warmOnly.latestCacheHitRate, undefined);
+
+    invalidateUsageCache();
+    const withTurn = getUsageTotals(
+      ctxWith([
+        {
+          type: "message",
+          id: "a1",
+          message: { role: "assistant", usage: usage({ input: 10, output: 5, cacheRead: 90 }) },
+        },
+        {
+          type: "usage",
+          id: "w2",
+          kind: "cache_warm",
+          usage: usage({ input: 40, output: 0, cacheRead: 460, cost: { total: 0.01 } }),
+        },
+      ]),
+    );
+    assert.equal(withTurn.input, 50);
+    assert.equal(withTurn.output, 5);
+    assert.equal(withTurn.cacheRead, 550);
+    assert.ok(Math.abs(withTurn.cost - 0.01) < 1e-9, String(withTurn.cost));
+    // The hit rate still comes from the assistant turn alone.
+    assert.equal(withTurn.latestCacheHitRate, 90);
+  });
 });

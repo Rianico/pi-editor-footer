@@ -331,6 +331,20 @@ export class TrackingEditor extends Editor {
     if (this.onExtensionShortcut?.(data)) {
       return;
     }
+    // pi 1.5.x (CustomEditor.handleInput, custom-editor.js:66-73): popup page keys run
+    // before any app action, so a page key rebound onto a key that also pastes an image
+    // (pi names Ctrl+V) pages the open popup instead of pasting. Order is the contract —
+    // see docs/reference/pi-tui-internals.md, "Editor surface delta 1.3.0 → 1.5.2".
+    if (
+      this.isShowingAutocomplete() &&
+      (this.keybindings.matches(data, "tui.select.pageUp") ||
+        this.keybindings.matches(data, "tui.select.pageDown"))
+    ) {
+      super.handleInput(data);
+      this.syncHighlight();
+      return;
+    }
+
     if (this.keybindings.matches(data, "app.clipboard.pasteImage")) {
       this.onPasteImage?.();
       return;
