@@ -20,7 +20,11 @@ import {
   type ConfigTab,
   type ThemeConfig,
 } from "../src/config.js";
-import { applySettingChange, settingRowsFor } from "../src/theme-settings.js";
+import {
+  applySettingChange,
+  registerThemeSettingsCommand,
+  settingRowsFor,
+} from "../src/theme-settings.js";
 
 const TABS: readonly ConfigTab[] = ["general", "appearance", "footer", "telemetry", "timeline"];
 
@@ -229,4 +233,56 @@ describe("enum cycle order (descriptor-driven)", () => {
       );
     });
   }
+});
+
+/** `/pi-editor-footer` opens a long-lived overlay; pin the options it hands to `ctx.ui.custom`. */
+function settingsOpen(optionsSeen: unknown[]): () => Promise<void> {
+  let handler: ((args: string, ctx: unknown) => void | Promise<void>) | undefined;
+  const pi = {
+    registerCommand(
+      _name: string,
+      opts: { handler: (args: string, ctx: unknown) => void | Promise<void> },
+    ): void {
+      handler = opts.handler;
+    },
+  };
+  registerThemeSettingsCommand(pi as never, {
+    getConfig: () => structuredClone(DEFAULT_CONFIG),
+    onConfigChanged: () => {},
+  });
+  assert.ok(handler, "the pi-editor-footer command must register exactly one handler");
+  const ctx = {
+    hasUI: true,
+    ui: {
+      custom(_factory: unknown, opts?: unknown): Promise<undefined> {
+        optionsSeen.push(opts);
+        return Promise.resolve(undefined);
+      },
+    },
+  };
+  const open: (args: string, ctx: unknown) => void | Promise<void> = handler;
+  return async () => {
+    await open("", ctx);
+  };
+}
+
+describe("settings overlay reports a blocked program status", () => {
+  test("declares a question with the dialog title", async () => {
+    const optionsSeen: unknown[] = [];
+    await settingsOpen(optionsSeen)();
+    assert.deepEqual(optionsSeen[0], {
+      overlay: true,
+      blocked: { kind: "question", message: "pi-editor-footer Settings" },
+    });
+  });
+
+  test("each open passes its own option object, never a stale status", async () => {
+    const optionsSeen: unknown[] = [];
+    const open = settingsOpen(optionsSeen);
+    await open();
+    await open();
+    assert.equal(optionsSeen.length, 2);
+    assert.notEqual(optionsSeen[0], optionsSeen[1]);
+    assert.deepEqual(optionsSeen[1], optionsSeen[0]);
+  });
 });

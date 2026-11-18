@@ -218,6 +218,21 @@ class SettingsUi {
   }
 }
 
+/**
+ * OSC 7501 program status: the settings overlay waits for a keypress, so report pi as
+ * blocked on a question instead of idle. pi 1.5.1+ honours `blocked` on overlays until
+ * `done()`; older pi ignores the option, so the `*` peer range stays compatible.
+ *
+ * Built per open (mirrors `blockedOnQuestion` in `cache-command.ts`) so no dialog ever
+ * receives an options object a previous open already handed to pi.
+ */
+function settingsOverlayOptions(): {
+  overlay: true;
+  blocked: { kind: "question"; message: string };
+} {
+  return { overlay: true, blocked: { kind: "question", message: COPY.title } };
+}
+
 export function registerThemeSettingsCommand(
   pi: any,
   hooks: {
@@ -230,25 +245,22 @@ export function registerThemeSettingsCommand(
     description: "Open pi-editor-footer settings (workspace, cursor, footer, telemetry)",
     handler: async (_args: string, ctx: ExtensionContext) => {
       if (!ctx.hasUI) return;
-      await ctx.ui.custom<void>(
-        (tui: TUI, theme: Theme, _kb: unknown, done: (v: void) => void) => {
-          const ui = new SettingsUi(
-            theme as Theme,
-            hooks.getConfig(),
-            (config) => hooks.onConfigChanged(config),
-            () => done(undefined),
-          );
-          return {
-            render: (w: number) => ui.render(w),
-            invalidate: () => ui.invalidate(),
-            handleInput: (data: string) => {
-              ui.handleInput(data);
-              tui.requestRender();
-            },
-          };
-        },
-        { overlay: true },
-      );
+      await ctx.ui.custom<void>((tui: TUI, theme: Theme, _kb: unknown, done: (v: void) => void) => {
+        const ui = new SettingsUi(
+          theme as Theme,
+          hooks.getConfig(),
+          (config) => hooks.onConfigChanged(config),
+          () => done(undefined),
+        );
+        return {
+          render: (w: number) => ui.render(w),
+          invalidate: () => ui.invalidate(),
+          handleInput: (data: string) => {
+            ui.handleInput(data);
+            tui.requestRender();
+          },
+        };
+      }, settingsOverlayOptions());
       hooks.onOverlayClosed?.();
     },
   });

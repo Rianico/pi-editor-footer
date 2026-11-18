@@ -67,6 +67,19 @@ const OVERLAY_OPTIONS = {
   margin: 1,
 } as const;
 
+/**
+ * OSC 7501 program status: while a dialog waits for a keypress, report pi as blocked on a
+ * question instead of idle. pi 1.5.1+ honours `blocked` on overlays until `done()` (also
+ * while hidden); older pi ignores the option, so the `*` peer range stays compatible.
+ */
+function blockedOnQuestion(message: string): { kind: "question"; message: string } {
+  return { kind: "question", message };
+}
+
+/** Dialog titles double as the blocked-status text, so the two can never drift apart. */
+const GRAPH_DIALOG_TITLE = "Context Cache Graph";
+const STATS_DIALOG_TITLE = "Context Cache Stats";
+
 const SUBCOMMANDS: CompletionItem[] = [
   { value: "graph", label: "graph", description: "Show cache hit % graph over time" },
   { value: "stats", label: "stats", description: "Show token/cache breakdown table" },
@@ -115,7 +128,7 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
             new ScrollDialog(
               theme,
               {
-                title: "Context Cache Graph",
+                title: GRAPH_DIALOG_TITLE,
                 getTitle: () => `Context Cache Graph — ${graphViewLabel(currentView)}`,
                 helpText: "1/2/3 view · r refresh · v cycle · ↑/↓ scroll · PgUp/PgDn · q/Esc close",
                 renderBody: (innerWidth) =>
@@ -148,7 +161,11 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
               },
               () => done(undefined),
             ),
-          { overlay: true, overlayOptions: OVERLAY_OPTIONS },
+          {
+            overlay: true,
+            overlayOptions: OVERLAY_OPTIONS,
+            blocked: blockedOnQuestion(GRAPH_DIALOG_TITLE),
+          },
         );
         return;
       }
@@ -159,7 +176,7 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
           new ScrollDialog(
             theme,
             {
-              title: "Context Cache Stats",
+              title: STATS_DIALOG_TITLE,
               helpText: "r refresh · ↑/↓ scroll · PgUp/PgDn · q/Esc close",
               renderBody: (innerWidth) => renderStatsBody(theme, metrics, innerWidth),
               onKey: (data) => {
@@ -172,7 +189,11 @@ export function registerCacheCommand(pi: RegisterCommandApi, options: CacheComma
             },
             () => done(undefined),
           ),
-        { overlay: true, overlayOptions: OVERLAY_OPTIONS },
+        {
+          overlay: true,
+          overlayOptions: OVERLAY_OPTIONS,
+          blocked: blockedOnQuestion(STATS_DIALOG_TITLE),
+        },
       );
     },
   });
