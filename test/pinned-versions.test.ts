@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test } from "node:test";
 import {
   check,
@@ -173,5 +176,112 @@ describe("pinned versions — against this repository", () => {
     const { code, report } = check(process.cwd());
     assert.equal(code, 0, `guard failed on the clean tree:\n${report}`);
     assert.match(report, /match the install/);
+  });
+});
+
+/** The version actually installed under node_modules — the guard compares against this. */
+function installedVersion(name: string): string {
+  const manifest = JSON.parse(readFileSync(join("node_modules", name, "package.json"), "utf8")) as {
+    version: string;
+  };
+  return manifest.version;
+}
+
+/** One lockfile snapshot key in pnpm's shape, optional peer suffix included. */
+function lockKey(name: string, version: string, suffix = ""): string {
+  return `\n  '${name}@${version}${suffix}':\n    resolution: {integrity: sha512-x}\n`;
+}
+
+/** A throwaway project root: the guard reads package.json + pnpm-lock.yaml from root. */
+function tempRoot(manifest: unknown, lockfile: string): string {
+  const root = mkdtempSync(join(tmpdir(), "pinned-versions-"));
+  writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
+  writeFileSync(join(root, "pnpm-lock.yaml"), lockfile);
+  return root;
+}
+
+function withRoot(root: string, run: () => void): void {
+  try {
+    run();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+describe("pinned versions — peer-suffixed lockfile keys", () => {
+  test("a suffixed key still yields its version", () => {
+    const suffixed = `\nsnapshots:\n${lockKey(AGENT, "1.3.0", "(ws@8.21.3)")}`;
+    assert.deepEqual(lockVersions(suffixed, AGENT), ["1.3.0"]);
+  });
+
+  test("suffixed and unsuffixed keys of the same version are one resolution", () => {
+    const both = `${LOCK}${lockKey(TUI, "1.3.0", "(ws@8.21.3)")}`;
+    assert.deepEqual(lockVersions(both, TUI), ["1.3.0"]);
+  });
+
+  test("a suffixed key is a pin, not an ambiguity", () => {
+    const suffixed = `\nsnapshots:\n${lockKey(AGENT, "1.3.0", "(ws@8.21.3)")}`;
+    const pins = resolvePins({ peerDependencies: { [AGENT]: "*" } }, suffixed);
+    assert.deepEqual(
+      pins.find((pin) => pin.name === AGENT),
+      { name: AGENT, pinned: "1.3.0", source: "pnpm-lock.yaml" },
+    );
+  });
+});
+
+describe("pinned versions — a split lockfile is not a stale install", () => {
+  test("a suffixed-only lockfile passes when it matches the install", () => {
+    const tui = installedVersion(TUI);
+    const agent = installedVersion(AGENT);
+    const root = tempRoot(
+      { devDependencies: { [TUI]: tui }, peerDependencies: { [AGENT]: "*" } },
+      `\nsnapshots:\n${lockKey(TUI, tui)}${lockKey(AGENT, agent, "(ws@8.21.3)")}`,
+    );
+    withRoot(root, () => {
+      const { code, report } = check(root);
+      assert.equal(code, 0, report);
+      assert.ok(
+        !report.includes("no single lockfile resolution"),
+        `a suffixed key is one resolution, not a missing pin:\n${report}`,
+      );
+    });
+  });
+
+  test("two resolutions are named as a split lockfile, with no frozen-install advice", () => {
+    const tui = installedVersion(TUI);
+    const agent = installedVersion(AGENT);
+    const other = "0.0.1";
+    const root = tempRoot(
+      { devDependencies: { [TUI]: tui }, peerDependencies: { [AGENT]: "*" } },
+      `\nsnapshots:\n${lockKey(TUI, tui)}${lockKey(TUI, other)}${lockKey(AGENT, agent)}`,
+    );
+    withRoot(root, () => {
+      const { code, report } = check(root);
+      assert.equal(code, 1);
+      assert.ok(
+        report.includes(tui) && report.includes(other),
+        `must name every version:\n${report}`,
+      );
+      assert.match(report, /split/);
+      assert.ok(
+        !report.includes(FIX_COMMAND),
+        `a split lockfile is not a stale tree, so the fix must differ from ${FIX_COMMAND}:\n${report}`,
+      );
+    });
+  });
+
+  test("one resolution that differs from the install keeps the stale-install message", () => {
+    const tui = installedVersion(TUI);
+    const root = tempRoot(
+      { devDependencies: { [TUI]: tui }, peerDependencies: { [AGENT]: "*" } },
+      `\nsnapshots:\n${lockKey(TUI, tui)}${lockKey(AGENT, "0.0.1")}`,
+    );
+    withRoot(root, () => {
+      const { code, report } = check(root);
+      assert.equal(code, 1);
+      assert.match(report, /do not match the pinned versions/);
+      assert.match(report, /pinned 0\.0\.1/);
+      assert.ok(report.includes(FIX_COMMAND), report);
+    });
   });
 });

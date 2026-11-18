@@ -85,14 +85,29 @@ function dependencyBlocks(manifest: ManifestLike): Record<string, string> {
   return merged;
 }
 
-/** Every version the lockfile resolves for `name` (snapshot keys look like `'name@1.3.0':`). */
+/** `1.3.0(ws@8.21.3)` → `1.3.0`; a key without a peer suffix passes through untouched. */
+function withoutPeerSuffix(key: string | undefined): string | undefined {
+  if (key === undefined) return undefined;
+  const open = key.indexOf("(");
+  const version = (open === -1 ? key : key.slice(0, open)).trim();
+  return version === "" ? undefined : version;
+}
+
+/**
+ * Every version the lockfile resolves for `name`, deduped, peer suffixes stripped.
+ *
+ * pnpm repeats a key under both `packages:` and `snapshots:`, and writes a peer-resolved
+ * snapshot as `'{name}@1.3.0(ws@8.21.3)':`. The suffix is not a different version, so a
+ * package that only ever appears suffixed must not read as "no resolution" — and two
+ * genuinely different versions must both survive, so the caller can refuse to guess.
+ */
 export function lockVersions(lockfile: string, name: string): string[] {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`^\\s+'?${escaped}@([^\\(:'"]+)'?:\\s*$`, "gm");
+  const pattern = new RegExp(`^\\s+'?${escaped}@([^:'"]+)'?:\\s*$`, "gm");
   const found = new Set<string>();
   for (const match of lockfile.matchAll(pattern)) {
-    const version = match[1];
-    if (version !== undefined) found.add(version.trim());
+    const version = withoutPeerSuffix(match[1]);
+    if (version !== undefined) found.add(version);
   }
   return [...found];
 }
@@ -142,6 +157,26 @@ function installedVersion(name: string): string | null {
   }
 }
 
+/** A watched package the lockfile resolves more than once — such a tree cannot be consistent. */
+interface SplitResolution {
+  readonly name: string;
+  readonly versions: readonly string[];
+}
+
+/**
+ * A split lockfile is NOT a stale node_modules: re-linking the tree (`FIX_COMMAND`) keeps
+ * both versions, so that remedy is deliberately not offered. The report names every version
+ * found and sends the reader to the procedure that actually re-resolves the package.
+ */
+function formatSplit(split: SplitResolution): string {
+  return [
+    `${split.name}: the lockfile is split — ${split.versions.length} resolutions (${split.versions.join(", ")})`,
+    `  This is not a stale node_modules: re-linking the tree keeps both versions.`,
+    `  Re-resolve the package so a single version survives (docs/reference/pi-tui-internals.md,`,
+    `  "Bumping the dev dependency"), then run this guard again.`,
+  ].join("\n");
+}
+
 /** Exit 1 and name pinned, installed and the fix; exit 0 only when every watched pin matches. */
 export function check(root = "."): { code: number; report: string } {
   let manifestText: string;
@@ -164,17 +199,34 @@ export function check(root = "."): { code: number; report: string } {
   } catch {
     lockfile = "";
   }
+  const resolutions = new Map<string, string[]>(
+    WATCHED_PACKAGES.map((name) => [name, lockVersions(lockfile, name)]),
+  );
+  const splits: SplitResolution[] = [];
+  for (const name of WATCHED_PACKAGES) {
+    const versions = resolutions.get(name) ?? [];
+    if (versions.length > 1) splits.push({ name, versions });
+  }
 
   const pins = resolvePins(manifest, lockfile);
   const installed: Record<string, string | null> = {};
   for (const pin of pins) installed[pin.name] = installedVersion(pin.name);
 
   const mismatches = diffVersions(pins, installed);
-  const missing = WATCHED_PACKAGES.filter((name) => !pins.some((pin) => pin.name === name));
+  const missing = WATCHED_PACKAGES.filter(
+    (name) => !pins.some((pin) => pin.name === name) && (resolutions.get(name)?.length ?? 0) === 0,
+  );
   const ambiguous = missing.map(
-    (name) => `${name}: no exact pin in package.json and ${lockfile ? "no single lockfile resolution" : "no pnpm-lock.yaml"}`,
+    (name) =>
+      `${name}: no exact pin in package.json and ${lockfile ? "no lockfile resolution" : "no pnpm-lock.yaml"}`,
   );
 
+  if (splits.length > 0) {
+    const sections = splits.map(formatSplit);
+    if (ambiguous.length > 0) sections.push(...ambiguous);
+    if (mismatches.length > 0) sections.push(formatReport(mismatches));
+    return { code: 1, report: sections.join("\n\n") };
+  }
   if (ambiguous.length > 0) {
     return { code: 1, report: [...ambiguous, `  Fix: ${FIX_COMMAND}`].join("\n") };
   }
