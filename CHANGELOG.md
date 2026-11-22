@@ -16,8 +16,8 @@
 
 ### Bug Fixes
 
-* **chrome:** keep id-less tool reports and fill a zero estimate once
-* **chrome:** count one tool call once across pi's two event channels
+* **chrome:** keep id-less tool reports and fill a zero estimate once (#75)
+* **chrome:** count one tool call once across pi's two event channels (#75)
 * **scripts:** read every lockfile resolution in the pinned-version guard (#74)
 * **editor:** port the 1.5.x autocomplete page-key branch into TrackingEditor (#72)
 * **chrome:** fold cache-warm usage entries into session totals (#72)
