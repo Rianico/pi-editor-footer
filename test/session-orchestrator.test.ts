@@ -351,3 +351,158 @@ describe("SessionOrchestrator", () => {
     assert.equal(ledger.getAtRestTotals(), null, "session shutdown clears the ledger");
   });
 });
+
+/**
+ * pi reports ONE tool call on TWO channels: `tool_execution_end` (pi's own emit) and
+ * `tool_result` (the extension event, emitted whenever a `tool_result` handler exists).
+ * Both handlers write the same two things, so one call used to be billed twice — twice its
+ * token estimate and twice in the run activity counts. One call, one outcome.
+ */
+describe("tool outcome: one tool call, two pi channels, one outcome", () => {
+  const RESULT_CHARS = 4000; // ceil(4000 / 4) = 1000 estimated tokens
+  const result = { content: [{ type: "text", text: "x".repeat(RESULT_CHARS) }] };
+
+  const harness = () => {
+    const orch = new SessionOrchestrator({
+      loadConfig: () => structuredClone(DEFAULT_CONFIG),
+      createInitialState: () => createInitialState(),
+      createGitRefresher: () => ({ start: () => {}, request: () => {}, stop: () => {} }),
+    });
+    const raw = fakePi();
+    orch.install(raw as unknown as Parameters<SessionOrchestrator["install"]>[0]);
+    const ctx = fakeCtx({
+      sessionManager: { getCwd: () => "/tmp", getEntries: () => [] },
+      getContextUsage: () => undefined,
+    });
+    const fire = (name: string, e: unknown): void => {
+      for (const h of raw.handlers.get(name) ?? []) h(e, ctx as never);
+    };
+    const startRun = (): void => fire("agent_start", { type: "agent_start" });
+    const startTool = (toolCallId: string, toolName = "read"): void =>
+      fire("tool_execution_start", { toolCallId, toolName });
+    const outcome = (
+      toolCallId: string,
+      over: Record<string, unknown> = {},
+    ): Record<string, unknown> => ({
+      toolCallId,
+      toolName: "read",
+      isError: false,
+      result,
+      ...over,
+    });
+    /** The production sequence: pi fires both channels for the same execution. */
+    const bothChannels = (toolCallId: string, over: Record<string, unknown> = {}): void => {
+      const event = outcome(toolCallId, over);
+      fire("tool_execution_end", event);
+      fire("tool_result", event);
+    };
+    const snap = () => orch.getRunActivityTracker().getSnapshot();
+    return { orch, fire, startRun, startTool, outcome, bothChannels, snap };
+  };
+
+  test("I1/I2: both channels for one call — finished once, billed once", () => {
+    const h = harness();
+    h.startRun();
+    h.startTool("call-1");
+    h.bothChannels("call-1");
+
+    assert.equal(h.snap().completedCount, 1, "one tool call finished exactly once");
+    assert.equal(h.snap().failedCount, 0);
+    assert.equal(
+      h.orch.getAgentLedger().getAccumToolTokens(),
+      RESULT_CHARS / 4,
+      "4000 chars ≈ 1000 tokens, counted once — not 2000",
+    );
+  });
+
+  test("I3: the dedupe resets at agent_start, so run n+1 is not suppressed by run n", () => {
+    const h = harness();
+    h.startRun();
+    h.startTool("call-1");
+    h.bothChannels("call-1");
+    assert.equal(h.snap().completedCount, 1);
+
+    // Next Agent run: same ids may legitimately reappear, and the run is accounted afresh.
+    h.startRun();
+    assert.equal(h.snap().completedCount, 0, "a new run starts from zero");
+    h.startTool("call-1");
+    h.bothChannels("call-1");
+    assert.equal(h.snap().completedCount, 1, "run n+1's own call is counted, not deduped away");
+    assert.equal(h.orch.getAgentLedger().getAccumToolTokens(), RESULT_CHARS / 4);
+  });
+
+  test("I4: a call reported on only one channel still counts exactly once", () => {
+    for (const channel of ["tool_execution_end", "tool_result"] as const) {
+      const h = harness();
+      h.startRun();
+      h.startTool("call-1");
+      h.fire(channel, h.outcome("call-1"));
+      assert.equal(h.snap().completedCount, 1, `${channel} alone`);
+      assert.equal(
+        h.orch.getAgentLedger().getAccumToolTokens(),
+        RESULT_CHARS / 4,
+        `${channel} alone`,
+      );
+    }
+  });
+
+  test("I5: a failed call is counted as failed exactly once", () => {
+    const h = harness();
+    h.startRun();
+    h.startTool("call-1");
+    h.bothChannels("call-1", { isError: true });
+
+    assert.equal(h.snap().failedCount, 1);
+    assert.equal(h.snap().completedCount, 0);
+  });
+
+  test("I6: a nested call (<parent>/<n>) is attributed once", () => {
+    const h = harness();
+    h.startRun();
+    h.startTool("call-1/0");
+    h.bothChannels("call-1/0");
+
+    assert.equal(h.snap().completedCount, 1);
+    assert.equal(h.orch.getAgentLedger().getAccumToolTokens(), RESULT_CHARS / 4);
+  });
+
+  test("I7: the delegated-usage path survives the dedupe", () => {
+    const h = harness();
+    h.startRun();
+    const delegated = {
+      toolCallId: "call-9",
+      toolName: "subagent",
+      isError: false,
+      result: {
+        content: [{ type: "text", text: "delegated" }],
+        details: {
+          mode: "single",
+          runId: "run-a",
+          results: [
+            {
+              agent: "worker",
+              usage: { input: 40, output: 8, cacheRead: 0, cacheWrite: 0, cost: 0.002 },
+            },
+          ],
+        },
+      },
+    };
+    h.fire("tool_result", delegated);
+    h.fire("tool_execution_end", delegated);
+
+    assert.deepEqual(
+      h.orch
+        .getSubagentUsage()
+        .records()
+        .map((r) => r.key),
+      ["run-a#0"],
+      "a foreground delegation still records its child usage",
+    );
+    assert.equal(h.snap().completedCount, 1);
+    assert.equal(
+      h.orch.getAgentLedger().getAccumToolTokens(),
+      Math.ceil("delegated".length / 4),
+      "the delegation's own result text is billed once",
+    );
+  });
+});

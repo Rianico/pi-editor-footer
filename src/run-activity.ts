@@ -35,7 +35,13 @@ export interface RunActivityTracker {
   startRun(now?: number): void;
   startTurn(turnIndex: number, now?: number): void;
   startTool(toolCallId: string, now?: number): void;
-  finishTool(toolCallId: string, isError: boolean, now?: number): void;
+  /**
+   * Consume one tool call's outcome. pi reports the SAME call on two channels
+   * (`tool_execution_end` and the `tool_result` extension event) and nested calls
+   * (`<parent>/<n>`) on both too, so the first report owns the count: true when this id was
+   * newly finished in this run, false for a re-delivery of a call already counted.
+   */
+  finishTool(toolCallId: string, isError: boolean, now?: number): boolean;
   settle(now?: number): void;
   reset(): void;
   getSnapshot(now?: number): RunActivitySnapshot;
@@ -48,6 +54,12 @@ class DefaultRunActivityTracker implements RunActivityTracker {
   private startedAt: number | undefined;
   private durationMs: number | undefined;
   private activeTools = new Map<string, number>();
+  /**
+   * Tool call ids whose outcome this run already counted — the one outcome key. pi emits one
+   * execution on two channels, so without it the second channel counts a second tool.
+   * Cleared with the run (startRun / reset): a later run's ids are its own.
+   */
+  private finishedTools = new Set<string>();
   private completedCount = 0;
   private failedCount = 0;
   private readonly now: () => number;
@@ -64,6 +76,7 @@ class DefaultRunActivityTracker implements RunActivityTracker {
     this.startedAt = normalizeTimestamp(now ?? this.now());
     this.durationMs = undefined;
     this.activeTools = new Map();
+    this.finishedTools = new Set();
     this.completedCount = 0;
     this.failedCount = 0;
     this.notify();
@@ -90,20 +103,17 @@ class DefaultRunActivityTracker implements RunActivityTracker {
     this.notify();
   }
 
-  finishTool(toolCallId: string, isError: boolean, now?: number): void {
-    if (!this.activeTools.has(toolCallId)) {
-      // tool was not tracked as active — still count it as completed
-      // (handles cases where start event was missed)
-      if (isError) this.failedCount += 1;
-      else this.completedCount += 1;
-      this.notify();
-      return;
-    }
+  finishTool(toolCallId: string, isError: boolean, now?: number): boolean {
+    // One call, one outcome: pi's other channel for this execution is not a second tool.
+    if (this.finishedTools.has(toolCallId)) return false;
+    this.finishedTools.add(toolCallId);
+    // An id that was never active means the start event was missed — still count the call.
     this.activeTools.delete(toolCallId);
     if (isError) this.failedCount += 1;
     else this.completedCount += 1;
     void now; // duration per-tool not needed for top border
     this.notify();
+    return true;
   }
 
   settle(now?: number): void {
@@ -111,7 +121,11 @@ class DefaultRunActivityTracker implements RunActivityTracker {
     if (this.phase === "settled" && this.activeTools.size === 0) return;
     const settledAt = normalizeTimestamp(now ?? this.now());
     // any still-active tools count as failed
-    for (const _ of this.activeTools.values()) this.failedCount += 1;
+    for (const toolCallId of this.activeTools.keys()) {
+      this.failedCount += 1;
+      // Settled-but-late duplicate of the same call must not count twice either.
+      this.finishedTools.add(toolCallId);
+    }
     this.activeTools.clear();
     this.phase = "settled";
     this.durationMs = Math.max(0, settledAt - (this.startedAt ?? settledAt));
@@ -125,6 +139,7 @@ class DefaultRunActivityTracker implements RunActivityTracker {
       this.startedAt === undefined &&
       this.durationMs === undefined &&
       this.activeTools.size === 0 &&
+      this.finishedTools.size === 0 &&
       this.completedCount === 0 &&
       this.failedCount === 0
     )
@@ -134,6 +149,7 @@ class DefaultRunActivityTracker implements RunActivityTracker {
     this.startedAt = undefined;
     this.durationMs = undefined;
     this.activeTools.clear();
+    this.finishedTools.clear();
     this.completedCount = 0;
     this.failedCount = 0;
     this.notify();
