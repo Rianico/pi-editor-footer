@@ -505,4 +505,42 @@ describe("tool outcome: one tool call, two pi channels, one outcome", () => {
       "the delegation's own result text is billed once",
     );
   });
+
+  test("I9: an id-less report is counted and billed every time (no key to share)", () => {
+    const h = harness();
+    h.startRun();
+    // Two distinct calls whose payloads carry no id must never fold into each other: the id is
+    // the only key, so an id-less report is unmetered by it.
+    h.fire("tool_execution_end", { toolName: "read", isError: false, result });
+    h.fire("tool_execution_end", { toolName: "read", isError: false, result });
+
+    assert.equal(h.snap().completedCount, 2, "two id-less calls are two tools");
+    assert.equal(
+      h.orch.getAgentLedger().getAccumToolTokens(),
+      2 * (RESULT_CHARS / 4),
+      "each id-less report bills its own text",
+    );
+  });
+
+  test("I10: a re-delivery fills a zero estimate instead of adding a second bill", () => {
+    const h = harness();
+    h.startRun();
+    h.startTool("call-1");
+    // First channel empty or redacted: the count lands, the estimate is still zero.
+    h.fire("tool_execution_end", {
+      toolCallId: "call-1",
+      toolName: "read",
+      isError: false,
+      result: "",
+    });
+    // Second channel carries the text: it FILLS the zero, it never adds a second bill.
+    h.fire("tool_result", { toolCallId: "call-1", toolName: "read", isError: false, result });
+
+    assert.equal(h.snap().completedCount, 1);
+    assert.equal(
+      h.orch.getAgentLedger().getAccumToolTokens(),
+      RESULT_CHARS / 4,
+      "billed once — the second channel filled the empty first report",
+    );
+  });
 });

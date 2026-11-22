@@ -38,10 +38,10 @@ export interface RunActivityTracker {
   /**
    * Consume one tool call's outcome. pi reports the SAME call on two channels
    * (`tool_execution_end` and the `tool_result` extension event) and nested calls
-   * (`<parent>/<n>`) on both too, so the first report owns the count: true when this id was
-   * newly finished in this run, false for a re-delivery of a call already counted.
+   * (`<parent>/<n>`) on both too, so the first report of an id owns the count. An id-less
+   * report carries no identity to be a re-delivery of, so it counts every time.
    */
-  finishTool(toolCallId: string, isError: boolean, now?: number): boolean;
+  finishTool(toolCallId: string, isError: boolean, now?: number): void;
   settle(now?: number): void;
   reset(): void;
   getSnapshot(now?: number): RunActivitySnapshot;
@@ -103,17 +103,19 @@ class DefaultRunActivityTracker implements RunActivityTracker {
     this.notify();
   }
 
-  finishTool(toolCallId: string, isError: boolean, now?: number): boolean {
-    // One call, one outcome: pi's other channel for this execution is not a second tool.
-    if (this.finishedTools.has(toolCallId)) return false;
-    this.finishedTools.add(toolCallId);
+  finishTool(toolCallId: string, isError: boolean, now?: number): void {
+    // One call, one outcome: pi's other channel for this execution is not a second tool. An
+    // id-less report has no key to be a re-delivery of, so it is never folded into another.
+    if (toolCallId.length > 0) {
+      if (this.finishedTools.has(toolCallId)) return;
+      this.finishedTools.add(toolCallId);
+    }
     // An id that was never active means the start event was missed — still count the call.
     this.activeTools.delete(toolCallId);
     if (isError) this.failedCount += 1;
     else this.completedCount += 1;
     void now; // duration per-tool not needed for top border
     this.notify();
-    return true;
   }
 
   settle(now?: number): void {

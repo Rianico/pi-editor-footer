@@ -869,13 +869,19 @@ export class SessionOrchestrator {
     /**
      * One tool call, one outcome. pi reports the SAME execution on two channels —
      * `tool_execution_end` and the `tool_result` extension event (nested `<parent>/<n>` calls
-     * included) — so both handlers come through here, and the tracker's id key decides which
-     * report owns the count. Only the owning report bills the result text.
+     * included) — so both handlers come through here, with a rule per number:
+     *   - the count: the tracker's id key owns it, first report wins; an id-less report has no
+     *     key, so it counts (and is billed) every time;
+     *   - the estimate: FIRST-WINS PLUS FILL. The first billable report of an id owns the bill, a
+     *     duplicate may only fill a zero (an empty or redacted first channel), never add twice.
      */
     const recordToolOutcome = (e: unknown): void => {
-      if (!this.runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e))) return;
+      const toolCallId = getToolCallId(e);
+      this.runActivityTracker.finishTool(toolCallId, getToolIsError(e));
       const text = extractToolResultText(e);
-      if (text.length > 0) this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
+      if (text.length > 0) {
+        this.agentLedger.addToolResultTokens(toolCallId, estimateTokensFromText(text));
+      }
     };
     const refreshAllLive = (): void => {
       this.liveBorder.render();
