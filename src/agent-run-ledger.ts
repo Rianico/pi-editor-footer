@@ -173,6 +173,11 @@ export class AgentRunLedger {
   private triggerTokens = 0;
   private accumOutputTokens = 0;
   private accumToolTokens = 0;
+  /**
+   * Tool call ids this run already billed. The token side of the one-outcome key: pi reports a
+   * call on two channels, and the first BILLABLE report owns the id (see addToolResultTokens).
+   */
+  private billedTools = new Set<string>();
   // Last settled Agent run's delta-token readout, kept for the usage row at rest.
   private atRest: TurnTelemetry | null = null;
 
@@ -201,6 +206,7 @@ export class AgentRunLedger {
     this.triggerTokens = 0;
     this.accumOutputTokens = 0;
     this.accumToolTokens = 0;
+    this.billedTools.clear();
     // The delta-token pair resets with the next run, never accumulating across runs.
     this.atRest = null;
   }
@@ -215,9 +221,18 @@ export class AgentRunLedger {
     return this.triggerTokens;
   }
 
-  /** Add tool result tokens (chars/4) to accumulation (Q8 a). */
-  addToolResultTokens(tokens: number): void {
+  /**
+   * Bill one tool call's result estimate (chars/4, Q8 a). First billable report owns the call's
+   * id; a later report of the same id may only FILL a zero — an empty or redacted first channel
+   * bills nothing, so the second channel's text lands instead of being dropped, and a figured
+   * id is never added to twice. An id-less report has no identity to own, so each one bills.
+   */
+  addToolResultTokens(toolCallId: string, tokens: number): void {
     if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return;
+    if (toolCallId.length > 0) {
+      if (this.billedTools.has(toolCallId)) return;
+      this.billedTools.add(toolCallId);
+    }
     this.accumToolTokens += Math.round(tokens);
   }
 
@@ -426,6 +441,7 @@ export class AgentRunLedger {
     this.triggerTokens = 0;
     this.accumOutputTokens = 0;
     this.accumToolTokens = 0;
+    this.billedTools.clear();
   }
 
   isActive(): boolean {

@@ -410,6 +410,9 @@ export class SessionOrchestrator {
   getAgentLedger(): AgentRunLedger {
     return this.agentLedger;
   }
+  getRunActivityTracker(): RunActivityTracker {
+    return this.runActivityTracker;
+  }
   getSessionRunTime(): SessionRunTimeAccumulator {
     return this.sessionRunTime;
   }
@@ -863,6 +866,23 @@ export class SessionOrchestrator {
       if (result && typeof result.isError === "boolean") return result.isError;
       return false;
     };
+    /**
+     * One tool call, one outcome. pi reports the SAME execution on two channels —
+     * `tool_execution_end` and the `tool_result` extension event (nested `<parent>/<n>` calls
+     * included) — so both handlers come through here, with a rule per number:
+     *   - the count: the tracker's id key owns it, first report wins; an id-less report has no
+     *     key, so it counts (and is billed) every time;
+     *   - the estimate: FIRST-WINS PLUS FILL. The first billable report of an id owns the bill, a
+     *     duplicate may only fill a zero (an empty or redacted first channel), never add twice.
+     */
+    const recordToolOutcome = (e: unknown): void => {
+      const toolCallId = getToolCallId(e);
+      this.runActivityTracker.finishTool(toolCallId, getToolIsError(e));
+      const text = extractToolResultText(e);
+      if (text.length > 0) {
+        this.agentLedger.addToolResultTokens(toolCallId, estimateTokensFromText(text));
+      }
+    };
     const refreshAllLive = (): void => {
       this.liveBorder.render();
     };
@@ -952,9 +972,7 @@ export class SessionOrchestrator {
       refreshAllLive();
     });
     pi.on("tool_execution_end", (e) => {
-      const text = extractToolResultText(e);
-      if (text.length > 0) this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
-      this.runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
+      recordToolOutcome(e);
       // A foreground delegation reports its children's usage here; the window itself sits
       // inside the parent run, so the run time is untouched (union, not sum).
       const event = e as { toolName?: string; result?: unknown };
@@ -968,9 +986,7 @@ export class SessionOrchestrator {
       refreshAllLive();
     });
     pi.on("tool_result", (e) => {
-      const text = extractToolResultText(e);
-      if (text.length > 0) this.agentLedger.addToolResultTokens(estimateTokensFromText(text));
-      this.runActivityTracker.finishTool(getToolCallId(e), getToolIsError(e));
+      recordToolOutcome(e);
       refreshAllLive();
     });
     pi.on("turn_end", (e) => {

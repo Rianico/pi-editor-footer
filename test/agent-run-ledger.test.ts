@@ -201,7 +201,7 @@ describe("AgentRunLedger", () => {
     const ledger = new AgentRunLedger(() => 5000);
     ledger.startRun(0);
     ledger.setTriggerTokens(400);
-    ledger.addToolResultTokens(1200);
+    ledger.addToolResultTokens("call-1", 1200);
     const liveTurn = mkTel({ inputTokens: 2000, outputTokens: 300, estimated: true });
     ledger.settleRun(liveTurn, 1_000_000);
     const atRest = ledger.getAtRestTotals();
@@ -216,7 +216,7 @@ describe("AgentRunLedger", () => {
     const ledger = new AgentRunLedger(() => 5000);
     ledger.startRun(0);
     ledger.setTriggerTokens(400);
-    ledger.addToolResultTokens(1200);
+    ledger.addToolResultTokens("call-1", 1200);
     ledger.settleRun(mkTel({ outputTokens: 300, estimated: true }), 1000);
     assert.equal(ledger.getAtRestTotals()?.inputTokens, 1000);
   });
