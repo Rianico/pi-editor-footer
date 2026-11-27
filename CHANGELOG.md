@@ -11,7 +11,7 @@
 
 ### Features
 
-* **chrome:** report context usage as percent/window
+* **chrome:** report context usage as percent/window (#76)
 * **chrome:** sync with pi 1.5.2 — cache-warm totals, editor page keys, blocked status (#72)
 * **ui:** report blocked program status from the extension overlays (#72)
 
