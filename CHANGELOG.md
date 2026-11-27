@@ -11,14 +11,15 @@
 
 ### Features
 
+* **chrome:** report context usage as percent/window
 * **chrome:** sync with pi 1.5.2 — cache-warm totals, editor page keys, blocked status (#72)
 * **ui:** report blocked program status from the extension overlays (#72)
 
 ### Bug Fixes
 
-* **chrome:** keep id-less tool reports and fill a zero estimate once (#75)
 * **chrome:** count one tool call once across pi's two event channels (#75)
 * **scripts:** read every lockfile resolution in the pinned-version guard (#74)
+* **chrome:** keep id-less tool reports and fill a zero estimate once (#75)
 * **editor:** port the 1.5.x autocomplete page-key branch into TrackingEditor (#72)
 * **chrome:** fold cache-warm usage entries into session totals (#72)
 
