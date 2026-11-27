@@ -119,7 +119,7 @@ describe("separator rule: `|` between fields, `·` within a field", () => {
       10,
       98.1,
     );
-    assert.equal(bar, "c 98.1% · 14.6% · 146k/1.0M");
+    assert.equal(bar, "c 98.1% · 14.6%/1.0M");
     assert.ok(!bar.includes("|"), "no field boundary inside the context bar");
   });
 
@@ -133,10 +133,7 @@ describe("separator rule: `|` between fields, `·` within a field", () => {
       98.1,
     );
     const top = topRule(bar);
-    assert.ok(
-      top.includes("opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6% · 146k/1.0M"),
-      top,
-    );
+    assert.ok(top.includes("opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6%/1.0M"), top);
   });
 
   test("tokens-above line joins input and output with `·`", () => {

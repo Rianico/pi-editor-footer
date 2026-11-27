@@ -22,7 +22,7 @@ Status: accepted (revision 3)
 
   ```
    ⠋ Working | ↑ 14M · ↓ 89k · 2 turns · 8s · 2 tools
-   ╭─ opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6% · 146k/1.0M ──────────────╮
+   ╭─ opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6%/1.0M ──────────────╮
   ```
 
   No elapsed time is carried — the run-activity section already reports duration, and two clocks on two lines invite disagreement. The footer's own `working Ns` segment is deleted. Because that line is otherwise conditional on having tokens or activity to show, the working segment must be able to bring the line into existence on its own. **Every indicator kind is handed to the editor** — pi's `showStatusIndicator` has no kind filter (`interactive-mode.js:1776-1793`), so retry and compaction indicators are embedded too. Non-working kinds are therefore rendered by the editor as their own row above the chrome and never swallowed; `Working` is the only kind that joins the usage row. Verified live by forcing a provider error: `Retrying (1/3 … 3/3)` renders on its own row.
@@ -36,7 +36,7 @@ Status: accepted (revision 3)
   Two limits keep that honest: `Ready` renders only where the usage row already exists, so a fresh session does not grow a line just to announce idleness; and a non-working indicator (retry, compaction) leaves the slot **empty** rather than claiming Ready — retrying is not ready.
 - **The `esc to interrupt` hint is not carried over.** The indicator becomes one section of a status line; a keyboard affordance belongs in pi's own hint surface, and the embedding API drops that line anyway (`renderInBorder` returns the spinner/message line only).
 - **Separators.** One rule: `|` between fields, `·` between sections inside a field. `•` is retired from the chrome entirely.
-  - Top rule: `provider/model · thinking` (one field) `|` `c 98.1% · 14.6% · 146k/1.0M` (the context field, its three sections joined by `·` — cache is a section of context, not a field of its own).
+  - Top rule: `provider/model · thinking` (one field) `|` `c 98.1% · 14.6%/1.0M` (the context field, its two sections joined by `·` — cache is a section of context, not a field of its own; revision 4 replaced the used-token count with that count's percentage).
   - Activity and telemetry keep `·` (one field each).
   - Usage row above the top rule: `⠋ Working | ↑ 40k · ↓ 8k · 2 turns · 8s · 3 tools | !2×3.3s` — three fields (status slot, run, stall), each `|`-separated, each absent when empty.
   - Footer left: `cwd · git` is one field (where am I), `runtime` another: `@ repo · main [?1] | node 26.8.1`.
@@ -50,7 +50,7 @@ Revisions 1–2 treated the row above the top rule as an inherited passthrough t
 
 ```
  ● Ready | ↑ 40k · ↓ 8k · 2 turns · 8s · 3 tools | !2×3.3s
- ╭─ opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6% · 146k/1.0M ──────────────╮
+ ╭─ opencode-go/deepseek-v4.1-flash · high | c 98.1% · 14.6%/1.0M ──────────────╮
 ```
 
 - **Boundaries.** `|` between fields: the status slot, then the run field, then the stall field when a stall exists. A `|` is emitted only when both sides are present, so an empty status slot leaves no dangling separator.
@@ -59,4 +59,13 @@ Revisions 1–2 treated the row above the top rule as an inherited passthrough t
 - **No context-window clamp at rest.** The authoritative value cannot exceed the window, so clamping it could only hide a bug; the synthetic live estimate keeps its clamp.
 - **Cost is not in this row.** The `$0.15` in the revision-1 example is stale: cost is a session figure and lives on the timeline row and the footer.
 - **Superseded clause.** Revision 1's "the telemetry status line … is preserved exactly as it is" applies to the line's position and alignment only; its contents are composed as above.
+
+## Revision 4 — the context field is `percent/window`, not `percent · used/window`
+
+The context field carried the figure twice: `14.6% · 146k/1.0M`. `14.6%` and `146k` over a `1.0M` window are one number stated twice, so the field now reads `14.6%/1.0M`.
+
+- **One number, one place.** The percentage answers "how full"; the window answers "full of what". The used-token count answered the same question as the percentage and is dropped (`chrome-state.ts:formatContextBar`).
+- **`/` is intra-field, not a separator.** It binds the percentage to its window; `·` still separates the cache section from the context section, and `|` still separates the context field from the model field.
+- **Icon-bar mode composes unchanged.** `# [████░░] 14.6%/1.0M` — the bar is the visual form of the same percentage.
+- **Superseded clause.** Revision 1's "the context field's three sections" (`Consequences`, Separators) becomes two; the used-token count is retired from the chrome.
 

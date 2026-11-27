@@ -842,7 +842,7 @@ describe("scope pin: the top-rule context/cache is parent-scope, toggle-independ
     // The pin is refutable: the field still carries the parent rate, computed from assistant
     // turns only (340 000 / (395 + 340 000 + 12 000) → 96.5%).
     assert.ok(withoutChild.includes("c 96.5%"), withoutChild);
-    assert.ok(withoutChild.includes("396k/1.0M"), withoutChild);
+    assert.ok(withoutChild.includes("39.6%/1.0M"), withoutChild);
 
     // Same session, footer: the child IS folded there, and only there.
     const footerLine = (entries: unknown[]): string => {

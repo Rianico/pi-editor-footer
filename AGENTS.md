@@ -104,6 +104,12 @@ This extension **replaces pi's default input editor**: `TrackingEditor` (`src/tr
 
 - Top context bar `formatContextBar` now takes `showIconBar` and returns `pct · tokens/W | c` without `icon`/`bar` by default (`0.0% · 0/1.0M | c 0.0%`), and `icon bar pct · tokens/W | c` when `showIconBar` true (`# [████░░] 39.6% · 416k/1.0M | c`). Config `ThemeConfig.contextIconBar` default `false`, validated in `validate()`, persisted via `ConfigStore`, toggled in `theme-settings` footer tab as “Context icon bar” On/Off, passed from `src/index.ts:refreshContextBar` as `currentConfig.contextIconBar`.
 
+### Context usage `pct · used/window` → `pct/window`
+
+- Top context field said the same thing twice: `39.6% · 416k/1.0M`. The used-token count is a restatement of the percentage over a known window, so `chrome-state.ts:formatContextBar` now builds `baseCore` from `pctText` + dim `/` + `windowText` — `39.6%/1.0M` (`# [████░░] 39.6%/1.0M` when the icon bar is on). Cache stays the first section, unchanged: `c 98.1% · 14.6%/1.0M`.
+- `contextUsage?.tokens` is no longer read by the bar; `contextPct` (from `contextUsage.percent`) carries the fill figure and the tier color. The footer's `↑` still reports billed session input, so nothing competes with it.
+- Tests pinned to the new shape: `test/chrome-separators.test.ts` (bar + top rule), `test/subagent-usage.test.ts` (`39.6%/1.0M`), `test/editor-frame.test.ts` and `test/editor-border-compat.test.ts` (fixture strings). ADR-0004 revision 4 records the superseded "three sections" clause.
+
 ### Context window section color — hex tiers, not theme tokens
 
 - `contextUsageColor(pct)` (4 semantic tiers, no window awareness) replaced by `color-policy.ts:contextUsageTier(pct, contextWindow)` + `CONTEXT_TIER_HEX` (`#A3BE8C` / `#EBCB8B` / `#9A3939`). **1M+ windows** escalate at **12.5 % / 25 %**; **smaller windows** at **25 % / 50 %**. `chrome-state.ts:contextPainter` colors the whole `pct · tokens/window` section (and the icon-bar fill) with one tier color — the cache `c` section keeps `cacheHitColor` and is untouched.

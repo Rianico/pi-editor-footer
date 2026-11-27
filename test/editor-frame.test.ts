@@ -127,13 +127,13 @@ describe("frame compositor", () => {
     const rows = plain(
       renderer().renderWithBorders(body(), 100, {
         glowEnabled: false,
-        topContextText: "14.6% · 146k/1.0M",
+        topContextText: "14.6%/1.0M",
         telemetryText: "TPS 60.6 tok/s · TTFT 2.5s",
       }),
     );
     assert.match(
       rows[0] ?? "",
-      /╭─ opencode-go\/deepseek-v4\.1-flash · <glow:high>high<\/glow> \| 14\.6% · 146k\/1\.0M ─+╮/,
+      /╭─ opencode-go\/deepseek-v4\.1-flash · <glow:high>high<\/glow> \| 14\.6%\/1\.0M ─+╮/,
     );
     assert.match(rows[2] ?? "", /╰─+ TPS 60\.6 tok\/s · TTFT 2\.5s ─╯/);
   });

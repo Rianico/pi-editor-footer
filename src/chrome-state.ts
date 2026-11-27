@@ -95,9 +95,10 @@ export function formatContextBar(
   const contextPct = contextUsage?.percent ?? 0;
   const paint = contextPainter(theme, contextUsageTier(contextPct, contextWindow));
   const pctText = paint(`${contextPct.toFixed(1)}%`);
-  const contextTokens = contextUsage?.tokens ?? 0;
-  const ctxText = `${paint(fmtTokens(contextTokens))}${theme.fg("dim", "/")}${paint(fmtTokens(contextWindow))}`;
-  const baseCore = `${pctText} ${theme.fg("dim", "·")} ${ctxText}`;
+  // Compact form: percent/window (`39.6%/1.0M`). The used-token count is dropped
+  // because the percentage already answers "how full", and the count only repeated it.
+  const windowText = paint(fmtTokens(contextWindow));
+  const baseCore = `${pctText}${theme.fg("dim", "/")}${windowText}`;
   const base = showIconBar
     ? `${paint(glyphs.context)} ${renderBar(theme, paint, contextPct, barWidth, isAscii)} ${baseCore}`
     : baseCore;
@@ -150,22 +151,14 @@ export function createChromeSnapshot(
   footerState?: FooterState | null | undefined,
   options: UsageTotalsOptions = {},
 ): ChromeSnapshot {
-  const cwd =
-    ctx?.sessionManager?.getCwd?.() ??
-    // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
-    // SAFETY: intentional unsafe cast — validated at runtime
-    /* SAFETY: intentional unsafe cast — validated at runtime */ (
-      ctx as unknown as { cwd?: string }
-    )?.cwd ?? // SAFETY: pi seam — intentional unsafe cast, validated at runtime
-    process.cwd();
+  // The seam type already declares `cwd`, so the former structural cast was dead.
+  const cwd = ctx?.sessionManager?.getCwd?.() ?? ctx?.cwd ?? process.cwd();
   const sessionName = ctx?.sessionManager?.getSessionName?.();
   const contextUsage = ctx?.getContextUsage?.() as ContextUsage | undefined;
   const totals = getUsageTotals(
-    // ast-grep-ignore: require-safety-comment-for-as-unknown-as
-    // SAFETY: pi seam
-    /* SAFETY: intentional unsafe cast — validated at runtime */ (ctx ??
-      {}) as unknown as Parameters<typeof getUsageTotals>[0], // SAFETY: pi seam — intentional unsafe cast, validated at runtime
+    // SAFETY: pi seam — the structural input is a subset of UsageTotalsSource and is
+    // narrowed at the call sites above; the cast only widens optional fields.
+    (ctx ?? {}) as unknown as Parameters<typeof getUsageTotals>[0],
     options,
   );
   // footerState may be absent when called from LiveBorder (context-only); use empty defaults

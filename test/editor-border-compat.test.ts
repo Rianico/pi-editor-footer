@@ -65,7 +65,7 @@ describe("BorderRenderer × pi-tui scroll borders", () => {
     const border = centredScrollBorder("↑", 3);
     const out = renderer().renderWithBorders([border, "typed text", bar()], WIDTH, {
       glowEnabled: true,
-      topContextText: "39.6% · 416k/1.0M",
+      topContextText: "39.6%/1.0M",
     });
     assert.match(stripAnsi(out[0] ?? ""), /↑ 3 more/, "pi's scroll hint must survive");
     assert.match(stripAnsi(out[0] ?? ""), /39\.6%/, "the context field joins the same rule");
@@ -76,7 +76,7 @@ describe("BorderRenderer × pi-tui scroll borders", () => {
     const border = legacyScrollBorder("↑", 3);
     const out = renderer().renderWithBorders([border, "typed text", bar()], WIDTH, {
       glowEnabled: true,
-      topContextText: "39.6% · 416k/1.0M",
+      topContextText: "39.6%/1.0M",
     });
     assert.match(stripAnsi(out[0] ?? ""), /↑ 3 more/);
     assert.match(stripAnsi(out[0] ?? ""), /^╭─.*╮$/);
@@ -174,7 +174,7 @@ describe("pi-tui 1.3.0 scroll-border shape matrix (real renderer)", () => {
 
       const out = renderer().renderWithBorders(lines, width, {
         glowEnabled: true,
-        topContextText: "39.6% · 416k/1.0M",
+        topContextText: "39.6%/1.0M",
       });
 
       if (width > 30) {
@@ -216,7 +216,7 @@ describe("pi-tui 1.3.0 scroll-border shape matrix (real renderer)", () => {
 
     const out = renderer().renderWithBorders(lines, WIDTH, {
       glowEnabled: true,
-      topContextText: "39.6% · 416k/1.0M",
+      topContextText: "39.6%/1.0M",
       telemetryText: TELEMETRY,
     });
 
